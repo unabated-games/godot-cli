@@ -11,6 +11,9 @@ pub const id_validate = @import("id_validate.zig");
 pub const id_session = @import("id_session.zig");
 pub const variant = @import("variant/root.zig");
 pub const node_tree = @import("node_tree.zig");
+pub const scene_edit = @import("scene_edit.zig");
+pub const scene_refs = @import("scene_refs.zig");
+pub const scene_resources = @import("scene_resources.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

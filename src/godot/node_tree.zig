@@ -18,6 +18,7 @@ pub const NodeInfo = struct {
     /// Viewport-style path, e.g. `/root/Root/Collision`.
     path: []const u8,
     section_line: usize,
+    section_index: usize,
     unique_id: ?i64,
 
     pub fn deinit(self: *const NodeInfo, allocator: std.mem.Allocator) void {
@@ -42,6 +43,7 @@ const RawNode = struct {
     node_type: []const u8,
     parent_attr: ?[]const u8,
     section_line: usize,
+    section_index: usize,
     unique_id: ?i64,
 };
 
@@ -50,7 +52,7 @@ pub fn collectNodes(allocator: std.mem.Allocator, doc: *const document.Document)
     defer raw_nodes.deinit(allocator);
     errdefer raw_nodes.deinit(allocator);
 
-    for (doc.sections.items) |section| {
+    for (doc.sections.items, 0..) |section, index| {
         if (!std.mem.eql(u8, section.header.name, "node")) continue;
         const name = section.header.getString("name") orelse continue;
         const node_type = section.header.getString("type") orelse "";
@@ -61,6 +63,7 @@ pub fn collectNodes(allocator: std.mem.Allocator, doc: *const document.Document)
             .node_type = node_type,
             .parent_attr = parent_attr,
             .section_line = section.line,
+            .section_index = index,
             .unique_id = unique_id,
         });
     }
@@ -98,6 +101,7 @@ pub fn collectNodes(allocator: std.mem.Allocator, doc: *const document.Document)
             .parent = parent_copy,
             .path = path,
             .section_line = raw.section_line,
+            .section_index = raw.section_index,
             .unique_id = raw.unique_id,
         };
     }
@@ -138,6 +142,7 @@ pub fn nodeToJson(allocator: std.mem.Allocator, node: *const NodeInfo) !std.json
     }
     try row.put(allocator, "path", .{ .string = try allocator.dupe(u8, node.path) });
     try row.put(allocator, "section_line", .{ .integer = @intCast(node.section_line) });
+    try row.put(allocator, "section_index", .{ .integer = @intCast(node.section_index) });
     if (node.unique_id) |id| {
         try row.put(allocator, "unique_id", .{ .integer = id });
     }

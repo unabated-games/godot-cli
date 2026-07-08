@@ -49,7 +49,38 @@ pub const ParseError = error{
 pub const EditError = error{
     OutOfMemory,
     SectionNotFound,
+    InvalidIndex,
 };
+
+pub fn appendSection(doc: *Document, allocator: std.mem.Allocator, section: Section) EditError!usize {
+    try doc.sections.append(allocator, section);
+    return doc.sections.items.len - 1;
+}
+
+pub fn insertSection(doc: *Document, allocator: std.mem.Allocator, index: usize, section: Section) EditError!void {
+    if (index > doc.sections.items.len) return error.InvalidIndex;
+    try doc.sections.insert(allocator, index, section);
+}
+
+pub fn removeSection(doc: *Document, index: usize) EditError!Section {
+    if (index >= doc.sections.items.len) return error.SectionNotFound;
+    return doc.sections.orderedRemove(index);
+}
+
+pub fn firstNodeSectionIndex(doc: *const Document) ?usize {
+    for (doc.sections.items, 0..) |section, index| {
+        if (std.mem.eql(u8, section.header.name, "node")) return index;
+    }
+    return null;
+}
+
+pub fn lastNodeSectionIndex(doc: *const Document) ?usize {
+    var last: ?usize = null;
+    for (doc.sections.items, 0..) |section, index| {
+        if (std.mem.eql(u8, section.header.name, "node")) last = index;
+    }
+    return last;
+}
 
 pub fn findSectionIndexByNodeName(doc: *const Document, node_name: []const u8) ?usize {
     for (doc.sections.items, 0..) |section, index| {
@@ -186,4 +217,72 @@ test "set section property replaces existing" {
 
     try setSectionProperty(&doc, allocator, 0, "visible", "false");
     try std.testing.expectEqualStrings("visible = false", doc.sections.items[0].properties.items[0].raw);
+}
+
+test "insert and remove sections" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Root" type="Node"]
+        \\
+    ;
+    var doc = try parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    var child_header = tag.Tag{ .name = try allocator.dupe(u8, "node"), .fields = .{} };
+    try child_header.setStringField(allocator, "name", "Child");
+    try child_header.setStringField(allocator, "type", "Node2D");
+    try child_header.setStringField(allocator, "parent", ".");
+
+    const child = Section{
+        .line = 0,
+        .leading_blank_lines = 1,
+        .header = child_header,
+        .properties = .empty,
+    };
+
+    const index = try appendSection(&doc, allocator, child);
+    try std.testing.expectEqual(@as(usize, 2), index);
+    try std.testing.expectEqual(@as(usize, 3), doc.sections.items.len);
+
+    _ = try removeSection(&doc, index);
+    try std.testing.expectEqual(@as(usize, 2), doc.sections.items.len);
+    child_header.deinit(allocator);
+}
+
+test "insert section preserves round trip" {
+    const allocator = std.testing.allocator;
+    const writer = @import("writer.zig");
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="Script" path="res://foo.gd" id="1_x"]
+        \\
+        \\[node name="Root" type="Node"]
+        \\
+    ;
+    var doc = try parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    var node_header = tag.Tag{ .name = try allocator.dupe(u8, "node"), .fields = .{} };
+    try node_header.setStringField(allocator, "name", "Player");
+    try node_header.setStringField(allocator, "type", "Node2D");
+    try node_header.setStringField(allocator, "parent", ".");
+
+    const insert_at = firstNodeSectionIndex(&doc).? + 1;
+    try insertSection(&doc, allocator, insert_at, .{
+        .line = 0,
+        .leading_blank_lines = 0,
+        .header = node_header,
+        .properties = .empty,
+    });
+
+    const written = try writer.writeDocument(allocator, &doc);
+    defer allocator.free(written);
+
+    var reparsed = try parseBytes(allocator, written);
+    defer reparsed.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 4), reparsed.sections.items.len);
+    try std.testing.expectEqualStrings("Player", reparsed.sections.items[insert_at].header.getString("name").?);
 }

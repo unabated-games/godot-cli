@@ -145,6 +145,22 @@ pub fn build(b: *std.Build) void {
     node_list_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&node_list_smoke.step);
 
+    const scene_author_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp /tmp/godot_cli_scene_XXXXXX.tscn) &&
+        \\./zig-out/bin/godot-cli scene new --output "$tmp" --root-name Main --root-type Node2D --no-prepare-save &&
+        \\./zig-out/bin/godot-cli scene node add "$tmp" --parent /root/Main --name Player --type CharacterBody2D --no-prepare-save &&
+        \\subout=$(./zig-out/bin/godot-cli scene sub add "$tmp" --type RectangleShape2D --property size --value "Vector2(16, 32)" --no-prepare-save --json) &&
+        \\subid=$(echo "$subout" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4) &&
+        \\./zig-out/bin/godot-cli scene node add "$tmp" --parent /root/Main/Player --name Collision --type CollisionShape2D --property shape --value "SubResource(\"$subid\")" --no-prepare-save &&
+        \\out=$(./zig-out/bin/godot-cli scene node list "$tmp" --json) &&
+        \\rm -f "$tmp" &&
+        \\echo "$out" | grep -q '"/root/Main/Player/Collision"'
+    });
+    scene_author_smoke.setCwd(b.path("."));
+    scene_author_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_author_smoke.step);
+
     const rich_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli scene inspect test_fixtures/project/rich_variants.tscn --json --no-validate) &&

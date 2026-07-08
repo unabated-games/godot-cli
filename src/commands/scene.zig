@@ -9,6 +9,9 @@ const id_session = @import("../godot/id_session.zig");
 const project_config = @import("../godot/project_config.zig");
 const variant = @import("../godot/variant/root.zig");
 const node_tree = @import("../godot/node_tree.zig");
+const scene_edit = @import("../godot/scene_edit.zig");
+const scene_refs = @import("../godot/scene_refs.zig");
+const scene_resources = @import("../godot/scene_resources.zig");
 
 const ValidateSetup = struct {
     ctx: id_validate.ValidateContext,
@@ -527,6 +530,356 @@ fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     };
 }
 
+fn sceneNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const output_path = inv.getOption("output") orelse return error.Usage;
+    const root_name = inv.getOption("root-name") orelse "Root";
+    const root_type = inv.getOption("root-type") orelse "Node";
+
+    var doc = try scene_edit.createNewScene(cli.allocator, root_name, root_type);
+    defer doc.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "root_name", .{ .string = try cli.allocator.dupe(u8, root_name) });
+    try data.put(cli.allocator, "root_type", .{ .string = try cli.allocator.dupe(u8, root_type) });
+    try data.put(cli.allocator, "root_path", .{ .string = try std.fmt.allocPrint(cli.allocator, "/root/{s}", .{root_name}) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "created scene {s}", .{output_path});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneRefsHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const path = inv.positionals[0];
+
+    const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
+    var list = try scene_refs.collectExtResources(cli.allocator, cli.io, &doc, projectRootFrom(inv));
+    defer list.deinit(cli.allocator);
+
+    const refs = try scene_refs.refsToJsonArray(cli.allocator, list.refs);
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, path) });
+    try data.put(cli.allocator, "refs", .{ .array = refs });
+    const summary = try std.fmt.allocPrint(cli.allocator, "{d} ext_resource(s) in {s}", .{ list.refs.len, path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const parent_path = inv.getOption("parent") orelse return error.Usage;
+    const node_name = inv.getOption("name") orelse return error.Usage;
+    const node_type = inv.getOption("type") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    var added = try scene_edit.addNode(cli.allocator, &doc, parent_path, node_name, node_type);
+    defer added.deinit(cli.allocator);
+
+    if (inv.getOption("property")) |property_name| {
+        const property_value = inv.getOption("value") orelse return error.Usage;
+        const written_value: []const u8 = if (inv.flag("raw-value")) property_value else blk: {
+            var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
+            defer parsed.deinit(cli.allocator);
+            break :blk try parsed.formatForWrite(cli.allocator);
+        };
+        defer if (!inv.flag("raw-value")) cli.allocator.free(written_value);
+        try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, property_name, written_value);
+    }
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        var prepare = try prepareSaveOptions(cli, inv, output_path);
+        defer prepare.deinit(cli.allocator);
+        if (prepare.options) |options| {
+            try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
+        }
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, added.path) });
+    try data.put(cli.allocator, "parent", .{ .string = try cli.allocator.dupe(u8, parent_path) });
+    try data.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, node_name) });
+    try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, node_type) });
+    try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "added {s} at {s}", .{ node_name, added.path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneNodeRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const node_path = inv.positionals[1];
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const removed = try scene_edit.removeNode(cli.allocator, &doc, node_path, inv.flag("recursive"));
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, node_path) });
+    try data.put(cli.allocator, "removed_count", .{ .integer = @intCast(removed) });
+    try data.put(cli.allocator, "recursive", .{ .bool = inv.flag("recursive") });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "removed {d} node section(s) from {s}", .{ removed, node_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneNodeRenameHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const node_path = inv.positionals[1];
+    const new_name = inv.getOption("name") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const new_path = try scene_edit.renameNode(cli.allocator, &doc, node_path, new_name);
+    defer cli.allocator.free(new_path);
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "old_path", .{ .string = try cli.allocator.dupe(u8, node_path) });
+    try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, new_path) });
+    try data.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, new_name) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "renamed {s} to {s}", .{ node_path, new_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const node_path = inv.positionals[1];
+    const new_parent = inv.getOption("parent") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    try scene_edit.reparentNode(cli.allocator, &doc, node_path, new_parent);
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, node_path) });
+    try data.put(cli.allocator, "parent", .{ .string = try cli.allocator.dupe(u8, new_parent) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "reparented {s} under {s}", .{ node_path, new_parent });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn referrersToJson(allocator: std.mem.Allocator, referrers: []const scene_resources.Referrer) !std.json.Array {
+    var arr = std.json.Array.init(allocator);
+    for (referrers) |*ref| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(allocator, "section_index", .{ .integer = @intCast(ref.section_index) });
+        try row.put(allocator, "section_name", .{ .string = try allocator.dupe(u8, ref.section_name) });
+        try row.put(allocator, "property", .{ .string = try allocator.dupe(u8, ref.property_raw) });
+        try arr.append(.{ .object = row });
+    }
+    return arr;
+}
+
+fn sceneExtAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const res_type = inv.getOption("type") orelse return error.Usage;
+    const res_path = inv.getOption("path") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const output_path = inv.getOption("output") orelse input_path;
+    const seed_path = try saveSeedPath(cli, inv, output_path);
+    defer cli.allocator.free(seed_path);
+
+    var added = try scene_resources.addExtResource(cli.allocator, &doc, seed_path, res_type, res_path);
+    defer added.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, added.id) });
+    try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, res_type) });
+    try data.put(cli.allocator, "resource_path", .{ .string = try cli.allocator.dupe(u8, res_path) });
+    try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "added ext_resource {s} ({s})", .{ added.id, res_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneExtRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const resource_id = inv.positionals[1];
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const output_path = inv.getOption("output") orelse input_path;
+
+    const removed_index = scene_resources.removeExtResource(cli.allocator, &doc, resource_id) catch |err| {
+        if (err == error.ResourceInUse) {
+            const referrers = try scene_resources.findReferrers(cli.allocator, &doc, resource_id, .ext);
+            defer {
+                for (referrers) |*ref| ref.deinit(cli.allocator);
+                cli.allocator.free(referrers);
+            }
+            var data: std.json.ObjectMap = .{};
+            try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
+            try data.put(cli.allocator, "referrers", .{ .array = try referrersToJson(cli.allocator, referrers) });
+            const summary = try std.fmt.allocPrint(cli.allocator, "ext_resource {s} is still referenced", .{resource_id});
+            try data.put(cli.allocator, "summary", .{ .string = summary });
+            return .{
+                .data = .{ .object = data },
+                .messages = &.{summary},
+                .exit_code = .failure,
+            };
+        }
+        return err;
+    };
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
+    try data.put(cli.allocator, "section_index", .{ .integer = @intCast(removed_index) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "removed ext_resource {s}", .{resource_id});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const res_type = inv.getOption("type") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const output_path = inv.getOption("output") orelse input_path;
+    const seed_path = try saveSeedPath(cli, inv, output_path);
+    defer cli.allocator.free(seed_path);
+
+    var properties: [1]scene_resources.PropertyInput = undefined;
+    var property_count: usize = 0;
+    if (inv.getOption("property")) |property_name| {
+        const property_value = inv.getOption("value") orelse return error.Usage;
+        const written_value: []const u8 = if (inv.flag("raw-value")) property_value else blk: {
+            var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
+            defer parsed.deinit(cli.allocator);
+            break :blk try parsed.formatForWrite(cli.allocator);
+        };
+        defer if (!inv.flag("raw-value")) cli.allocator.free(written_value);
+        properties[0] = .{ .name = property_name, .value = written_value };
+        property_count = 1;
+    }
+
+    var added = try scene_resources.addSubResource(cli.allocator, &doc, seed_path, res_type, properties[0..property_count]);
+    defer added.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, added.id) });
+    try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, res_type) });
+    try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "added sub_resource {s}", .{added.id});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneSubRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const resource_id = inv.positionals[1];
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const output_path = inv.getOption("output") orelse input_path;
+
+    const removed_index = scene_resources.removeSubResource(cli.allocator, &doc, resource_id) catch |err| {
+        if (err == error.ResourceInUse) {
+            const referrers = try scene_resources.findReferrers(cli.allocator, &doc, resource_id, .sub);
+            defer {
+                for (referrers) |*ref| ref.deinit(cli.allocator);
+                cli.allocator.free(referrers);
+            }
+            var data: std.json.ObjectMap = .{};
+            try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
+            try data.put(cli.allocator, "referrers", .{ .array = try referrersToJson(cli.allocator, referrers) });
+            const summary = try std.fmt.allocPrint(cli.allocator, "sub_resource {s} is still referenced", .{resource_id});
+            try data.put(cli.allocator, "summary", .{ .string = summary });
+            return .{
+                .data = .{ .object = data },
+                .messages = &.{summary},
+                .exit_code = .failure,
+            };
+        }
+        return err;
+    };
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
+    try data.put(cli.allocator, "section_index", .{ .integer = @intCast(removed_index) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "removed sub_resource {s}", .{resource_id});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
 fn resourceInspectHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     return inspectHandler(ctx, inv, "resource");
 }
@@ -803,11 +1156,93 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "node-name", .kind = .string, .description = "Node name to look up (alternative to node path positional)" },
         .{ .long = "parent", .kind = .string, .description = "Parent attribute filter when using --node-name (e.g. \".\" or \"Root\")" },
     };
+    const node_edit_options = [_]spec.OptionSpec{
+        .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)" },
+        .{ .long = "name", .kind = .string, .description = "Node name" },
+        .{ .long = "type", .kind = .string, .description = "Godot node class name (e.g. CharacterBody2D)" },
+        .{ .long = "property", .kind = .string, .description = "Optional property to set on the new node" },
+        .{ .long = "value", .kind = .string, .description = "Property value (Variant text)" },
+        .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
+        .{ .long = "recursive", .kind = .flag, .description = "Remove descendant nodes as well" },
+    } ++ save_options;
+    const scene_new_options = [_]spec.OptionSpec{
+        .{ .long = "output", .kind = .path, .description = "Output .tscn path (required)" },
+        .{ .long = "root-name", .kind = .string, .description = "Scene root node name (default: Root)" },
+        .{ .long = "root-type", .kind = .string, .description = "Scene root node type (default: Node)" },
+    } ++ save_options;
+    const refs_options = [_]spec.OptionSpec{
+        project_root_opt,
+    };
+    const ext_add_options = [_]spec.OptionSpec{
+        .{ .long = "type", .kind = .string, .description = "Godot resource type (e.g. Script, PackedScene)" },
+        .{ .long = "path", .kind = .string, .description = "Godot res:// path for the external resource" },
+    } ++ save_options;
+    const sub_add_options = [_]spec.OptionSpec{
+        .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. RectangleShape2D)" },
+        .{ .long = "property", .kind = .string, .description = "Optional sub_resource property to set" },
+        .{ .long = "value", .kind = .string, .description = "Property value (Variant text)" },
+        .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
+    } ++ save_options;
+    const resource_remove_options = save_options;
 
     return .{
         .name = "scene",
         .summary = "Inspect and edit Godot scene files",
         .children = &.{
+            .{
+                .name = "new",
+                .summary = "Create a new empty scene file",
+                .description = "Writes a minimal gd_scene with a single root node. Use scene node add to build the tree.",
+                .options = &scene_new_options,
+                .handler = sceneNewHandler,
+            },
+            .{
+                .name = "refs",
+                .summary = "List ext_resource references in a scene",
+                .description = "With --project-root, resolves res:// paths to filesystem paths and reports whether each file exists.",
+                .options = &refs_options,
+                .handler = sceneRefsHandler,
+            },
+            .{
+                .name = "ext",
+                .summary = "Add or remove external resources",
+                .children = &.{
+                    .{
+                        .name = "add",
+                        .summary = "Add an ext_resource section",
+                        .description = "Inserts before node sections and assigns a Godot-style id (e.g. 1_ab12c).",
+                        .options = &ext_add_options,
+                        .handler = sceneExtAddHandler,
+                    },
+                    .{
+                        .name = "remove",
+                        .summary = "Remove an ext_resource by id",
+                        .description = "Fails with referrer list if the id is still referenced in property text.",
+                        .options = &resource_remove_options,
+                        .handler = sceneExtRemoveHandler,
+                    },
+                },
+            },
+            .{
+                .name = "sub",
+                .summary = "Add or remove sub-resources",
+                .children = &.{
+                    .{
+                        .name = "add",
+                        .summary = "Add a sub_resource section",
+                        .description = "Inserts before node sections and assigns a Godot-style id (e.g. CapsuleShape3D_ab12c).",
+                        .options = &sub_add_options,
+                        .handler = sceneSubAddHandler,
+                    },
+                    .{
+                        .name = "remove",
+                        .summary = "Remove a sub_resource by id",
+                        .description = "Fails with referrer list if the id is still referenced in property text.",
+                        .options = &resource_remove_options,
+                        .handler = sceneSubRemoveHandler,
+                    },
+                },
+            },
             .{
                 .name = "inspect",
                 .summary = "Parse a .tscn file and report structure and ID issues",
@@ -830,6 +1265,32 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Pass file and node path (e.g. /root/Root/Player), or use --node-name with optional --parent.",
                         .options = &node_get_options,
                         .handler = sceneNodeGetHandler,
+                    },
+                    .{
+                        .name = "add",
+                        .summary = "Add a child node under a parent path",
+                        .description = "Requires --parent, --name, and --type. Assigns unique_id on save via save preparation.",
+                        .options = &node_edit_options,
+                        .handler = sceneNodeAddHandler,
+                    },
+                    .{
+                        .name = "remove",
+                        .summary = "Remove a node by viewport path",
+                        .description = "Fails if the node has children unless --recursive is set.",
+                        .options = &node_edit_options,
+                        .handler = sceneNodeRemoveHandler,
+                    },
+                    .{
+                        .name = "rename",
+                        .summary = "Rename a node and rewrite descendant parent attributes",
+                        .options = &node_edit_options,
+                        .handler = sceneNodeRenameHandler,
+                    },
+                    .{
+                        .name = "reparent",
+                        .summary = "Move a node under a new parent path",
+                        .options = &node_edit_options,
+                        .handler = sceneNodeReparentHandler,
                     },
                 },
             },

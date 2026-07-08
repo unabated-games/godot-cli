@@ -15,9 +15,10 @@ This roadmap is ordered by priority for MCP/LLM agent use. Implement one item at
 | 3 | Property normalization on save | **done** | `src/godot/text_format/normalize_properties.zig`, `--normalize-properties` |
 | 4 | Variant gaps | **done** | `src/godot/variant/collection.zig`, arrays/dicts/typed/packed byte |
 | 5 | Fixture and CI hardening | **done** | `test_fixtures/project/rich_variants.tscn`, `.github/workflows/ci.yml` |
-| 6 | Thin MCP server | **next** | `tools/mcp_server/` (optional) |
+| 6 | Thin MCP server | **deferred** | CLI-first; see [scene_authoring_roadmap.md](scene_authoring_roadmap.md) |
+| 7 | Scene authoring (LLM) | **next** | Phases A–G in [scene_authoring_roadmap.md](scene_authoring_roadmap.md) |
 
-**Start next session at item #6.**
+**Start next session at scene authoring Phase A** ([roadmap](scene_authoring_roadmap.md)).
 
 ---
 
@@ -214,21 +215,17 @@ Each form has parse + format tests derived from Godot-saved fixture strings.
 
 ---
 
-## 6. Thin MCP server (optional)
+## 6. Thin MCP server (optional) — **deferred**
 
-### Goal
+CLI + `--json` / `--request` is sufficient for agents; revisit only if a client requires MCP registration. See [ABOUT.md](ABOUT.md).
 
-Stdio MCP server that forwards tool calls to `godot-cli --request '...'` using shapes from [mcp_tools.json](mcp_tools.json). No duplicate business logic in the server.
+---
 
-### Implementation notes
+## 7. Scene authoring (LLM-first) — **next**
 
-- Separate small package or `tools/mcp_server/` (Python/Node/Zig — pick simplest).
-- Spawn `godot-cli` subprocess; map MCP tool names to `argv` from `mcp_tools.json`.
-- Return stdout JSON envelope as tool result.
+Full plan: **[scene_authoring_roadmap.md](scene_authoring_roadmap.md)**
 
-### Done when
-
-- One end-to-end MCP tool (e.g. `scene_validate`) works against the built binary.
+Phases: document mutations → node CRUD → ext/sub resources → templates → PackedScene instancing → declarative patch → agent docs.
 
 ---
 
@@ -248,7 +245,9 @@ Stdio MCP server that forwards tool calls to `godot-cli --request '...'` using s
 |------------|---------|
 | [id_generation_plan.md](id_generation_plan.md) | Completed phases 1–6 |
 | [development_principles.md](development_principles.md) | CLI/JSON contracts |
-| [mcp_tools.json](mcp_tools.json) | MCP tool catalog |
+| [ABOUT.md](ABOUT.md) | Project overview |
+| [scene_authoring_roadmap.md](scene_authoring_roadmap.md) | LLM scene authoring plan |
+| [mcp_tools.json](mcp_tools.json) | JSON request shapes for every command |
 | `src/godot/variant/` | Variant parse/format |
 | `src/godot/text_format/document.zig` | Scene document model |
 | `src/commands/scene.zig` | Inspect, set-property, normalize handlers |

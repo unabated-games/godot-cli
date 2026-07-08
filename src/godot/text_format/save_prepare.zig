@@ -295,7 +295,7 @@ fn sortExtResourceSections(allocator: std.mem.Allocator, doc: *document.Document
     doc.sections = reordered;
 }
 
-fn updateLoadSteps(doc: *document.Document) void {
+pub fn updateLoadSteps(doc: *document.Document) void {
     var ext_count: usize = 0;
     var sub_count: usize = 0;
 

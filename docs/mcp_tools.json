@@ -60,6 +60,44 @@
       }
     },
     {
+      "name": "scene_new",
+      "argv": ["scene", "new", "--output", "<file.tscn>"],
+      "options": ["--root-name", "--root-type", "--project-root", "--dry-run"],
+      "description": "Create a new empty scene with gd_scene header and root node.",
+      "json_request": { "argv": ["scene", "new", "--output", "main.tscn", "--root-name", "Main", "--root-type", "Node2D", "--json"] }
+    },
+    {
+      "name": "scene_refs",
+      "argv": ["scene", "refs", "<file.tscn>"],
+      "options": ["--project-root"],
+      "description": "List ext_resource entries; with --project-root resolves filesystem paths and existence.",
+      "json_request": { "argv": ["scene", "refs", "main.tscn", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "scene_ext_add",
+      "argv": ["scene", "ext", "add", "<file.tscn>"],
+      "options": ["--type", "--path", "--output", "--project-root", "--dry-run"],
+      "json_request": { "argv": ["scene", "ext", "add", "main.tscn", "--type", "Script", "--path", "res://player.gd", "--json"] }
+    },
+    {
+      "name": "scene_ext_remove",
+      "argv": ["scene", "ext", "remove", "<file.tscn>", "<id>"],
+      "options": ["--output", "--project-root", "--dry-run"],
+      "json_request": { "argv": ["scene", "ext", "remove", "main.tscn", "1_abc12", "--json"] }
+    },
+    {
+      "name": "scene_sub_add",
+      "argv": ["scene", "sub", "add", "<file.tscn>"],
+      "options": ["--type", "--property", "--value", "--output", "--project-root", "--dry-run"],
+      "json_request": { "argv": ["scene", "sub", "add", "main.tscn", "--type", "RectangleShape2D", "--property", "size", "--value", "Vector2(16, 32)", "--json"] }
+    },
+    {
+      "name": "scene_sub_remove",
+      "argv": ["scene", "sub", "remove", "<file.tscn>", "<id>"],
+      "options": ["--output", "--project-root", "--dry-run"],
+      "json_request": { "argv": ["scene", "sub", "remove", "main.tscn", "RectangleShape2D_abc12", "--json"] }
+    },
+    {
       "name": "scene_inspect",
       "argv": ["scene", "inspect", "<file.tscn>"],
       "options": ["--no-validate", "--no-parse-properties"],
@@ -78,6 +116,31 @@
       "options": ["--node-name", "--parent"],
       "description": "Get one node by viewport path positional or --node-name with optional --parent.",
       "json_request": { "argv": ["scene", "node", "get", "main.tscn", "/root/Player", "--json"] }
+    },
+    {
+      "name": "scene_node_add",
+      "argv": ["scene", "node", "add", "<file.tscn>"],
+      "options": ["--parent", "--name", "--type", "--property", "--value", "--output", "--project-root", "--dry-run"],
+      "description": "Add a child node under a viewport parent path (e.g. /root/Main).",
+      "json_request": { "argv": ["scene", "node", "add", "main.tscn", "--parent", "/root/Main", "--name", "Player", "--type", "CharacterBody2D", "--json"] }
+    },
+    {
+      "name": "scene_node_remove",
+      "argv": ["scene", "node", "remove", "<file.tscn>", "<node-path>"],
+      "options": ["--recursive", "--output", "--project-root", "--dry-run"],
+      "json_request": { "argv": ["scene", "node", "remove", "main.tscn", "/root/Main/Player", "--json"] }
+    },
+    {
+      "name": "scene_node_rename",
+      "argv": ["scene", "node", "rename", "<file.tscn>", "<node-path>"],
+      "options": ["--name", "--output", "--project-root", "--dry-run"],
+      "json_request": { "argv": ["scene", "node", "rename", "main.tscn", "/root/Main/Player", "--name", "Hero", "--json"] }
+    },
+    {
+      "name": "scene_node_reparent",
+      "argv": ["scene", "node", "reparent", "<file.tscn>", "<node-path>"],
+      "options": ["--parent", "--output", "--project-root", "--dry-run"],
+      "json_request": { "argv": ["scene", "node", "reparent", "main.tscn", "/root/Main/Hero", "--parent", "/root/Main", "--json"] }
     },
     {
       "name": "scene_validate",

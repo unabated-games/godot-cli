@@ -8,7 +8,7 @@ Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripti
 
 Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, **set-property**, and **Godot save round-trip** are available. Save preparation matches Godot's ID seeding, ext_resource ordering, and optional byte-identical output via `--godot-save-format` + id session cache — see [ID generation plan](docs/id_generation_plan.md).
 
-**Next work:** [Mini roadmap](docs/mini_roadmap.md) item **#6** (thin MCP server). Items 1–5 done: rich inspect, node tree, `--normalize-properties`, variant parsing, fixture/CI hardening.
+**Next work:** [Scene authoring](docs/scene_authoring_roadmap.md) Phase E (templates). Phases A–C done: scene new, node CRUD, ext/sub resources, `scene refs`.
 
 ## Requirements
 
@@ -87,6 +87,8 @@ godot-cli --request-stdin < request.json
 
 ## Documentation
 
+- [About godot-cli](docs/ABOUT.md) — what it is, what it can do, why it exists
+- [Scene authoring roadmap](docs/scene_authoring_roadmap.md) — LLM-first plan for full scene authoring
 - [Development principles](docs/development_principles.md) — CLI argument conventions, result shapes, and JSON contracts
 - [MCP tool catalog](docs/mcp_tools.json) — JSON request shapes for every command
 - [ID generation plan](docs/id_generation_plan.md) — Godot ID systems and roadmap for scene/resource I/O
