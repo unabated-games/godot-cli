@@ -1,0 +1,141 @@
+{
+  "name": "godot-cli",
+  "version": "0.1.0",
+  "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
+  "binary": "godot-cli",
+  "request_envelope": {
+    "argv": ["command", "subcommand", "positional...", "--option", "value"],
+    "options": { "json": true },
+    "response": {
+      "ok": true,
+      "data": {},
+      "messages": []
+    }
+  },
+  "tools": [
+    {
+      "name": "ping",
+      "argv": ["ping"],
+      "json_request": { "argv": ["ping", "--json"] }
+    },
+    {
+      "name": "uid_encode",
+      "argv": ["uid", "encode", "<id>"],
+      "json_request": { "argv": ["uid", "encode", "1350303725746704497", "--json"] }
+    },
+    {
+      "name": "uid_decode",
+      "argv": ["uid", "decode", "<uid-text>"],
+      "json_request": { "argv": ["uid", "decode", "uid://tidkmw585t0t", "--json"] }
+    },
+    {
+      "name": "uid_create_for_path",
+      "argv": ["uid", "create-for-path", "<res-path>"],
+      "json_request": { "argv": ["uid", "create-for-path", "res://main.tscn", "--json"] }
+    },
+    {
+      "name": "uid_scene_id_generate",
+      "argv": ["uid", "scene-id", "generate"],
+      "json_request": { "argv": ["uid", "scene-id", "generate", "--json"] }
+    },
+    {
+      "name": "uid_cache_list",
+      "argv": ["uid", "cache", "list", "--project-root", "<path>"],
+      "json_request": {
+        "argv": ["uid", "cache", "list", "--project-root", ".", "--json"]
+      }
+    },
+    {
+      "name": "uid_cache_lookup",
+      "argv": ["uid", "cache", "lookup", "<uid-or-path>", "--project-root", "<path>"],
+      "json_request": {
+        "argv": ["uid", "cache", "lookup", "uid://tidkmw585t0t", "--project-root", ".", "--json"]
+      }
+    },
+    {
+      "name": "scene_inspect",
+      "argv": ["scene", "inspect", "<file.tscn>"],
+      "json_request": { "argv": ["scene", "inspect", "main.tscn", "--json"] }
+    },
+    {
+      "name": "scene_validate",
+      "argv": ["scene", "validate", "<file.tscn>", "--project-root", "<path>"],
+      "json_request": {
+        "argv": ["scene", "validate", "main.tscn", "--project-root", ".", "--json"]
+      },
+      "exit_codes": { "0": "no errors", "1": "validation errors" }
+    },
+    {
+      "name": "scene_validate_batch",
+      "argv": ["scene", "validate-batch", "<files...>", "--project-root", "<path>"],
+      "json_request": {
+        "argv": ["scene", "validate-batch", "a.tscn", "b.tscn", "--project-root", ".", "--json"]
+      }
+    },
+    {
+      "name": "scene_set_property",
+      "argv": ["scene", "set-property", "<file>", "<section-index>", "<key>", "<value>"],
+      "options": ["--output", "--resource-path", "--no-prepare-save", "--raw-value"],
+      "json_request": {
+        "argv": ["scene", "set-property", "main.tscn", "2", "visible", "false", "--json"]
+      }
+    },
+    {
+      "name": "scene_normalize",
+      "argv": ["scene", "normalize", "<file>", "--output", "<out>"],
+      "options": ["--resource-path", "--no-prepare-save"],
+      "json_request": {
+        "argv": ["scene", "normalize", "main.tscn", "--output", "out.tscn", "--resource-path", "res://main.tscn", "--json"]
+      }
+    },
+    {
+      "name": "scene_retarget_ext",
+      "argv": ["scene", "retarget-ext", "--from", "<res-path>", "--to", "<res-path>", "<file>"],
+      "json_request": {
+        "argv": ["scene", "retarget-ext", "--from", "res://old.gd", "--to", "res://new.gd", "main.tscn", "--json"]
+      }
+    },
+    {
+      "name": "scene_round_trip",
+      "argv": ["scene", "round-trip", "<file>"],
+      "options": ["--dry-run"],
+      "json_request": { "argv": ["scene", "round-trip", "main.tscn", "--dry-run", "--json"] }
+    },
+    {
+      "name": "resource_inspect",
+      "argv": ["resource", "inspect", "<file.tres>"],
+      "json_request": { "argv": ["resource", "inspect", "mat.tres", "--json"] }
+    },
+    {
+      "name": "resource_validate",
+      "argv": ["resource", "validate", "<file.tres>", "--project-root", "<path>"],
+      "json_request": {
+        "argv": ["resource", "validate", "mat.tres", "--project-root", ".", "--json"]
+      }
+    },
+    {
+      "name": "resource_validate_batch",
+      "argv": ["resource", "validate-batch", "<files...>"],
+      "json_request": { "argv": ["resource", "validate-batch", "a.tres", "b.tres", "--json"] }
+    },
+    {
+      "name": "resource_set_property",
+      "argv": ["resource", "set-property", "<file>", "<section-index>", "<key>", "<value>"],
+      "options": ["--output", "--resource-path", "--no-prepare-save", "--raw-value"]
+    },
+    {
+      "name": "resource_normalize",
+      "argv": ["resource", "normalize", "<file>", "--output", "<out>"],
+      "options": ["--resource-path", "--no-prepare-save"]
+    },
+    {
+      "name": "resource_retarget_ext",
+      "argv": ["resource", "retarget-ext", "--from", "<res-path>", "--to", "<res-path>", "<file>"]
+    },
+    {
+      "name": "resource_round_trip",
+      "argv": ["resource", "round-trip", "<file>"],
+      "options": ["--dry-run"]
+    }
+  ]
+}

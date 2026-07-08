@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://id_reference.gd" id="1_a7oy8"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_37kl0"]
+
+[node name="Root" type="Node3D" unique_id=1290995245]
+script = ExtResource("1_a7oy8")
+visible = true
+
+[node name="Collision" type="CollisionShape3D" parent="Root" unique_id=987654321]
+shape = SubResource("CapsuleShape3D_37kl0")

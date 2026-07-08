@@ -51,9 +51,30 @@ pub fn parseArgv(
         try parseCommandOption(allocator, leaf, arg, argv, &index, &inv);
     }
 
-    if (index < argv.len) {
-        inv.positionals = argv[index..];
+    var positionals = std.ArrayList([]const u8).empty;
+    errdefer positionals.deinit(allocator);
+
+    while (index < argv.len) : (index += 1) {
+        const arg = argv[index];
+        if (std.mem.eql(u8, arg, "--")) {
+            index += 1;
+            while (index < argv.len) : (index += 1) {
+                try positionals.append(allocator, argv[index]);
+            }
+            break;
+        }
+        if (std.mem.startsWith(u8, arg, "-")) {
+            if (isGlobalFlag(arg)) {
+                applyGlobalFlag(arg, &inv.global);
+                continue;
+            }
+            try parseCommandOption(allocator, leaf, arg, argv, &index, &inv);
+            continue;
+        }
+        try positionals.append(allocator, arg);
     }
+
+    inv.positionals = try positionals.toOwnedSlice(allocator);
 
     return inv;
 }
@@ -251,4 +272,22 @@ test "parse ping command" {
     try std.testing.expect(inv.global.json_output);
     try std.testing.expectEqual(@as(usize, 1), inv.path.len);
     try std.testing.expectEqualStrings("ping", inv.path[0]);
+}
+
+test "parse options after positionals" {
+    const commands = @import("../commands.zig");
+    const allocator = std.testing.allocator;
+
+    const inv = try parseArgv(allocator, &commands.root, &.{
+        "scene", "validate", "main.tscn", "--json", "--project-root", ".",
+    });
+    defer {
+        var mutable = inv;
+        mutable.deinit(allocator);
+    }
+
+    try std.testing.expect(inv.global.json_output);
+    try std.testing.expectEqual(@as(usize, 1), inv.positionals.len);
+    try std.testing.expectEqualStrings("main.tscn", inv.positionals[0]);
+    try std.testing.expectEqualStrings(".", inv.getOption("project-root").?);
 }

@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3 uid="uid://tidkmw585t0t"]
+
+[ext_resource type="Script" path="res://id_reference.gd" id="1_mf4mk"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_37kl0"]
+radius = 0.5
+height = 2.0
+
+[node name="Root" type="Node3D" unique_id=1290995245]
+script = ExtResource("1_mf4mk")
+visible = true
+
+[node name="Collision" type="CollisionShape3D" parent="Root" unique_id=987654321]
+shape = SubResource("CapsuleShape3D_37kl0")

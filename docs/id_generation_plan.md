@@ -73,6 +73,10 @@ src/godot/
     document.zig
     writer.zig
     save_prepare.zig
+    roundtrip.zig
+    batch.zig
+  variant/
+    parse.zig
 ```
 
 `src/io_util.zig` — synchronous file writes (workaround for Zig 0.16 threaded Io EINVAL after write).
@@ -113,10 +117,22 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [x] Sort `ext_resource` sections by id (Godot `ResourceSort`)
 - [x] Update `load_steps` when present
 - [x] CLI: `scene normalize`, `resource normalize` (and automatic prepare on save unless `--no-prepare-save`)
-- [ ] Per-resource `set_id_for_path` cache persistence (editor session only in Godot; out of scope unless we add a sidecar)
-- [ ] Byte-identical round-trip vs Godot headless save
+- [x] Round-trip structure test (`text_format/roundtrip.zig`) + CLI `round-trip`
+- [x] Godot reference fixture (`test_fixtures/project/sample_godot_saved.tscn`, `zig build test-godot`)
+- [x] Semantic Godot save compare (`documentsMatchGodotSave` — ext id remaps, default sub_resource fields)
+- [ ] Byte-identical round-trip vs Godot headless save (IDs are path-seeded; semantic match only)
+- [x] Node `unique_id` assignment on save (`node_id.zig`, `save_prepare.assignNodeUniqueIds`)
+- [x] Variant parser: Color, Vector2/3/4 (`variant/parse.zig`)
+- [x] `uid_cache.bin` fixture via `tools/import_fixtures.sh`
 
-### Phase 6 — ID integrity detection (partial)
+### Phase 5 — Batch / integration (partial)
+
+- [x] CLI: `scene validate-batch`, `resource validate-batch`
+- [x] CLI: `scene retarget-ext`, `resource retarget-ext`
+- [x] Options after positionals in argv parser (`scene validate file.tscn --json`)
+- [x] Single-threaded Io in CLI main (fixes stdout after file I/O)
+- [x] JSON command shapes for MCP (`docs/mcp_tools.json`, examples below)
+- [ ] Optional: invoke installed Godot headless for validation diffs in CI
 
 - [x] Core checks in `id_validate.zig` (uid text, scene ids, duplicates, uid cache)
 - [x] Dangling `ExtResource` / `SubResource` reference detection
@@ -125,13 +141,7 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [x] `stale_uid_for_path` (compare file bytes to `create_id_for_path` when `--project-root` given)
 - [x] Node `unique_id` validation (range + duplicates)
 
-### Phase 5 — Batch / integration
-
-- [ ] JSON command shapes for MCP (already defined in `docs/development_principles.md`)
-- [ ] Multi-file operations (bulk rename, retarget ext_resource paths)
-- [ ] Optional: invoke installed Godot headless for validation diffs
-
-### Phase 6 — ID integrity detection (partial) ✅ core checks
+### Phase 6 — ID integrity detection ✅ core checks
 
 Goal: detect when an LLM or manual edit has left a scene/resource in an invalid or inconsistent ID state.
 

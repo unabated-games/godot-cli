@@ -125,6 +125,22 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    const godot_bin = b.option([]const u8, "godot", "Path to Godot binary for reference generation") orelse "/Applications/Godot.app/Contents/MacOS/Godot";
+    const godot_step = b.step("test-godot", "Import fixtures, generate Godot reference save, run round-trip CLI check");
+    const import_cmd = b.addSystemCommand(&.{ "bash", "tools/import_fixtures.sh" });
+    import_cmd.setCwd(b.path("."));
+    import_cmd.setEnvironmentVariable("GODOT", godot_bin);
+    godot_step.dependOn(&import_cmd.step);
+    const godot_cmd = b.addSystemCommand(&.{ godot_bin, "--headless", "--path", "test_fixtures/project", "--script", "save_reference.gd" });
+    godot_cmd.setCwd(b.path("."));
+    godot_cmd.step.dependOn(&import_cmd.step);
+    godot_step.dependOn(&godot_cmd.step);
+    const roundtrip_cmd = b.addRunArtifact(exe);
+    roundtrip_cmd.addArgs(&.{ "scene", "round-trip", "test_fixtures/project/sample.tscn", "--dry-run" });
+    roundtrip_cmd.step.dependOn(&godot_cmd.step);
+    roundtrip_cmd.step.dependOn(b.getInstallStep());
+    godot_step.dependOn(&roundtrip_cmd.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

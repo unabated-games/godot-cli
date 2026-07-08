@@ -22,6 +22,7 @@ The binary is installed to `zig-out/bin/godot-cli`.
 
 ```bash
 zig build test
+zig build test-godot   # requires Godot 4.x at default macOS path (or -Dgodot=...)
 zig build run -- --help
 ```
 
@@ -61,6 +62,9 @@ godot-cli scene inspect path/to/main.tscn --json
 godot-cli scene validate test_fixtures/invalid_duplicate_id.tscn
 godot-cli scene validate path/to/main.tscn --project-root .   # enables stale uid checks
 godot-cli scene normalize --resource-path res://main.tscn --output out.tscn in.tscn
+godot-cli scene validate-batch *.tscn --project-root .
+godot-cli scene retarget-ext --from res://old.gd --to res://new.gd scenes/*.tscn
+godot-cli scene round-trip path/to/main.tscn --dry-run
 godot-cli scene set-property --node-name Player --property visible --value true path/to/main.tscn
 
 # Resource files (.tres)
@@ -77,7 +81,15 @@ godot-cli --request-stdin < request.json
 ## Documentation
 
 - [Development principles](docs/development_principles.md) — CLI argument conventions, result shapes, and JSON contracts
+- [MCP tool catalog](docs/mcp_tools.json) — JSON request shapes for every command
 - [ID generation plan](docs/id_generation_plan.md) — Godot ID systems and roadmap for scene/resource I/O
+
+Regenerate Godot import metadata for test fixtures:
+
+```bash
+tools/import_fixtures.sh
+# or: GODOT=/path/to/Godot tools/import_fixtures.sh
+```
 
 ## Project layout
 
@@ -92,6 +104,9 @@ src/
 docs/
   development_principles.md
   id_generation_plan.md
+  mcp_tools.json
+tools/
+  import_fixtures.sh   # Godot --import for test_fixtures/project
 test_fixtures/
   project/           Minimal Godot project for cross-checking IDs
 ```

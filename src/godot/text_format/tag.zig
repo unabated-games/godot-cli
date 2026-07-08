@@ -59,6 +59,30 @@ pub const Tag = struct {
         errdefer allocator.free(key_copy);
         try self.fields.put(allocator, key_copy, .{ .string = value_copy });
     }
+
+    pub fn setIntegerField(self: *Tag, allocator: std.mem.Allocator, key: []const u8, value: i64) !void {
+        if (self.fields.getPtr(key)) |existing| {
+            switch (existing.*) {
+                .string => |s| allocator.free(s),
+                else => {},
+            }
+            existing.* = .{ .integer = value };
+            return;
+        }
+
+        const key_copy = try allocator.dupe(u8, key);
+        errdefer allocator.free(key_copy);
+        try self.fields.put(allocator, key_copy, .{ .integer = value });
+    }
+
+    pub fn removeField(self: *Tag, allocator: std.mem.Allocator, key: []const u8) void {
+        const value = self.fields.fetchRemove(key) orelse return;
+        allocator.free(value.key);
+        switch (value.value) {
+            .string => |s| allocator.free(s),
+            else => {},
+        }
+    }
 };
 
 pub const ParseError = error{

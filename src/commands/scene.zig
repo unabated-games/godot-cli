@@ -6,6 +6,7 @@ const uid_cache = @import("../godot/uid_cache.zig");
 const text_format = @import("../godot/text_format/root.zig");
 const id_validate = @import("../godot/id_validate.zig");
 const project_config = @import("../godot/project_config.zig");
+const variant = @import("../godot/variant/root.zig");
 
 const ValidateSetup = struct {
     ctx: id_validate.ValidateContext,
@@ -165,7 +166,16 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         return error.Usage;
     };
 
-    try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, property_name, property_value);
+    const written_value: []const u8 = if (inv.flag("raw-value")) property_value else blk: {
+        const parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
+        defer cli.allocator.free(parsed.raw);
+        break :blk try parsed.formatForWrite(cli.allocator);
+    };
+    if (!inv.flag("raw-value")) {
+        defer cli.allocator.free(written_value);
+    }
+
+    try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, property_name, written_value);
 
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
@@ -365,6 +375,153 @@ fn resourceInspectHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     return inspectHandler(ctx, inv, "resource");
 }
 
+fn validateBatchHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+
+    var results = std.json.Array.init(cli.allocator);
+    var total_errors: usize = 0;
+
+    for (inv.positionals) |path| {
+        const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
+        var setup = try ValidateSetup.init(cli, inv, path);
+        const report = try id_validate.validateDocument(cli.allocator, &doc, setup.ctx);
+        setup.deinit(cli.allocator);
+
+        const issues = try buildIssuesJson(cli, &report);
+        const errors = countErrors(&report);
+        total_errors += errors;
+
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "path", .{ .string = path });
+        try row.put(cli.allocator, "issues", .{ .array = issues });
+        try row.put(cli.allocator, "error_count", .{ .integer = @intCast(errors) });
+        try results.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "kind", .{ .string = kind });
+    try data.put(cli.allocator, "files", .{ .array = results });
+    try data.put(cli.allocator, "file_count", .{ .integer = @intCast(inv.positionals.len) });
+    try data.put(cli.allocator, "error_count", .{ .integer = @intCast(total_errors) });
+
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "{s}: validated {d} file(s), {d} error(s)",
+        .{ kind, inv.positionals.len, total_errors },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    if (total_errors > 0) {
+        return .{ .data = .{ .object = data }, .messages = &.{}, .exit_code = .failure };
+    }
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn retargetExtHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+    const from_path = inv.getOption("from") orelse return error.Usage;
+    const to_path = inv.getOption("to") orelse return error.Usage;
+    if (inv.positionals.len == 0) return error.Usage;
+
+    const cli = appFrom(ctx);
+    var total_retargeted: usize = 0;
+    var files_changed: usize = 0;
+
+    var file_results = std.json.Array.init(cli.allocator);
+
+    for (inv.positionals) |input_path| {
+        var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+        const count = try text_format.batch.retargetExtResourcePaths(&doc, cli.allocator, from_path, to_path);
+        if (count > 0) {
+            files_changed += 1;
+            total_retargeted += count;
+            const output_path = inv.getOption("output") orelse input_path;
+            const prepare = try prepareSaveOptions(cli, inv, output_path);
+            if (!inv.flag("dry-run")) {
+                try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare);
+            }
+        }
+
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "path", .{ .string = input_path });
+        try row.put(cli.allocator, "retargeted", .{ .integer = @intCast(count) });
+        try file_results.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "kind", .{ .string = kind });
+    try data.put(cli.allocator, "from", .{ .string = from_path });
+    try data.put(cli.allocator, "to", .{ .string = to_path });
+    try data.put(cli.allocator, "files", .{ .array = file_results });
+    try data.put(cli.allocator, "files_changed", .{ .integer = @intCast(files_changed) });
+    try data.put(cli.allocator, "retargeted_count", .{ .integer = @intCast(total_retargeted) });
+
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "retargeted {d} ext_resource path(s) in {d} file(s)",
+        .{ total_retargeted, files_changed },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn roundTripHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const output_path = inv.getOption("output") orelse input_path;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    if (!inv.flag("dry-run")) {
+        try text_format.writer.writeFile(cli.allocator, output_path, &doc, null);
+    }
+
+    const written = try text_format.writer.writeDocument(cli.allocator, &doc);
+    defer cli.allocator.free(written);
+
+    var reparsed = try text_format.document.parseBytes(cli.allocator, written);
+    defer reparsed.deinit(cli.allocator);
+
+    const equal = text_format.roundtrip.documentsEqual(&doc, &reparsed);
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = input_path });
+    try data.put(cli.allocator, "output", .{ .string = output_path });
+    try data.put(cli.allocator, "kind", .{ .string = kind });
+    try data.put(cli.allocator, "structure_preserved", .{ .bool = equal });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+
+    if (!equal) {
+        return .{ .data = .{ .object = data }, .messages = &.{}, .exit_code = .failure };
+    }
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneValidateBatchHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return validateBatchHandler(ctx, inv, "scene");
+}
+
+fn resourceValidateBatchHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return validateBatchHandler(ctx, inv, "resource");
+}
+
+fn sceneRetargetExtHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return retargetExtHandler(ctx, inv, "scene");
+}
+
+fn resourceRetargetExtHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return retargetExtHandler(ctx, inv, "resource");
+}
+
+fn sceneRoundTripHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return roundTripHandler(ctx, inv, "scene");
+}
+
+fn resourceRoundTripHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return roundTripHandler(ctx, inv, "resource");
+}
+
 pub fn uidCacheCommands() spec.CommandSpec {
     const project_root_opt = spec.OptionSpec{
         .long = "project-root",
@@ -407,11 +564,28 @@ pub fn sceneCommands() spec.CommandSpec {
     };
     const set_property_options = [_]spec.OptionSpec{
         .{ .long = "property", .kind = .string, .description = "Property name to set" },
-        .{ .long = "value", .kind = .string, .description = "Raw property value (right-hand side of =)" },
+        .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)" },
+        .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
         .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },
         .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (e.g. resource)" },
     } ++ save_options;
+    const batch_options = [_]spec.OptionSpec{
+        project_root_opt,
+    };
+    const retarget_options = [_]spec.OptionSpec{
+        .{ .long = "from", .kind = .string, .description = "Current ext_resource path (res://…)" },
+        .{ .long = "to", .kind = .string, .description = "New ext_resource path (res://…)" },
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding" },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write" },
+        .{ .long = "output", .kind = .path, .description = "Output path when processing a single file" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Report changes without writing" },
+    };
+    const roundtrip_options = [_]spec.OptionSpec{
+        .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Check structure preservation without writing" },
+    };
 
     return .{
         .name = "scene",
@@ -431,6 +605,12 @@ pub fn sceneCommands() spec.CommandSpec {
                 .handler = sceneValidateHandler,
             },
             .{
+                .name = "validate-batch",
+                .summary = "Validate multiple scene files (aggregated JSON, exit 1 on any error)",
+                .options = &batch_options,
+                .handler = sceneValidateBatchHandler,
+            },
+            .{
                 .name = "set-property",
                 .summary = "Set a property on a node section and save the scene",
                 .description = "Target a section with --node-name or --section-line. Value is written verbatim after =.",
@@ -443,6 +623,18 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Runs Godot-compatible save preparation without editing properties.",
                 .options = &save_options,
                 .handler = sceneNormalizeHandler,
+            },
+            .{
+                .name = "retarget-ext",
+                .summary = "Replace ext_resource paths across one or more files",
+                .options = &retarget_options,
+                .handler = sceneRetargetExtHandler,
+            },
+            .{
+                .name = "round-trip",
+                .summary = "Parse and rewrite a scene; fail if structure is not preserved",
+                .options = &roundtrip_options,
+                .handler = sceneRoundTripHandler,
             },
         },
     };
@@ -463,10 +655,27 @@ pub fn resourceCommands() spec.CommandSpec {
     };
     const set_property_options = [_]spec.OptionSpec{
         .{ .long = "property", .kind = .string, .description = "Property name to set" },
-        .{ .long = "value", .kind = .string, .description = "Raw property value (right-hand side of =)" },
+        .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)" },
+        .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
         .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (default: resource)" },
     } ++ save_options;
+    const batch_options = [_]spec.OptionSpec{
+        project_root_opt,
+    };
+    const retarget_options = [_]spec.OptionSpec{
+        .{ .long = "from", .kind = .string, .description = "Current ext_resource path (res://…)" },
+        .{ .long = "to", .kind = .string, .description = "New ext_resource path (res://…)" },
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding" },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write" },
+        .{ .long = "output", .kind = .path, .description = "Output path when processing a single file" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Report changes without writing" },
+    };
+    const roundtrip_options = [_]spec.OptionSpec{
+        .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Check structure preservation without writing" },
+    };
 
     return .{
         .name = "resource",
@@ -485,6 +694,12 @@ pub fn resourceCommands() spec.CommandSpec {
                 .handler = resourceValidateHandler,
             },
             .{
+                .name = "validate-batch",
+                .summary = "Validate multiple resource files (aggregated JSON, exit 1 on any error)",
+                .options = &batch_options,
+                .handler = resourceValidateBatchHandler,
+            },
+            .{
                 .name = "set-property",
                 .summary = "Set a property on a resource section and save",
                 .options = &set_property_options,
@@ -495,6 +710,18 @@ pub fn resourceCommands() spec.CommandSpec {
                 .summary = "Repair scene-local IDs and sort ext_resource sections for save",
                 .options = &save_options,
                 .handler = resourceNormalizeHandler,
+            },
+            .{
+                .name = "retarget-ext",
+                .summary = "Replace ext_resource paths across one or more files",
+                .options = &retarget_options,
+                .handler = resourceRetargetExtHandler,
+            },
+            .{
+                .name = "round-trip",
+                .summary = "Parse and rewrite a resource file; fail if structure is not preserved",
+                .options = &roundtrip_options,
+                .handler = resourceRoundTripHandler,
             },
         },
     };

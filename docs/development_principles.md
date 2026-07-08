@@ -58,7 +58,7 @@ Declared per command in `OptionSpec`:
 
 Short forms (`-x`) are supported when `short` is set on the option.
 
-Positional arguments are passed after all options. Use `--` to terminate option parsing if a positional begins with `-`.
+Positional arguments are passed after options, but **command options may also appear after positionals** (e.g. `godot-cli scene validate main.tscn --json`). Use `--` to force remaining tokens to be positionals only.
 
 ### JSON input (alternative to argv)
 
@@ -102,6 +102,46 @@ Structured:
 {
   "command": ["ping"],
   "options": { "json": true }
+}
+```
+
+Batch validate (MCP-friendly):
+
+```json
+{
+  "argv": ["scene", "validate-batch", "scenes/a.tscn", "scenes/b.tscn", "--project-root", ".", "--json"]
+}
+```
+
+Full tool catalog for MCP server registration: [`docs/mcp_tools.json`](mcp_tools.json).
+
+Retarget external paths:
+
+```json
+{
+  "command": ["scene", "retarget-ext"],
+  "positional": ["scenes/player.tscn"],
+  "options": {
+    "from": "res://old_script.gd",
+    "to": "res://new_script.gd",
+    "json": true
+  }
+}
+```
+
+Normalize / save-prep only:
+
+```json
+{
+  "argv": ["scene", "normalize", "main.tscn", "--resource-path", "res://main.tscn", "--json"]
+}
+```
+
+Options may appear after positionals:
+
+```json
+{
+  "argv": ["scene", "validate", "main.tscn", "--json", "--project-root", "."]
 }
 ```
 

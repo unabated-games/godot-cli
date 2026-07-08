@@ -3,6 +3,8 @@
 
 const std = @import("std");
 const scene_id = @import("../scene_id.zig");
+const node_id = @import("../node_id.zig");
+const id_validate = @import("../id_validate.zig");
 const document = @import("document.zig");
 const tag = @import("tag.zig");
 
@@ -12,6 +14,7 @@ pub const SaveOptions = struct {
     repair_ids: bool = true,
     sort_ext_resources: bool = true,
     update_load_steps: bool = true,
+    assign_node_unique_ids: bool = true,
 };
 
 pub const PrepareError = error{
@@ -30,6 +33,9 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     }
     if (options.update_load_steps) {
         updateLoadSteps(doc);
+    }
+    if (options.assign_node_unique_ids) {
+        try assignNodeUniqueIds(allocator, doc, options.seed_path);
     }
 }
 
@@ -314,6 +320,76 @@ fn parseDigitRun(text: []const u8, index: *usize) u64 {
         index.* += 1;
     }
     return value;
+}
+
+fn assignNodeUniqueIds(allocator: std.mem.Allocator, doc: *document.Document, seed_path: []const u8) !void {
+    node_id.resetNodeUniqueIdGenerator();
+    node_id.seedNodeUniqueIdGeneratorFromPath(seed_path);
+
+    var used = std.AutoHashMap(i32, void).init(allocator);
+    defer used.deinit();
+
+    var needs_assign: std.ArrayList(usize) = .empty;
+    defer needs_assign.deinit(allocator);
+
+    for (doc.sections.items, 0..) |section, index| {
+        if (!std.mem.eql(u8, section.header.name, "node")) continue;
+
+        if (section.header.getInteger("unique_id")) |unique_id| {
+            if (id_validate.validateNodeUniqueId(unique_id) == null) {
+                const id: i32 = @intCast(unique_id);
+                const gop = try used.getOrPut(id);
+                if (gop.found_existing) {
+                    try needs_assign.append(allocator, index);
+                }
+                continue;
+            }
+        }
+        try needs_assign.append(allocator, index);
+    }
+
+    for (needs_assign.items) |index| {
+        const new_id = node_id.generateNodeUniqueId(&used);
+        try used.put(new_id, {});
+        try doc.sections.items[index].header.setIntegerField(allocator, "unique_id", new_id);
+    }
+}
+
+test "assigns node unique_id when missing" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\[node name="Root" type="Node"]
+        \\[node name="Child" type="Node" parent="Root"]
+        \\
+    ;
+
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    try prepareDocument(allocator, &doc, .{
+        .seed_path = "res://test.tscn",
+        .repair_ids = false,
+        .sort_ext_resources = false,
+        .update_load_steps = false,
+    });
+
+    const root_id = doc.sections.items[1].header.getInteger("unique_id").?;
+    const child_id = doc.sections.items[2].header.getInteger("unique_id").?;
+    try std.testing.expect(root_id > 0);
+    try std.testing.expect(child_id > 0);
+    try std.testing.expect(root_id != child_id);
+
+    var doc2 = try document.parseBytes(allocator, source);
+    defer doc2.deinit(allocator);
+    try prepareDocument(allocator, &doc2, .{
+        .seed_path = "res://test.tscn",
+        .repair_ids = false,
+        .sort_ext_resources = false,
+        .update_load_steps = false,
+    });
+    try std.testing.expectEqual(root_id, doc2.sections.items[1].header.getInteger("unique_id").?);
+    try std.testing.expectEqual(child_id, doc2.sections.items[2].header.getInteger("unique_id").?);
 }
 
 test "assigns missing ext_resource id deterministically" {
