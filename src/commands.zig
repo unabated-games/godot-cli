@@ -1,5 +1,6 @@
 const std = @import("std");
 const spec = @import("cli/spec.zig");
+const uid = @import("commands/uid.zig");
 
 fn pingHandler(ctx: *anyopaque, inv: *const spec.Invocation) anyerror!spec.Result {
     _ = ctx;
@@ -25,10 +26,11 @@ pub const root = spec.CommandSpec{
             .description = "Returns a trivial response so callers can verify JSON and CLI wiring.",
             .handler = pingHandler,
         },
+        uid.commands(),
     },
 };
 
-test "root exposes ping" {
-    try std.testing.expectEqual(@as(usize, 2), root.children.len);
-    try std.testing.expectEqualStrings("ping", root.children[1].name);
+test "root exposes uid commands" {
+    try std.testing.expectEqual(@as(usize, 3), root.children.len);
+    try std.testing.expectEqualStrings("uid", root.children[2].name);
 }

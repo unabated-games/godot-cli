@@ -114,7 +114,7 @@ pub const App = struct {
             return .success;
         };
 
-        const ctx: *anyopaque = @ptrCast(@constCast(&self.root));
+        const ctx: *anyopaque = @ptrCast(@constCast(self));
         const result = handler(ctx, &inv) catch |err| {
             const failure = emit.Failure{
                 .kind = "command_failed",
