@@ -140,6 +140,14 @@ pub fn build(b: *std.Build) void {
     roundtrip_cmd.step.dependOn(&godot_cmd.step);
     roundtrip_cmd.step.dependOn(b.getInstallStep());
     godot_step.dependOn(&roundtrip_cmd.step);
+    const compare_cmd = b.addRunArtifact(exe);
+    compare_cmd.addArgs(&.{
+        "scene", "compare-godot", "test_fixtures/project/sample.tscn",
+        "test_fixtures/project/sample_godot_saved.tscn", "--json",
+    });
+    compare_cmd.step.dependOn(&godot_cmd.step);
+    compare_cmd.step.dependOn(b.getInstallStep());
+    godot_step.dependOn(&compare_cmd.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

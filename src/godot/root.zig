@@ -8,6 +8,7 @@ pub const uid_cache = @import("uid_cache.zig");
 pub const project_config = @import("project_config.zig");
 pub const text_format = @import("text_format/root.zig");
 pub const id_validate = @import("id_validate.zig");
+pub const id_session = @import("id_session.zig");
 pub const variant = @import("variant/root.zig");
 
 test {

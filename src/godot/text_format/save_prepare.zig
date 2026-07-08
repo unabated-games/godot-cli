@@ -5,6 +5,7 @@ const std = @import("std");
 const scene_id = @import("../scene_id.zig");
 const node_id = @import("../node_id.zig");
 const id_validate = @import("../id_validate.zig");
+const id_session = @import("../id_session.zig");
 const document = @import("document.zig");
 const tag = @import("tag.zig");
 
@@ -15,6 +16,7 @@ pub const SaveOptions = struct {
     sort_ext_resources: bool = true,
     update_load_steps: bool = true,
     assign_node_unique_ids: bool = true,
+    id_session: ?*id_session.Session = null,
 };
 
 pub const PrepareError = error{
@@ -26,7 +28,7 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     scene_id.seedSceneUniqueIdFromPath(options.seed_path);
 
     if (options.repair_ids) {
-        try assignSceneIds(allocator, doc);
+        try assignSceneIds(allocator, doc, options);
     }
     if (options.sort_ext_resources) {
         try sortExtResourceSections(allocator, doc);
@@ -37,9 +39,12 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     if (options.assign_node_unique_ids) {
         try assignNodeUniqueIds(allocator, doc, options.seed_path);
     }
+    if (options.id_session) |session| {
+        try recordExtResourceIds(allocator, doc, options.seed_path, session);
+    }
 }
 
-fn assignSceneIds(allocator: std.mem.Allocator, doc: *document.Document) !void {
+fn assignSceneIds(allocator: std.mem.Allocator, doc: *document.Document, options: SaveOptions) !void {
     var used_ids = std.StringHashMap(void).init(allocator);
     defer {
         var it = used_ids.keyIterator();
@@ -61,8 +66,22 @@ fn assignSceneIds(allocator: std.mem.Allocator, doc: *document.Document) !void {
     for (doc.sections.items) |*section| {
         if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
 
+        const ext_path = section.header.getString("path");
         const existing = section.header.getString("id");
-        const new_id = try resolveExtResourceId(allocator, existing, ext_index, &used_ids);
+
+        var cached_id: ?[]const u8 = null;
+        if (options.id_session) |session| {
+            if (ext_path) |path| {
+                if (session.getExtId(options.seed_path, path)) |cached| {
+                    if (!used_ids.contains(cached)) cached_id = cached;
+                }
+            }
+        }
+
+        const new_id = if (cached_id) |cached|
+            try allocator.dupe(u8, cached)
+        else
+            try resolveExtResourceId(allocator, existing, ext_index, &used_ids);
         defer allocator.free(new_id);
         ext_index += 1;
 
@@ -322,6 +341,16 @@ fn parseDigitRun(text: []const u8, index: *usize) u64 {
     return value;
 }
 
+fn recordExtResourceIds(allocator: std.mem.Allocator, doc: *document.Document, seed_path: []const u8, session: *id_session.Session) !void {
+    _ = allocator;
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const ext_path = section.header.getString("path") orelse continue;
+        const id = section.header.getString("id") orelse continue;
+        try session.setExtId(session.referrers.allocator, seed_path, ext_path, id);
+    }
+}
+
 fn assignNodeUniqueIds(allocator: std.mem.Allocator, doc: *document.Document, seed_path: []const u8) !void {
     node_id.resetNodeUniqueIdGenerator();
     node_id.seedNodeUniqueIdGeneratorFromPath(seed_path);
@@ -353,6 +382,33 @@ fn assignNodeUniqueIds(allocator: std.mem.Allocator, doc: *document.Document, se
         try used.put(new_id, {});
         try doc.sections.items[index].header.setIntegerField(allocator, "unique_id", new_id);
     }
+}
+
+test "uses id session cache for ext_resource ids" {
+    const allocator = std.testing.allocator;
+    var session = id_session.Session.init(allocator);
+    defer session.deinit(allocator);
+    try session.setExtId(allocator, "res://test.tscn", "res://a.gd", "1_cached");
+
+    const source =
+        \\[gd_scene format=3]
+        \\[ext_resource type="Script" path="res://a.gd"]
+        \\[node name="Root" type="Node"]
+        \\
+    ;
+
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    try prepareDocument(allocator, &doc, .{
+        .seed_path = "res://test.tscn",
+        .sort_ext_resources = false,
+        .update_load_steps = false,
+        .assign_node_unique_ids = false,
+        .id_session = &session,
+    });
+
+    try std.testing.expectEqualStrings("1_cached", doc.sections.items[1].header.getString("id").?);
 }
 
 test "assigns node unique_id when missing" {

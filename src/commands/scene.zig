@@ -5,6 +5,7 @@ const resource_uid = @import("../godot/resource_uid.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
 const text_format = @import("../godot/text_format/root.zig");
 const id_validate = @import("../godot/id_validate.zig");
+const id_session = @import("../godot/id_session.zig");
 const project_config = @import("../godot/project_config.zig");
 const variant = @import("../godot/variant/root.zig");
 
@@ -45,6 +46,26 @@ const ValidateSetup = struct {
     }
 };
 
+const PreparedSave = struct {
+    options: ?text_format.save_prepare.SaveOptions,
+    session: ?id_session.Session = null,
+    session_path: ?[]const u8 = null,
+    seed_path_owned: ?[]const u8 = null,
+
+    pub fn deinit(self: *PreparedSave, allocator: std.mem.Allocator) void {
+        if (self.seed_path_owned) |path| allocator.free(path);
+        if (self.session) |*session| session.deinit(allocator);
+        if (self.session_path) |path| allocator.free(path);
+    }
+
+    pub fn persistSession(self: *PreparedSave, allocator: std.mem.Allocator) !void {
+        if (self.session_path) |path| {
+            if (self.session) |*session| try session.saveToFile(path);
+        }
+        _ = allocator;
+    }
+};
+
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
 }
@@ -65,10 +86,42 @@ fn saveSeedPath(cli: *const app_mod.App, inv: *const spec.Invocation, output_pat
     return try cli.allocator.dupe(u8, output_path);
 }
 
-fn prepareSaveOptions(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8) !?text_format.save_prepare.SaveOptions {
-    if (inv.flag("no-prepare-save")) return null;
+fn prepareSaveOptions(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8) !PreparedSave {
+    if (inv.flag("no-prepare-save")) return .{ .options = null };
+
     const seed_path = try saveSeedPath(cli, inv, output_path);
-    return .{ .seed_path = seed_path };
+    var prepared: PreparedSave = .{
+        .options = .{ .seed_path = seed_path },
+        .seed_path_owned = seed_path,
+    };
+
+    if (!inv.flag("no-id-session")) {
+        const session_path = if (inv.getOption("id-session")) |path|
+            try cli.allocator.dupe(u8, path)
+        else if (projectRootFrom(inv)) |root|
+            try id_session.Session.defaultPath(cli.allocator, root)
+        else
+            null;
+
+        if (session_path) |path| {
+            prepared.session_path = path;
+            prepared.session = id_session.Session.loadFromFile(cli.allocator, path) catch id_session.Session.init(cli.allocator);
+            if (prepared.options) |*options| {
+                options.id_session = &prepared.session.?;
+            }
+        }
+    }
+
+    return prepared;
+}
+
+fn writeWithPrepare(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8, doc: *text_format.document.Document) !void {
+    var prepare = try prepareSaveOptions(cli, inv, output_path);
+    defer prepare.deinit(cli.allocator);
+    try text_format.writer.writeFile(cli.allocator, output_path, doc, prepare.options);
+    if (!inv.flag("dry-run")) {
+        try prepare.persistSession(cli.allocator);
+    }
 }
 
 fn loadCacheOptional(cli: *const app_mod.App, inv: *const spec.Invocation) !?uid_cache.Cache {
@@ -179,8 +232,7 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
 
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
-        const prepare = try prepareSaveOptions(cli, inv, output_path);
-        try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare);
+        try writeWithPrepare(cli, inv, output_path, &doc);
     }
 
     const section = doc.sections.items[section_index];
@@ -323,10 +375,12 @@ fn normalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const 
     const output_path = inv.getOption("output") orelse input_path;
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
-    const prepare = try prepareSaveOptions(cli, inv, output_path);
+    var prepare = try prepareSaveOptions(cli, inv, output_path);
+    defer prepare.deinit(cli.allocator);
     if (!inv.flag("dry-run")) {
-        try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare);
-    } else if (prepare) |options| {
+        try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare.options);
+        try prepare.persistSession(cli.allocator);
+    } else if (prepare.options) |options| {
         try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
     }
 
@@ -436,9 +490,8 @@ fn retargetExtHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
             files_changed += 1;
             total_retargeted += count;
             const output_path = inv.getOption("output") orelse input_path;
-            const prepare = try prepareSaveOptions(cli, inv, output_path);
             if (!inv.flag("dry-run")) {
-                try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare);
+                try writeWithPrepare(cli, inv, output_path, &doc);
             }
         }
 
@@ -522,6 +575,49 @@ fn resourceRoundTripHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     return roundTripHandler(ctx, inv, "resource");
 }
 
+fn compareGodotHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const reference_path = if (inv.getOption("reference")) |ref| ref else blk: {
+        if (inv.positionals.len < 2) return error.Usage;
+        break :blk inv.positionals[1];
+    };
+
+    var original = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    defer original.deinit(cli.allocator);
+    var reference = try text_format.document.parseFile(cli.allocator, cli.io, reference_path);
+    defer reference.deinit(cli.allocator);
+
+    const match = text_format.roundtrip.documentsMatchGodotSave(cli.allocator, &original, &reference);
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = input_path });
+    try data.put(cli.allocator, "reference", .{ .string = reference_path });
+    try data.put(cli.allocator, "kind", .{ .string = kind });
+    try data.put(cli.allocator, "matches_godot_save", .{ .bool = match });
+
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "{s}: {s} vs Godot reference {s}",
+        .{ if (match) "matches" else "differs from", input_path, reference_path },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    if (!match) {
+        return .{ .data = .{ .object = data }, .messages = &.{}, .exit_code = .failure };
+    }
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneCompareGodotHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return compareGodotHandler(ctx, inv, "scene");
+}
+
+fn resourceCompareGodotHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return compareGodotHandler(ctx, inv, "resource");
+}
+
 pub fn uidCacheCommands() spec.CommandSpec {
     const project_root_opt = spec.OptionSpec{
         .long = "project-root",
@@ -555,13 +651,17 @@ pub fn sceneCommands() spec.CommandSpec {
         .kind = .path,
         .description = "Godot project root for uid_cache lookup and res:// seed path",
     };
+    const id_session_options = [_]spec.OptionSpec{
+        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
+        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
+    };
     const save_options = [_]spec.OptionSpec{
-        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
         .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
-    };
+    } ++ id_session_options;
     const set_property_options = [_]spec.OptionSpec{
         .{ .long = "property", .kind = .string, .description = "Property name to set" },
         .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)" },
@@ -581,10 +681,13 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write" },
         .{ .long = "output", .kind = .path, .description = "Output path when processing a single file" },
         .{ .long = "dry-run", .kind = .flag, .description = "Report changes without writing" },
-    };
+    } ++ id_session_options;
     const roundtrip_options = [_]spec.OptionSpec{
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Check structure preservation without writing" },
+    };
+    const compare_godot_options = [_]spec.OptionSpec{
+        .{ .long = "reference", .kind = .path, .description = "Godot-saved reference file (default: second positional)" },
     };
 
     return .{
@@ -636,6 +739,13 @@ pub fn sceneCommands() spec.CommandSpec {
                 .options = &roundtrip_options,
                 .handler = sceneRoundTripHandler,
             },
+            .{
+                .name = "compare-godot",
+                .summary = "Compare a scene to a Godot headless save (semantic match)",
+                .description = "Ignores ext_resource id suffixes and default sub_resource fields stripped by Godot.",
+                .options = &compare_godot_options,
+                .handler = sceneCompareGodotHandler,
+            },
         },
     };
 }
@@ -646,13 +756,17 @@ pub fn resourceCommands() spec.CommandSpec {
         .kind = .path,
         .description = "Godot project root for uid_cache lookup and res:// seed path",
     };
+    const id_session_options = [_]spec.OptionSpec{
+        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
+        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
+    };
     const save_options = [_]spec.OptionSpec{
-        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
         .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
-    };
+    } ++ id_session_options;
     const set_property_options = [_]spec.OptionSpec{
         .{ .long = "property", .kind = .string, .description = "Property name to set" },
         .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)" },
@@ -671,10 +785,13 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write" },
         .{ .long = "output", .kind = .path, .description = "Output path when processing a single file" },
         .{ .long = "dry-run", .kind = .flag, .description = "Report changes without writing" },
-    };
+    } ++ id_session_options;
     const roundtrip_options = [_]spec.OptionSpec{
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Check structure preservation without writing" },
+    };
+    const compare_godot_options = [_]spec.OptionSpec{
+        .{ .long = "reference", .kind = .path, .description = "Godot-saved reference file (default: second positional)" },
     };
 
     return .{
@@ -722,6 +839,12 @@ pub fn resourceCommands() spec.CommandSpec {
                 .summary = "Parse and rewrite a resource file; fail if structure is not preserved",
                 .options = &roundtrip_options,
                 .handler = resourceRoundTripHandler,
+            },
+            .{
+                .name = "compare-godot",
+                .summary = "Compare a resource to a Godot headless save (semantic match)",
+                .options = &compare_godot_options,
+                .handler = resourceCompareGodotHandler,
             },
         },
     };

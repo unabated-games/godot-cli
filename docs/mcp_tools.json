@@ -96,6 +96,13 @@
       }
     },
     {
+      "name": "scene_compare_godot",
+      "argv": ["scene", "compare-godot", "<file.tscn>", "<godot-reference.tscn>"],
+      "json_request": {
+        "argv": ["scene", "compare-godot", "sample.tscn", "sample_godot_saved.tscn", "--json"]
+      }
+    },
+    {
       "name": "scene_round_trip",
       "argv": ["scene", "round-trip", "<file>"],
       "options": ["--dry-run"],

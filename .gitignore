@@ -7,3 +7,6 @@ build/
 build-*/
 docgen_tmp/
 
+# Godot editor cache (keep uid_cache.bin and scene_id_cache.json fixtures)
+test_fixtures/project/.godot/editor/
+

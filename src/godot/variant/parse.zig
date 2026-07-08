@@ -13,6 +13,8 @@ pub const Kind = enum {
     vector2,
     vector3,
     vector4,
+    node_path,
+    array,
     raw,
 };
 
@@ -43,6 +45,8 @@ pub const Value = struct {
             .vector4 => try std.fmt.allocPrint(allocator, "Vector4({d}, {d}, {d}, {d})", .{
                 self.components[0], self.components[1], self.components[2], self.components[3],
             }),
+            .node_path => try quoteString(allocator, self.string),
+            .array => try allocator.dupe(u8, self.raw),
         };
     }
 };
@@ -85,7 +89,17 @@ pub fn parsePropertyValue(allocator: std.mem.Allocator, text: []const u8) ParseE
         return value;
     }
 
-    // ExtResource, SubResource, arrays, dictionaries, etc.
+    if (std.mem.startsWith(u8, trimmed, "NodePath(") and trimmed[trimmed.len - 1] == ')') {
+        const inner = try parseNodePath(allocator, trimmed);
+        return .{ .kind = .node_path, .raw = try allocator.dupe(u8, trimmed), .string = inner };
+    }
+
+    if (trimmed[0] == '[' and trimmed[trimmed.len - 1] == ']') {
+        try validateArraySyntax(trimmed);
+        return .{ .kind = .array, .raw = try allocator.dupe(u8, trimmed) };
+    }
+
+    // ExtResource, SubResource, dictionaries, etc.
     return .{ .kind = .raw, .raw = try allocator.dupe(u8, trimmed) };
 }
 
@@ -126,6 +140,45 @@ fn parseConstructor(text: []const u8) ParseError!?Value {
     if (count != expected) return error.InvalidSyntax;
 
     return .{ .kind = kind, .raw = "", .components = components };
+}
+
+fn parseNodePath(allocator: std.mem.Allocator, text: []const u8) ParseError![]u8 {
+    const open = std.mem.indexOfScalar(u8, text, '(') orelse return error.InvalidSyntax;
+    if (text[text.len - 1] != ')') return error.InvalidSyntax;
+    const inner = std.mem.trim(u8, text[open + 1 .. text.len - 1], &std.ascii.whitespace);
+    if (inner.len == 0) return try allocator.dupe(u8, "");
+    if (inner[0] == '"') return parseQuotedString(allocator, inner);
+    return try allocator.dupe(u8, inner);
+}
+
+fn validateArraySyntax(text: []const u8) ParseError!void {
+    var depth: usize = 0;
+    var in_string = false;
+    var escape = false;
+    for (text) |c| {
+        if (in_string) {
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (c == '\\') {
+                escape = true;
+                continue;
+            }
+            if (c == '"') in_string = false;
+            continue;
+        }
+        switch (c) {
+            '"' => in_string = true,
+            '[', '(' => depth += 1,
+            ']', ')' => {
+                if (depth == 0) return error.InvalidSyntax;
+                depth -= 1;
+            },
+            else => {},
+        }
+    }
+    if (in_string or depth != 0) return error.InvalidSyntax;
 }
 
 fn parseQuotedString(allocator: std.mem.Allocator, text: []const u8) ParseError![]u8 {
@@ -192,6 +245,18 @@ test "parse Color and Vector3" {
     const formatted = try v.formatForWrite(std.testing.allocator);
     defer std.testing.allocator.free(formatted);
     try std.testing.expectEqualStrings("Vector3(1, 2, 3)", formatted);
+}
+
+test "parse NodePath and array" {
+    const np = try parsePropertyValue(std.testing.allocator, "NodePath(\"Root/Child\")");
+    defer std.testing.allocator.free(np.raw);
+    defer std.testing.allocator.free(np.string);
+    try std.testing.expect(np.kind == .node_path);
+    try std.testing.expectEqualStrings("Root/Child", np.string);
+
+    const arr = try parsePropertyValue(std.testing.allocator, "[1, 2, 3]");
+    defer std.testing.allocator.free(arr.raw);
+    try std.testing.expect(arr.kind == .array);
 }
 
 test "parse raw ExtResource" {

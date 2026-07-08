@@ -65,6 +65,7 @@ godot-cli scene normalize --resource-path res://main.tscn --output out.tscn in.t
 godot-cli scene validate-batch *.tscn --project-root .
 godot-cli scene retarget-ext --from res://old.gd --to res://new.gd scenes/*.tscn
 godot-cli scene round-trip path/to/main.tscn --dry-run
+godot-cli scene compare-godot sample.tscn sample_godot_saved.tscn --json
 godot-cli scene set-property --node-name Player --property visible --value true path/to/main.tscn
 
 # Resource files (.tres)
