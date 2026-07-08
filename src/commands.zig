@@ -1,6 +1,7 @@
 const std = @import("std");
 const spec = @import("cli/spec.zig");
 const uid = @import("commands/uid.zig");
+const scene = @import("commands/scene.zig");
 
 fn pingHandler(ctx: *anyopaque, inv: *const spec.Invocation) anyerror!spec.Result {
     _ = ctx;
@@ -27,10 +28,13 @@ pub const root = spec.CommandSpec{
             .handler = pingHandler,
         },
         uid.commands(),
+        scene.sceneCommands(),
+        scene.resourceCommands(),
     },
 };
 
 test "root exposes uid commands" {
-    try std.testing.expectEqual(@as(usize, 3), root.children.len);
+    try std.testing.expectEqual(@as(usize, 5), root.children.len);
     try std.testing.expectEqualStrings("uid", root.children[2].name);
+    try std.testing.expectEqualStrings("scene", root.children[3].name);
 }

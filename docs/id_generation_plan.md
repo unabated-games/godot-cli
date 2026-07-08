@@ -39,7 +39,7 @@ Godot uses several distinct ID systems. They must not be conflated.
 | Seeding | `Resource::seed_scene_unique_id(p_path.hash())` at save time → deterministic per save path |
 | Collision handling | Saver retries until unused |
 
-**Status in this repo:** Implemented in `src/godot/scene_id.zig`. When seeded with `path.hash()` (as Godot does on save), output is deterministic and PCG-compatible. Unseeded Godot editor runs use a time-based seed and will differ.
+**Status in this repo:** Implemented in `src/godot/scene_id.zig`. When seeded with `path.hash()` (as Godot does on save), output is deterministic and PCG-compatible.
 
 ### 3. Node `unique_id` (scene instances)
 
@@ -51,33 +51,32 @@ Godot uses several distinct ID systems. They must not be conflated.
 | Format | Positive `int32` in `[node … unique_id=N]` |
 | Generation | `ResourceUID::create_id() & 0x7FFFFFFF`, skip 0, retry on collision |
 
-**Status:** Documented; implement when parsing/saving node sections.
+**Status:** Documented; validate when parsing node sections (Phase 6).
 
 ### 4. Object IDs / RIDs
 
 Runtime-only (`object_id.h`, `rid.h`). **Out of scope** for file tooling.
 
-## Architecture (target)
+## Architecture
 
 ```
 src/godot/
-  hash.zig           # String::hash / hash64, murmur3 helpers
-  pcg.zig              # RandomPCG / PCG32
-  resource_uid.zig     # uid:// encode/decode, create_id_for_path
-  scene_id.zig         # generate_scene_unique_id, ext/sub id formatting
-  uid_cache.zig        # (planned) read/write .godot/uid_cache.bin
+  hash.zig
+  pcg.zig
+  resource_uid.zig
+  scene_id.zig
+  uid_cache.zig
+  id_validate.zig
   text_format/
-    lexer.zig          # (planned) [section] headers, key=value lines
-    parser.zig         # (planned) build AST from .tscn/.tres
-    writer.zig         # (planned) serialize AST → Godot-compatible text
-    variant.zig        # (planned) subset of Variant literal syntax
+    tag.zig
+    document.zig
 ```
 
-CLI commands grow under `godot-cli uid …` and `godot-cli scene …` / `resource …`.
+CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resource …`.
 
 ## Phased delivery
 
-### Phase 1 — IDs (current)
+### Phase 1 — IDs ✅
 
 - [x] Port hash + PCG primitives
 - [x] `ResourceUID` text ↔ integer + `create_id_for_path`
@@ -86,18 +85,19 @@ CLI commands grow under `godot-cli uid …` and `godot-cli scene …` / `resourc
 - [x] CLI: `uid scene-id generate` (seeded sequence)
 - [x] Godot reference fixtures in `test_fixtures/`
 
-### Phase 2 — UID cache
+### Phase 2 — UID cache ✅
 
-- [ ] Parse/write `uid_cache.bin` (`ResourceUID::encode_binary_cache` format)
-- [ ] Resolve `uid://` references using project `.godot/` data
-- [ ] CLI: `uid cache list`, `uid cache lookup`
+- [x] Parse/write `uid_cache.bin` (`ResourceUID::encode_binary_cache` format)
+- [x] Resolve `uid://` references using project `.godot/` data
+- [x] CLI: `uid cache list`, `uid cache lookup`
 
-### Phase 3 — Text format read path
+### Phase 3 — Text format read path ✅ (headers + validation)
 
-- [ ] Lexer for Godot text resources (`[gd_scene]`, `[ext_resource]`, `[sub_resource]`, `[node]`, `[resource]`)
-- [ ] Parse `id`, `uid`, `path`, `type` attributes
-- [ ] Parse property lines into a typed or raw representation
-- [ ] CLI: `scene inspect`, `resource inspect` (read-only)
+- [x] Section header parser (`[gd_scene]`, `[ext_resource]`, `[sub_resource]`, `[node]`, `[resource]`)
+- [x] Parse `id`, `uid`, `path`, `type` attributes
+- [x] Store property lines as raw text (full Variant parsing deferred)
+- [x] CLI: `scene inspect`, `resource inspect` (read-only)
+- [x] Basic ID validation in inspect output (`issues` array)
 
 ### Phase 4 — Text format write path
 
@@ -112,29 +112,64 @@ CLI commands grow under `godot-cli uid …` and `godot-cli scene …` / `resourc
 - [ ] Multi-file operations (bulk rename, retarget ext_resource paths)
 - [ ] Optional: invoke installed Godot headless for validation diffs
 
+### Phase 6 — ID integrity detection (planned)
+
+Goal: detect when an LLM or manual edit has left a scene/resource in an invalid or inconsistent ID state.
+
+**Checks to implement** (building on `src/godot/id_validate.zig`):
+
+| Check | Kind | Description |
+|-------|------|-------------|
+| `invalid_uid_text` | error | `uid://` string does not decode |
+| `uid_not_in_cache` | warning | UID not in `.godot/uid_cache.bin` (when `--project-root` given) |
+| `uid_path_mismatch` | error | `ext_resource` uid/path disagree with cache |
+| `empty_scene_id` / `invalid_scene_id_char` | error | Malformed `id=` attribute |
+| `unexpected_scene_id_suffix` | warning | Suffix not from `generate_scene_unique_id` alphabet |
+| `nonstandard_scene_id` | warning | Legacy or hand-edited id format |
+| `duplicate_scene_id` | error | Same `id=` used twice in one file |
+| `dangling_ext_reference` | error | `ExtResource("…")` in properties with no matching `ext_resource` |
+| `dangling_sub_reference` | error | `SubResource("…")` with no matching `sub_resource` |
+| `stale_uid_for_path` | warning | File bytes imply a different `create_id_for_path` than declared uid |
+
+**CLI (planned):**
+
+```bash
+godot-cli scene validate path/to/main.tscn --project-root .
+godot-cli resource validate path/to/material.tres --project-root .
+```
+
+`scene inspect` / `resource inspect` already include an `issues` array when validation is enabled (default). A dedicated `validate` command would exit non-zero on errors for CI/MCP.
+
 ## Verification strategy
 
 1. **Unit tests** — fixed vectors from Godot 4.7 (`test_fixtures/project/`, `id_reference.gd`).
 2. **Round-trip** — parse → modify nothing → save → `diff` against Godot-saved file.
 3. **Godot headless** — `/Applications/Godot.app/Contents/MacOS/Godot --headless --path <project> --script …` for reference output when needed.
 
-## CLI (phase 1)
+## CLI reference
 
 ```bash
 # Resource UID
 godot-cli uid encode 1350303725746704497
 godot-cli uid decode uid://tidkmw585t0t
 godot-cli uid create-for-path --project-name TestProject --resource-path res://test.tscn <file>
-
-# Scene-local 5-char IDs (deterministic with --seed)
 godot-cli uid scene-id generate --seed 1290995245 --count 5
+
+# UID cache (requires Godot to have imported the project once)
+godot-cli uid cache list --project-root test_fixtures/project
+godot-cli uid cache lookup --project-root test_fixtures/project uid://tidkmw585t0t
+
+# Inspect scenes/resources
+godot-cli scene inspect path/to/main.tscn --json
+godot-cli scene inspect path/to/main.tscn --project-root . --json
+godot-cli resource inspect path/to/material.tres --json
 ```
 
 ## References (Godot source)
 
 | File | Relevance |
 |------|-----------|
-| `core/io/resource_uid.cpp` | UID alphabet, create_id_for_path |
+| `core/io/resource_uid.cpp` | UID alphabet, create_id_for_path, uid_cache.bin |
 | `core/io/resource.cpp` | generate_scene_unique_id |
 | `core/math/random_pcg.h` | PCG wrapper |
 | `thirdparty/misc/pcg.cpp` | PCG algorithm |
@@ -142,6 +177,7 @@ godot-cli uid scene-id generate --seed 1290995245 --count 5
 | `core/templates/hashfuncs.h` | murmur3, djb2 |
 | `scene/resources/resource_format_text.cpp` | Save/load text scenes, ID assignment |
 | `scene/resources/packed_scene.cpp` | Node unique_id assignment |
+| `core/variant/variant_parser.cpp` | Section header parsing |
 
 ## Non-goals (for now)
 

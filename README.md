@@ -6,7 +6,7 @@ Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripti
 
 ## Status
 
-Early development. The CLI framework (argument parsing, help, JSON input/output) is in place. **Godot-compatible ID generation** (`uid` commands) is implemented and tested against Godot 4.7. Scene and resource load/save are not yet implemented — see [ID generation plan](docs/id_generation_plan.md).
+Early development. The CLI framework and **Godot-compatible ID generation** are in place. **Scene/resource inspect** (read headers + ID validation) is available. Load/save editing is not yet implemented — see [ID generation plan](docs/id_generation_plan.md).
 
 ## Requirements
 
@@ -54,6 +54,9 @@ godot-cli uid decode uid://tidkmw585t0t
 godot-cli uid create-for-path --project-name TestProject --resource-path res://test.tscn \
   test_fixtures/project/test.tscn
 godot-cli uid scene-id generate --seed 1290995245 --count 5
+godot-cli uid cache list --project-root test_fixtures/project
+godot-cli scene inspect path/to/main.tscn --json
+godot-cli resource inspect path/to/material.tres --json
 
 # JSON command descriptor (alternative to argv)
 godot-cli --request '{"command":["ping"]}'

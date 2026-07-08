@@ -118,6 +118,7 @@ pub fn commands() spec.CommandSpec {
                     },
                 },
             },
+            @import("scene.zig").uidCacheCommands(),
         },
     };
 }
@@ -125,5 +126,5 @@ pub fn commands() spec.CommandSpec {
 test "uid command tree" {
     const tree = commands();
     try std.testing.expectEqualStrings("uid", tree.name);
-    try std.testing.expectEqual(@as(usize, 4), tree.children.len);
+    try std.testing.expectEqual(@as(usize, 5), tree.children.len);
 }
