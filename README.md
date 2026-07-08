@@ -6,7 +6,7 @@ Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripti
 
 ## Status
 
-Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, and **set-property** are available. Save preparation matches Godot's ID seeding and ext_resource ordering; full byte-identical round-trip vs the editor is still in progress — see [ID generation plan](docs/id_generation_plan.md).
+Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, **set-property**, and **Godot save round-trip** are available. Save preparation matches Godot's ID seeding, ext_resource ordering, and optional byte-identical output via `--godot-save-format` + id session cache — see [ID generation plan](docs/id_generation_plan.md).
 
 ## Requirements
 
@@ -66,6 +66,8 @@ godot-cli scene validate-batch *.tscn --project-root .
 godot-cli scene retarget-ext --from res://old.gd --to res://new.gd scenes/*.tscn
 godot-cli scene round-trip path/to/main.tscn --dry-run
 godot-cli scene compare-godot sample.tscn sample_godot_saved.tscn --json
+godot-cli scene normalize in.tscn --output out.tscn --project-root . --godot-save-format
+godot-cli uid session import --referrer res://main.tscn --from godot_saved.tscn --project-root .
 godot-cli scene set-property --node-name Player --property visible --value true path/to/main.tscn
 
 # Resource files (.tres)
@@ -108,6 +110,7 @@ docs/
   mcp_tools.json
 tools/
   import_fixtures.sh   # Godot --import for test_fixtures/project
+  sync_id_session.sh   # Import ext_resource ids from Godot save into session cache
 test_fixtures/
   project/           Minimal Godot project for cross-checking IDs
 ```

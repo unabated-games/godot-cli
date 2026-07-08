@@ -53,6 +53,13 @@
       }
     },
     {
+      "name": "uid_session_import",
+      "argv": ["uid", "session", "import", "--referrer", "<res-path>", "--from", "<godot-saved.tscn>", "--project-root", "<path>"],
+      "json_request": {
+        "argv": ["uid", "session", "import", "--referrer", "res://sample.tscn", "--from", "sample_godot_saved.tscn", "--project-root", ".", "--json"]
+      }
+    },
+    {
       "name": "scene_inspect",
       "argv": ["scene", "inspect", "<file.tscn>"],
       "json_request": { "argv": ["scene", "inspect", "main.tscn", "--json"] }

@@ -51,7 +51,7 @@ Godot uses several distinct ID systems. They must not be conflated.
 | Format | Positive `int32` in `[node … unique_id=N]` |
 | Generation | `ResourceUID::create_id() & 0x7FFFFFFF`, skip 0, retry on collision |
 
-**Status:** Documented; validate when parsing node sections (Phase 6).
+**Status:** Implemented in `src/godot/node_id.zig` with deterministic seeding for CLI saves; validated in `id_validate.zig`.
 
 ### 4. Object IDs / RIDs
 
@@ -66,6 +66,7 @@ src/godot/
   resource_uid.zig
   scene_id.zig
   uid_cache.zig
+  id_session.zig
   project_config.zig
   id_validate.zig
   text_format/
@@ -73,6 +74,7 @@ src/godot/
     document.zig
     writer.zig
     save_prepare.zig
+    godot_format.zig
     roundtrip.zig
     batch.zig
   variant/
@@ -107,7 +109,7 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [x] Store property lines as raw text (full Variant parsing deferred)
 - [x] CLI: `scene inspect`, `resource inspect` (read-only)
 
-### Phase 4 — Text format write path (in progress)
+### Phase 4 — Text format write path ✅
 
 - [x] Serialize documents back to text (`text_format/writer.zig`)
 - [x] Preserve blank lines between sections on round-trip
@@ -124,17 +126,17 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [x] Ext resource id session cache (`id_session.zig`, `.godot/scene_id_cache.json`)
 - [x] CLI: `scene compare-godot`, `resource compare-godot`
 - [x] Node `unique_id` assignment on save (`node_id.zig`, `save_prepare.assignNodeUniqueIds`)
-- [x] Variant parser: Color, Vector2/3/4 (`variant/parse.zig`)
+- [x] Variant parser: Color, Vector2/3/4, Rect2, NodePath, arrays, dictionaries (`variant/parse.zig`)
 - [x] `uid_cache.bin` fixture via `tools/import_fixtures.sh`
 
-### Phase 5 — Batch / integration (partial)
+### Phase 5 — Batch / integration ✅
 
 - [x] CLI: `scene validate-batch`, `resource validate-batch`
 - [x] CLI: `scene retarget-ext`, `resource retarget-ext`
 - [x] Options after positionals in argv parser (`scene validate file.tscn --json`)
 - [x] Single-threaded Io in CLI main (fixes stdout after file I/O)
 - [x] JSON command shapes for MCP (`docs/mcp_tools.json`, examples below)
-- [ ] Optional: invoke installed Godot headless for validation diffs in CI
+- [x] Optional: invoke installed Godot headless for validation diffs in CI (`zig build test-godot`)
 
 - [x] Core checks in `id_validate.zig` (uid text, scene ids, duplicates, uid cache)
 - [x] Dangling `ExtResource` / `SubResource` reference detection
