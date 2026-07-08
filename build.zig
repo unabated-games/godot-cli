@@ -125,6 +125,26 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    const inspect_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene inspect test_fixtures/project/sample.tscn --json --no-validate) &&
+        \\echo "$out" | grep -q '"properties"' &&
+        \\echo "$out" | grep -q '"kind":"bool"'
+    });
+    inspect_smoke.setCwd(b.path("."));
+    inspect_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&inspect_smoke.step);
+
+    const node_list_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene node list test_fixtures/project/sample.tscn --json) &&
+        \\echo "$out" | grep -q '"nodes"' &&
+        \\echo "$out" | grep -q '"/root/Root/Collision"'
+    });
+    node_list_smoke.setCwd(b.path("."));
+    node_list_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&node_list_smoke.step);
+
     const godot_bin = b.option([]const u8, "godot", "Path to Godot binary for reference generation") orelse "/Applications/Godot.app/Contents/MacOS/Godot";
     const godot_step = b.step("test-godot", "Import fixtures, generate Godot reference save, run round-trip CLI check");
     const import_cmd = b.addSystemCommand(&.{ "bash", "tools/import_fixtures.sh" });

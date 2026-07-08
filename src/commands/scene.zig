@@ -8,6 +8,7 @@ const id_validate = @import("../godot/id_validate.zig");
 const id_session = @import("../godot/id_session.zig");
 const project_config = @import("../godot/project_config.zig");
 const variant = @import("../godot/variant/root.zig");
+const node_tree = @import("../godot/node_tree.zig");
 
 const ValidateSetup = struct {
     ctx: id_validate.ValidateContext,
@@ -228,8 +229,8 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     };
 
     const written_value: []const u8 = if (inv.flag("raw-value")) property_value else blk: {
-        const parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
-        defer cli.allocator.free(parsed.raw);
+        var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
+        defer parsed.deinit(cli.allocator);
         break :blk try parsed.formatForWrite(cli.allocator);
     };
     if (!inv.flag("raw-value")) {
@@ -321,11 +322,18 @@ fn uidCacheLookupHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
     return error.Usage;
 }
 
+fn inspectParseProperties(inv: *const spec.Invocation) bool {
+    if (inv.flag("no-parse-properties")) return false;
+    if (inv.flag("parse-properties")) return true;
+    return inv.global.json_output;
+}
+
 fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
     const path = inv.positionals[0];
     const validate = !inv.flag("no-validate");
+    const parse_properties = inspectParseProperties(inv);
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
 
@@ -348,6 +356,10 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
         try row.put(cli.allocator, "name", .{ .string = section.header.name });
         try row.put(cli.allocator, "fields", .{ .object = fields });
         try row.put(cli.allocator, "property_count", .{ .integer = @intCast(section.properties.items.len) });
+        if (parse_properties) {
+            const properties = try variant.property_line.buildPropertiesJson(cli.allocator, section.properties.items);
+            try row.put(cli.allocator, "properties", .{ .array = properties });
+        }
         try arr.append(.{ .object = row });
     }
 
@@ -369,10 +381,11 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
         "{s}: {d} sections",
         .{ kind, doc.sections.items.len },
     );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{summary},
+        .messages = &.{},
     };
 }
 
@@ -383,11 +396,16 @@ fn normalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const 
     const output_path = inv.getOption("output") orelse input_path;
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+
+    var norm_stats: ?text_format.normalize_properties.Stats = null;
+    if (inv.flag("normalize-properties")) {
+        norm_stats = try text_format.normalize_properties.normalizeDocument(cli.allocator, &doc);
+    }
+
     var prepare = try prepareSaveOptions(cli, inv, output_path);
     defer prepare.deinit(cli.allocator);
     if (!inv.flag("dry-run")) {
-        try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare.options);
-        try prepare.persistSession(cli.allocator);
+        try writeWithPrepare(cli, inv, output_path, &doc);
     } else if (prepare.options) |options| {
         try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
     }
@@ -397,6 +415,11 @@ fn normalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const 
     try data.put(cli.allocator, "path", .{ .string = output_path });
     try data.put(cli.allocator, "kind", .{ .string = kind });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    try data.put(cli.allocator, "normalize_properties", .{ .bool = inv.flag("normalize-properties") });
+    if (norm_stats) |stats| {
+        try data.put(cli.allocator, "properties_normalized", .{ .integer = @intCast(stats.normalized) });
+        try data.put(cli.allocator, "properties_preserved", .{ .integer = @intCast(stats.preserved) });
+    }
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{
@@ -431,6 +454,77 @@ fn resourceSetPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spe
 
 fn sceneInspectHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     return inspectHandler(ctx, inv, "scene");
+}
+
+fn sceneNodeListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const path = inv.positionals[0];
+
+    const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
+    var list = try node_tree.collectNodes(cli.allocator, &doc);
+    defer list.deinit(cli.allocator);
+
+    const nodes = try node_tree.nodesToJsonArray(cli.allocator, list.nodes);
+
+    var data: std.json.ObjectMap = .{};
+    const path_copy = try cli.allocator.dupe(u8, path);
+    try data.put(cli.allocator, "path", .{ .string = path_copy });
+    try data.put(cli.allocator, "nodes", .{ .array = nodes });
+
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "{d} node(s) in {s}",
+        .{ list.nodes.len, path },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+    };
+}
+
+fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const path = inv.positionals[0];
+
+    const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
+    var list = try node_tree.collectNodes(cli.allocator, &doc);
+    defer list.deinit(cli.allocator);
+
+    const node: *const node_tree.NodeInfo = blk: {
+        if (inv.positionals.len >= 2) {
+            const node_path = inv.positionals[1];
+            break :blk node_tree.findByPath(&list, node_path) orelse return error.Usage;
+        }
+        const node_name = inv.getOption("node-name") orelse return error.Usage;
+        const parent = inv.getOption("parent");
+        break :blk (try node_tree.findByName(&list, node_name, parent)) orelse return error.Usage;
+    };
+
+    var data: std.json.ObjectMap = .{};
+    const path_copy = try cli.allocator.dupe(u8, path);
+    try data.put(cli.allocator, "path", .{ .string = path_copy });
+    try data.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, node.name) });
+    try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, node.node_type) });
+    if (node.parent.len > 0) {
+        try data.put(cli.allocator, "parent", .{ .string = try cli.allocator.dupe(u8, node.parent) });
+    }
+    try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, node.path) });
+    try data.put(cli.allocator, "section_line", .{ .integer = @intCast(node.section_line) });
+    if (node.unique_id) |id| {
+        try data.put(cli.allocator, "unique_id", .{ .integer = id });
+    }
+
+    const summary = try std.fmt.allocPrint(cli.allocator, "{s} ({s})", .{ node.name, node.path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+    };
 }
 
 fn resourceInspectHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -663,6 +757,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
         .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
         .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
+        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format" },
     };
     const save_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
@@ -698,6 +793,16 @@ pub fn sceneCommands() spec.CommandSpec {
     const compare_godot_options = [_]spec.OptionSpec{
         .{ .long = "reference", .kind = .path, .description = "Godot-saved reference file (default: second positional)" },
     };
+    const inspect_options = [_]spec.OptionSpec{
+        project_root_opt,
+        .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" },
+        .{ .long = "parse-properties", .kind = .flag, .description = "Include parsed property values in JSON output" },
+        .{ .long = "no-parse-properties", .kind = .flag, .description = "Omit parsed properties (faster for large files)" },
+    };
+    const node_get_options = [_]spec.OptionSpec{
+        .{ .long = "node-name", .kind = .string, .description = "Node name to look up (alternative to node path positional)" },
+        .{ .long = "parent", .kind = .string, .description = "Parent attribute filter when using --node-name (e.g. \".\" or \"Root\")" },
+    };
 
     return .{
         .name = "scene",
@@ -706,9 +811,27 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "inspect",
                 .summary = "Parse a .tscn file and report structure and ID issues",
-                .description = "Reads section headers and runs ID validation. Pass --project-root to check uids against uid_cache.bin.",
-                .options = &.{ project_root_opt, .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" } },
+                .description = "Reads section headers, parsed properties (with --json), and runs ID validation. Pass --project-root to check uids against uid_cache.bin.",
+                .options = &inspect_options,
                 .handler = sceneInspectHandler,
+            },
+            .{
+                .name = "node",
+                .summary = "List and query scene node tree",
+                .children = &.{
+                    .{
+                        .name = "list",
+                        .summary = "List all nodes in a scene with paths and section lines",
+                        .handler = sceneNodeListHandler,
+                    },
+                    .{
+                        .name = "get",
+                        .summary = "Get one node by viewport path or by name",
+                        .description = "Pass file and node path (e.g. /root/Root/Player), or use --node-name with optional --parent.",
+                        .options = &node_get_options,
+                        .handler = sceneNodeGetHandler,
+                    },
+                },
             },
             .{
                 .name = "validate",
@@ -769,6 +892,7 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
         .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
         .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
+        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format" },
     };
     const save_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
@@ -803,6 +927,12 @@ pub fn resourceCommands() spec.CommandSpec {
     const compare_godot_options = [_]spec.OptionSpec{
         .{ .long = "reference", .kind = .path, .description = "Godot-saved reference file (default: second positional)" },
     };
+    const inspect_options = [_]spec.OptionSpec{
+        project_root_opt,
+        .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" },
+        .{ .long = "parse-properties", .kind = .flag, .description = "Include parsed property values in JSON output" },
+        .{ .long = "no-parse-properties", .kind = .flag, .description = "Omit parsed properties (faster for large files)" },
+    };
 
     return .{
         .name = "resource",
@@ -811,7 +941,8 @@ pub fn resourceCommands() spec.CommandSpec {
             .{
                 .name = "inspect",
                 .summary = "Parse a .tres file and report structure and ID issues",
-                .options = &.{ project_root_opt, .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" } },
+                .description = "Reads section headers, parsed properties (with --json), and runs ID validation.",
+                .options = &inspect_options,
                 .handler = resourceInspectHandler,
             },
             .{

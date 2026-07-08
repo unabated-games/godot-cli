@@ -8,6 +8,8 @@ Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripti
 
 Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, **set-property**, and **Godot save round-trip** are available. Save preparation matches Godot's ID seeding, ext_resource ordering, and optional byte-identical output via `--godot-save-format` + id session cache — see [ID generation plan](docs/id_generation_plan.md).
 
+**Next work:** [Mini roadmap](docs/mini_roadmap.md) item **#5** (fixture/CI hardening). Items 1–4 done: rich inspect, node tree, `--normalize-properties`, variant array/dict/typed/packed parsing.
+
 ## Requirements
 
 - Zig 0.16.0 or later

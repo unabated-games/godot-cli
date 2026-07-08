@@ -10,6 +10,7 @@ pub const text_format = @import("text_format/root.zig");
 pub const id_validate = @import("id_validate.zig");
 pub const id_session = @import("id_session.zig");
 pub const variant = @import("variant/root.zig");
+pub const node_tree = @import("node_tree.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

@@ -78,6 +78,12 @@ src/godot/
     roundtrip.zig
     batch.zig
   variant/
+    godot_ref.zig
+    kind.zig
+    value.zig
+    constructors.zig
+    lex.zig
+    object.zig
     parse.zig
 ```
 
@@ -126,7 +132,7 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [x] Ext resource id session cache (`id_session.zig`, `.godot/scene_id_cache.json`)
 - [x] CLI: `scene compare-godot`, `resource compare-godot`
 - [x] Node `unique_id` assignment on save (`node_id.zig`, `save_prepare.assignNodeUniqueIds`)
-- [x] Variant parser: Color, Vector2/3/4, Rect2, NodePath, arrays, dictionaries (`variant/parse.zig`)
+- [x] Variant type system: scalars, math types, resources, packed arrays (`variant/` — incremental expansion via `constructors.zig`)
 - [x] `uid_cache.bin` fixture via `tools/import_fixtures.sh`
 
 ### Phase 5 — Batch / integration ✅
@@ -211,11 +217,14 @@ godot-cli resource inspect path/to/material.tres --json
 | `core/templates/hashfuncs.h` | murmur3, djb2 |
 | `scene/resources/resource_format_text.cpp` | Save/load text scenes, ID assignment |
 | `scene/resources/packed_scene.cpp` | Node unique_id assignment |
-| `core/variant/variant_parser.cpp` | Section header parsing |
+| `core/variant/variant_parser.cpp` | Variant text parse/write (`godot_ref.zig` line map) |
 
 ## Non-goals (for now)
 
 - Running scenes or scripts
 - Binary `.scn` / `.res` format (text first)
-- Full Variant type system (grow incrementally by property types we need to edit)
 - Editor-only metadata unless required for round-trip
+
+## Next work
+
+See [mini_roadmap.md](mini_roadmap.md). **Items 1–4 complete** (rich inspect, node tree, property normalization, variant gaps). **Next: item #5** fixture/CI hardening, then optional MCP server.

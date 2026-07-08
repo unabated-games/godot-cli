@@ -62,7 +62,22 @@
     {
       "name": "scene_inspect",
       "argv": ["scene", "inspect", "<file.tscn>"],
+      "options": ["--no-validate", "--no-parse-properties"],
+      "description": "Returns section headers, property_count, and with --json parsed properties (name, kind, value) per section.",
       "json_request": { "argv": ["scene", "inspect", "main.tscn", "--json"] }
+    },
+    {
+      "name": "scene_node_list",
+      "argv": ["scene", "node", "list", "<file.tscn>"],
+      "description": "List scene nodes with name, type, parent, viewport path, section_line, and unique_id.",
+      "json_request": { "argv": ["scene", "node", "list", "main.tscn", "--json"] }
+    },
+    {
+      "name": "scene_node_get",
+      "argv": ["scene", "node", "get", "<file.tscn>", "<node-path>"],
+      "options": ["--node-name", "--parent"],
+      "description": "Get one node by viewport path positional or --node-name with optional --parent.",
+      "json_request": { "argv": ["scene", "node", "get", "main.tscn", "/root/Player", "--json"] }
     },
     {
       "name": "scene_validate",
@@ -90,7 +105,8 @@
     {
       "name": "scene_normalize",
       "argv": ["scene", "normalize", "<file>", "--output", "<out>"],
-      "options": ["--resource-path", "--no-prepare-save"],
+      "options": ["--resource-path", "--no-prepare-save", "--normalize-properties", "--godot-save-format"],
+      "description": "Repair IDs and sort ext_resources for save; optional --normalize-properties rewrites property values via Variant parse/format.",
       "json_request": {
         "argv": ["scene", "normalize", "main.tscn", "--output", "out.tscn", "--resource-path", "res://main.tscn", "--json"]
       }
@@ -118,6 +134,8 @@
     {
       "name": "resource_inspect",
       "argv": ["resource", "inspect", "<file.tres>"],
+      "options": ["--no-validate", "--no-parse-properties"],
+      "description": "Returns section headers, property_count, and with --json parsed properties (name, kind, value) per section.",
       "json_request": { "argv": ["resource", "inspect", "mat.tres", "--json"] }
     },
     {
@@ -140,7 +158,8 @@
     {
       "name": "resource_normalize",
       "argv": ["resource", "normalize", "<file>", "--output", "<out>"],
-      "options": ["--resource-path", "--no-prepare-save"]
+      "options": ["--resource-path", "--no-prepare-save", "--normalize-properties", "--godot-save-format"],
+      "description": "Repair IDs and sort ext_resources for save; optional --normalize-properties rewrites property values via Variant parse/format."
     },
     {
       "name": "resource_retarget_ext",
