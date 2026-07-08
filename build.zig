@@ -145,6 +145,27 @@ pub fn build(b: *std.Build) void {
     node_list_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&node_list_smoke.step);
 
+    const rich_inspect_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene inspect test_fixtures/project/rich_variants.tscn --json --no-validate) &&
+        \\echo "$out" | grep -q '"kind":"object"' &&
+        \\echo "$out" | grep -q '"kind":"typed_array"' &&
+        \\echo "$out" | grep -q '"kind":"packed_array"'
+    });
+    rich_inspect_smoke.setCwd(b.path("."));
+    rich_inspect_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&rich_inspect_smoke.step);
+
+    const material_inspect_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli resource inspect test_fixtures/project/sample_material.tres --json --no-validate) &&
+        \\echo "$out" | grep -q '"kind":"color"' &&
+        \\echo "$out" | grep -q 'albedo_color'
+    });
+    material_inspect_smoke.setCwd(b.path("."));
+    material_inspect_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&material_inspect_smoke.step);
+
     const godot_bin = b.option([]const u8, "godot", "Path to Godot binary for reference generation") orelse "/Applications/Godot.app/Contents/MacOS/Godot";
     const godot_step = b.step("test-godot", "Import fixtures, generate Godot reference save, run round-trip CLI check");
     const import_cmd = b.addSystemCommand(&.{ "bash", "tools/import_fixtures.sh" });

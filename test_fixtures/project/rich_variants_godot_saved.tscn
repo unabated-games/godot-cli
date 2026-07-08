@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://variant_fixture_holder.gd" id="1_fo7e5"]
+
+[sub_resource type="Gradient" id="Gradient_ajuje"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
+
+[node name="Root" type="Node3D" unique_id=1005735153]
+
+[node name="VariantHolder" type="Node" parent="." unique_id=1355617114]
+script = ExtResource("1_fo7e5")
+meta_gradient = SubResource("Gradient_ajuje")
+meta_object = Object(Gradient, "offsets": PackedFloat32Array(0, 1), "colors": PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1))
+meta_array = Array[int]([1, 2, 3])
+meta_dictionary = Dictionary[String, int]({ "a": 1, "count": 3 })
+meta_plain_array = [1, 2, Vector3(1, 2, 3)]
+meta_plain_dictionary = { "enabled": true, "count": 3 }
+meta_packed_bytes = PackedByteArray("AQID")
+meta_color = Color(1, 0.25, 0.5, 1)

@@ -14,10 +14,10 @@ This roadmap is ordered by priority for MCP/LLM agent use. Implement one item at
 | 2 | Node tree commands | **done** | `src/godot/node_tree.zig`, `scene node list/get` |
 | 3 | Property normalization on save | **done** | `src/godot/text_format/normalize_properties.zig`, `--normalize-properties` |
 | 4 | Variant gaps | **done** | `src/godot/variant/collection.zig`, arrays/dicts/typed/packed byte |
-| 5 | Fixture and CI hardening | **next** | `test_fixtures/`, GitHub Actions |
-| 6 | Thin MCP server | pending | `tools/mcp_server/` (optional) |
+| 5 | Fixture and CI hardening | **done** | `test_fixtures/project/rich_variants.tscn`, `.github/workflows/ci.yml` |
+| 6 | Thin MCP server | **next** | `tools/mcp_server/` (optional) |
 
-**Start next session at item #5.**
+**Start next session at item #6.**
 
 ---
 
@@ -186,7 +186,7 @@ Each form has parse + format tests derived from Godot-saved fixture strings.
 
 ---
 
-## 5. Fixture and CI hardening
+## 5. Fixture and CI hardening — **done**
 
 ### Goal
 
@@ -203,6 +203,14 @@ Each form has parse + format tests derived from Godot-saved fixture strings.
 
 - At least one new fixture covering `Object(...)` property on a sub_resource or resource.
 - CI runs unit tests on push; Godot test documented or gated.
+
+### Shipped
+
+- `test_fixtures/project/rich_variants.tscn` — `Object(Gradient, ...)`, typed/plain arrays and dicts, `PackedByteArray`, `Color`, sub_resource `Gradient` with packed arrays.
+- `test_fixtures/project/sample_material.tres` — `StandardMaterial3D` with color properties.
+- `tools/save_rich_fixtures.gd` + `REGENERATE_RICH=1 tools/import_fixtures.sh` for partial Godot regeneration.
+- `src/godot/fixtures.zig` — parse tests against committed fixtures.
+- `.github/workflows/ci.yml` — manual `workflow_dispatch` only (`zig build test` + `test-godot` jobs).
 
 ---
 

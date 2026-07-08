@@ -14,4 +14,5 @@ pub const node_tree = @import("node_tree.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());
+    _ = @import("fixtures.zig");
 }

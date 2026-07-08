@@ -8,7 +8,7 @@ Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripti
 
 Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, **set-property**, and **Godot save round-trip** are available. Save preparation matches Godot's ID seeding, ext_resource ordering, and optional byte-identical output via `--godot-save-format` + id session cache — see [ID generation plan](docs/id_generation_plan.md).
 
-**Next work:** [Mini roadmap](docs/mini_roadmap.md) item **#5** (fixture/CI hardening). Items 1–4 done: rich inspect, node tree, `--normalize-properties`, variant array/dict/typed/packed parsing.
+**Next work:** [Mini roadmap](docs/mini_roadmap.md) item **#6** (thin MCP server). Items 1–5 done: rich inspect, node tree, `--normalize-properties`, variant parsing, fixture/CI hardening.
 
 ## Requirements
 
@@ -27,6 +27,8 @@ zig build test
 zig build test-godot   # requires Godot 4.x at default macOS path (or -Dgodot=...)
 zig build run -- --help
 ```
+
+CI workflow is available but **manual only** (GitHub Actions → CI → Run workflow). For day-to-day iteration use `zig build test` locally; `zig build test-godot` when you have Godot installed.
 
 Optional build flag:
 
@@ -94,7 +96,10 @@ Regenerate Godot import metadata for test fixtures:
 ```bash
 tools/import_fixtures.sh
 # or: GODOT=/path/to/Godot tools/import_fixtures.sh
+# optional: REGENERATE_RICH=1 tools/import_fixtures.sh  # material + scene shells via save_rich_fixtures.gd
 ```
+
+Rich variant fixtures live in `test_fixtures/project/rich_variants.tscn` and `sample_material.tres` (see `src/godot/fixtures.zig` tests).
 
 ## Project layout
 
@@ -114,7 +119,9 @@ tools/
   import_fixtures.sh   # Godot --import for test_fixtures/project
   sync_id_session.sh   # Import ext_resource ids from Godot save into session cache
 test_fixtures/
-  project/           Minimal Godot project for cross-checking IDs
+  project/           # Minimal Godot project (IDs, rich variant fixtures)
+.github/
+  workflows/ci.yml   # manual workflow_dispatch only (zig build test + test-godot)
 ```
 
 ## License
