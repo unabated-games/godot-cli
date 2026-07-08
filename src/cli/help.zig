@@ -1,0 +1,112 @@
+const std = @import("std");
+const spec = @import("spec.zig");
+const version = @import("../version.zig");
+
+pub fn printRootHelp(
+    writer: *std.Io.Writer,
+    root: *const spec.CommandSpec,
+) std.Io.Writer.Error!void {
+    try writer.print("{s} — {s}\n\n", .{ version.name, version.summary });
+    try writer.print("Usage:\n", .{});
+    try writer.print("  {s} [global options] <command> [command options] [args...]\n", .{version.name});
+    try writer.print("  {s} --request <json>\n", .{version.name});
+    try writer.print("  {s} --request-file <path>\n", .{version.name});
+    try writer.print("  {s} --request-stdin\n\n", .{version.name});
+
+    try writer.print("Global options:\n", .{});
+    try printGlobalOptions(writer);
+    try writer.print("\nCommands:\n", .{});
+    for (root.children) |child| {
+        try writer.print("  {s:<16} {s}\n", .{ child.name, child.summary });
+    }
+    try writer.print("\nRun '{s} help <command>' for command-specific help.\n", .{version.name});
+}
+
+pub fn printCommandHelp(
+    allocator: std.mem.Allocator,
+    writer: *std.Io.Writer,
+    root: *const spec.CommandSpec,
+    path: []const []const u8,
+) (std.Io.Writer.Error || spec.CliError)!void {
+    const command = findCommand(root, path) orelse return error.UnknownCommand;
+
+    var usage: std.ArrayList(u8) = .empty;
+    defer usage.deinit(allocator);
+
+    try usage.appendSlice(allocator, version.name);
+    try usage.appendSlice(allocator, " ");
+    for (path) |segment| {
+        try usage.append(allocator, ' ');
+        try usage.appendSlice(allocator, segment);
+    }
+    if (command.options.len != 0 or command.children.len != 0) {
+        try usage.appendSlice(allocator, " [options]");
+    }
+    if (command.handler != null) {
+        try usage.appendSlice(allocator, " [args...]");
+    }
+
+    try writer.print("{s}\n\n", .{usage.items});
+    try writer.print("{s}\n\n", .{command.summary});
+    if (command.description) |description| {
+        try writer.print("{s}\n\n", .{description});
+    }
+
+    if (command.options.len != 0) {
+        try writer.print("Options:\n", .{});
+        for (command.options) |opt| {
+            try printOption(writer, opt);
+        }
+        try writer.print("\n", .{});
+    }
+
+    if (command.children.len != 0) {
+        try writer.print("Subcommands:\n", .{});
+        for (command.children) |child| {
+            try writer.print("  {s:<16} {s}\n", .{ child.name, child.summary });
+        }
+        try writer.print("\n", .{});
+    }
+}
+
+fn printGlobalOptions(writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    try writer.print("  -h, --help              Show help and exit\n", .{});
+    try writer.print("      --version           Show version and exit\n", .{});
+    try writer.print("      --json              Emit machine-readable JSON output\n", .{});
+    try writer.print("  -v, --verbose           Enable verbose logging on stderr\n", .{});
+    try writer.print("      --request <json>    Run using a JSON command descriptor\n", .{});
+    try writer.print("      --request-file <p>  Read JSON command descriptor from a file\n", .{});
+    try writer.print("      --request-stdin     Read JSON command descriptor from stdin\n", .{});
+}
+
+fn printOption(writer: *std.Io.Writer, opt: spec.OptionSpec) std.Io.Writer.Error!void {
+    var label: [64]u8 = undefined;
+    const label_text = if (opt.short) |short_char| blk: {
+        break :blk std.fmt.bufPrint(&label, "-{c}, --{s}", .{ short_char, opt.long }) catch unreachable;
+    } else blk: {
+        break :blk std.fmt.bufPrint(&label, "    --{s}", .{opt.long}) catch unreachable;
+    };
+
+    const placeholder = switch (opt.kind) {
+        .flag => "",
+        .string => " <value>",
+        .path => " <path>",
+    };
+
+    try writer.print("  {s}{s:<12} {s}\n", .{ label_text, placeholder, opt.description });
+}
+
+pub fn findCommand(root: *const spec.CommandSpec, path: []const []const u8) ?*const spec.CommandSpec {
+    var current: *const spec.CommandSpec = root;
+    for (path) |segment| {
+        var found: ?*const spec.CommandSpec = null;
+        for (current.children, 0..) |child, child_index| {
+            if (std.mem.eql(u8, child.name, segment)) {
+                found = &current.children[child_index];
+                break;
+            }
+        }
+        current = found orelse return null;
+    }
+    return current;
+}
