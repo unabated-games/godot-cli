@@ -13,8 +13,10 @@ pub const Kind = enum {
     vector2,
     vector3,
     vector4,
+    rect2,
     node_path,
     array,
+    dictionary,
     raw,
 };
 
@@ -45,8 +47,11 @@ pub const Value = struct {
             .vector4 => try std.fmt.allocPrint(allocator, "Vector4({d}, {d}, {d}, {d})", .{
                 self.components[0], self.components[1], self.components[2], self.components[3],
             }),
+            .rect2 => try std.fmt.allocPrint(allocator, "Rect2({d}, {d}, {d}, {d})", .{
+                self.components[0], self.components[1], self.components[2], self.components[3],
+            }),
             .node_path => try quoteString(allocator, self.string),
-            .array => try allocator.dupe(u8, self.raw),
+            .array, .dictionary => try allocator.dupe(u8, self.raw),
         };
     }
 };
@@ -95,11 +100,16 @@ pub fn parsePropertyValue(allocator: std.mem.Allocator, text: []const u8) ParseE
     }
 
     if (trimmed[0] == '[' and trimmed[trimmed.len - 1] == ']') {
-        try validateArraySyntax(trimmed);
+        try validateDelimitedSyntax(trimmed, '[', ']');
         return .{ .kind = .array, .raw = try allocator.dupe(u8, trimmed) };
     }
 
-    // ExtResource, SubResource, dictionaries, etc.
+    if (trimmed[0] == '{' and trimmed[trimmed.len - 1] == '}') {
+        try validateDelimitedSyntax(trimmed, '{', '}');
+        return .{ .kind = .dictionary, .raw = try allocator.dupe(u8, trimmed) };
+    }
+
+    // ExtResource, SubResource, etc.
     return .{ .kind = .raw, .raw = try allocator.dupe(u8, trimmed) };
 }
 
@@ -118,11 +128,13 @@ fn parseConstructor(text: []const u8) ParseError!?Value {
         .vector3
     else if (std.mem.eql(u8, name, "Vector4"))
         .vector4
+    else if (std.mem.eql(u8, name, "Rect2"))
+        .rect2
     else
         return null;
 
     const expected: usize = switch (kind) {
-        .color, .vector4 => 4,
+        .color, .vector4, .rect2 => 4,
         .vector3 => 3,
         .vector2 => 2,
         else => unreachable,
@@ -151,7 +163,8 @@ fn parseNodePath(allocator: std.mem.Allocator, text: []const u8) ParseError![]u8
     return try allocator.dupe(u8, inner);
 }
 
-fn validateArraySyntax(text: []const u8) ParseError!void {
+fn validateDelimitedSyntax(text: []const u8, open_char: u8, close_char: u8) ParseError!void {
+    if (text.len < 2 or text[0] != open_char or text[text.len - 1] != close_char) return error.InvalidSyntax;
     var depth: usize = 0;
     var in_string = false;
     var escape = false;
@@ -170,8 +183,8 @@ fn validateArraySyntax(text: []const u8) ParseError!void {
         }
         switch (c) {
             '"' => in_string = true,
-            '[', '(' => depth += 1,
-            ']', ')' => {
+            '(', '[', '{' => depth += 1,
+            ')', ']', '}' => {
                 if (depth == 0) return error.InvalidSyntax;
                 depth -= 1;
             },
@@ -257,6 +270,14 @@ test "parse NodePath and array" {
     const arr = try parsePropertyValue(std.testing.allocator, "[1, 2, 3]");
     defer std.testing.allocator.free(arr.raw);
     try std.testing.expect(arr.kind == .array);
+
+    const dict = try parsePropertyValue(std.testing.allocator, "{ \"enabled\": true, \"count\": 3 }");
+    defer std.testing.allocator.free(dict.raw);
+    try std.testing.expect(dict.kind == .dictionary);
+
+    const rect = try parsePropertyValue(std.testing.allocator, "Rect2(0, 0, 100, 50)");
+    defer std.testing.allocator.free(rect.raw);
+    try std.testing.expect(rect.kind == .rect2);
 }
 
 test "parse raw ExtResource" {
