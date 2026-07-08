@@ -135,6 +135,11 @@ pub fn build(b: *std.Build) void {
     godot_cmd.setCwd(b.path("."));
     godot_cmd.step.dependOn(&import_cmd.step);
     godot_step.dependOn(&godot_cmd.step);
+    const sync_session_cmd = b.addSystemCommand(&.{ "bash", "tools/sync_id_session.sh" });
+    sync_session_cmd.setCwd(b.path("."));
+    sync_session_cmd.step.dependOn(&godot_cmd.step);
+    sync_session_cmd.step.dependOn(b.getInstallStep());
+    godot_step.dependOn(&sync_session_cmd.step);
     const roundtrip_cmd = b.addRunArtifact(exe);
     roundtrip_cmd.addArgs(&.{ "scene", "round-trip", "test_fixtures/project/sample.tscn", "--dry-run" });
     roundtrip_cmd.step.dependOn(&godot_cmd.step);

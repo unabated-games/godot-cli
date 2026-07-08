@@ -3,6 +3,9 @@ const spec = @import("../cli/spec.zig");
 const app_mod = @import("../cli/app.zig");
 const resource_uid = @import("../godot/resource_uid.zig");
 const scene_id = @import("../godot/scene_id.zig");
+const id_session = @import("../godot/id_session.zig");
+const text_format = @import("../godot/text_format/root.zig");
+const project_config = @import("../godot/project_config.zig");
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
@@ -77,6 +80,78 @@ fn uidSceneIdGenerateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
     };
 }
 
+fn uidSessionImportHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const source_path = if (inv.getOption("from")) |path| path else blk: {
+        if (inv.positionals.len == 0) return error.Usage;
+        break :blk inv.positionals[0];
+    };
+
+    const referrer_path = if (inv.getOption("referrer")) |path|
+        try cli.allocator.dupe(u8, path)
+    else if (inv.getOption("project-root")) |root|
+        try project_config.filesystemToResPath(cli.allocator, root, source_path) orelse return error.Usage
+    else
+        return error.Usage;
+
+    const session_path = if (inv.getOption("id-session")) |path|
+        try cli.allocator.dupe(u8, path)
+    else if (inv.getOption("project-root")) |root|
+        try id_session.Session.defaultPath(cli.allocator, root)
+    else
+        return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, source_path);
+    defer doc.deinit(cli.allocator);
+
+    var session = id_session.Session.loadFromFile(cli.allocator, session_path) catch id_session.Session.init(cli.allocator);
+    defer session.deinit(cli.allocator);
+
+    const imported = try session.importExtResourceIdsFromDocument(cli.allocator, referrer_path, &doc);
+    try session.saveToFile(session_path);
+
+    const summary = try std.fmt.allocPrint(cli.allocator, "imported {d} ext_resource id(s) for {s}", .{ imported, referrer_path });
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "referrer", .{ .string = referrer_path });
+    try data.put(cli.allocator, "source", .{ .string = source_path });
+    try data.put(cli.allocator, "session_path", .{ .string = session_path });
+    try data.put(cli.allocator, "imported_count", .{ .integer = @intCast(imported) });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+    };
+}
+
+pub fn sessionCommands() spec.CommandSpec {
+    const project_root_opt = spec.OptionSpec{
+        .long = "project-root",
+        .kind = .path,
+        .description = "Godot project root (default session path under .godot/)",
+    };
+    const import_options = [_]spec.OptionSpec{
+        .{ .long = "referrer", .kind = .string, .description = "Referrer res:// path (scene being saved)" },
+        .{ .long = "from", .kind = .path, .description = "Godot-saved scene to import ids from" },
+        .{ .long = "id-session", .kind = .path, .description = "Session cache JSON path" },
+        project_root_opt,
+    };
+
+    return .{
+        .name = "session",
+        .summary = "Persistent ext_resource id session cache",
+        .children = &.{
+            .{
+                .name = "import",
+                .summary = "Import ext_resource ids from a Godot-saved scene",
+                .description = "Updates scene_id_cache.json so future saves reuse Godot-assigned ext_resource ids.",
+                .options = &import_options,
+                .handler = uidSessionImportHandler,
+            },
+        },
+    };
+}
+
 pub fn commands() spec.CommandSpec {
     return .{
         .name = "uid",
@@ -119,6 +194,7 @@ pub fn commands() spec.CommandSpec {
                 },
             },
             @import("scene.zig").uidCacheCommands(),
+            sessionCommands(),
         },
     };
 }
@@ -126,5 +202,5 @@ pub fn commands() spec.CommandSpec {
 test "uid command tree" {
     const tree = commands();
     try std.testing.expectEqualStrings("uid", tree.name);
-    try std.testing.expectEqual(@as(usize, 5), tree.children.len);
+    try std.testing.expectEqual(@as(usize, 6), tree.children.len);
 }
