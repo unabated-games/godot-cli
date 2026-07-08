@@ -66,11 +66,16 @@ src/godot/
   resource_uid.zig
   scene_id.zig
   uid_cache.zig
+  project_config.zig
   id_validate.zig
   text_format/
     tag.zig
     document.zig
+    writer.zig
+    save_prepare.zig
 ```
+
+`src/io_util.zig` — synchronous file writes (workaround for Zig 0.16 threaded Io EINVAL after write).
 
 CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resource …`.
 
@@ -91,20 +96,34 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [x] Resolve `uid://` references using project `.godot/` data
 - [x] CLI: `uid cache list`, `uid cache lookup`
 
-### Phase 3 — Text format read path ✅ (headers + validation)
+### Phase 3 — Text format read path ✅
 
 - [x] Section header parser (`[gd_scene]`, `[ext_resource]`, `[sub_resource]`, `[node]`, `[resource]`)
 - [x] Parse `id`, `uid`, `path`, `type` attributes
 - [x] Store property lines as raw text (full Variant parsing deferred)
 - [x] CLI: `scene inspect`, `resource inspect` (read-only)
-- [x] Basic ID validation in inspect output (`issues` array)
 
-### Phase 4 — Text format write path
+### Phase 4 — Text format write path (in progress)
 
-- [ ] Round-trip AST → text with Godot ordering conventions
-- [ ] Reuse cached ext/sub IDs when present (`set_id_for_path` behaviour)
-- [ ] Assign new IDs only when needed (match `resource_format_text.cpp` save logic)
-- [ ] CLI: `scene set-property`, `resource set-property`
+- [x] Serialize documents back to text (`text_format/writer.zig`)
+- [x] Preserve blank lines between sections on round-trip
+- [x] `setSectionProperty` — update or append property lines
+- [x] CLI: `scene set-property`, `resource set-property`
+- [x] Save preparation (`text_format/save_prepare.zig`): seed from path hash, repair ext/sub IDs, remap references
+- [x] Sort `ext_resource` sections by id (Godot `ResourceSort`)
+- [x] Update `load_steps` when present
+- [x] CLI: `scene normalize`, `resource normalize` (and automatic prepare on save unless `--no-prepare-save`)
+- [ ] Per-resource `set_id_for_path` cache persistence (editor session only in Godot; out of scope unless we add a sidecar)
+- [ ] Byte-identical round-trip vs Godot headless save
+
+### Phase 6 — ID integrity detection (partial)
+
+- [x] Core checks in `id_validate.zig` (uid text, scene ids, duplicates, uid cache)
+- [x] Dangling `ExtResource` / `SubResource` reference detection
+- [x] CLI: `scene validate`, `resource validate` (exit code 1 on errors, JSON includes `issues`)
+- [x] `scene inspect` / `resource inspect` include `issues` by default
+- [x] `stale_uid_for_path` (compare file bytes to `create_id_for_path` when `--project-root` given)
+- [x] Node `unique_id` validation (range + duplicates)
 
 ### Phase 5 — Batch / integration
 
@@ -112,33 +131,34 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [ ] Multi-file operations (bulk rename, retarget ext_resource paths)
 - [ ] Optional: invoke installed Godot headless for validation diffs
 
-### Phase 6 — ID integrity detection (planned)
+### Phase 6 — ID integrity detection (partial) ✅ core checks
 
 Goal: detect when an LLM or manual edit has left a scene/resource in an invalid or inconsistent ID state.
 
-**Checks to implement** (building on `src/godot/id_validate.zig`):
+**Implemented** in `src/godot/id_validate.zig` and exposed via `validate` / `inspect`:
 
-| Check | Kind | Description |
-|-------|------|-------------|
-| `invalid_uid_text` | error | `uid://` string does not decode |
-| `uid_not_in_cache` | warning | UID not in `.godot/uid_cache.bin` (when `--project-root` given) |
-| `uid_path_mismatch` | error | `ext_resource` uid/path disagree with cache |
-| `empty_scene_id` / `invalid_scene_id_char` | error | Malformed `id=` attribute |
-| `unexpected_scene_id_suffix` | warning | Suffix not from `generate_scene_unique_id` alphabet |
-| `nonstandard_scene_id` | warning | Legacy or hand-edited id format |
-| `duplicate_scene_id` | error | Same `id=` used twice in one file |
-| `dangling_ext_reference` | error | `ExtResource("…")` in properties with no matching `ext_resource` |
-| `dangling_sub_reference` | error | `SubResource("…")` with no matching `sub_resource` |
-| `stale_uid_for_path` | warning | File bytes imply a different `create_id_for_path` than declared uid |
+| Check | Kind | Status |
+|-------|------|--------|
+| `invalid_uid_text` | err | ✅ |
+| `uid_not_in_cache` | warning | ✅ |
+| `uid_path_mismatch` | err | ✅ |
+| `empty_scene_id` / `invalid_scene_id_char` | err | ✅ |
+| `unexpected_scene_id_suffix` | warning | ✅ |
+| `nonstandard_scene_id` | warning | ✅ |
+| `duplicate_scene_id` | err | ✅ |
+| `dangling_ext_reference` | err | ✅ |
+| `dangling_sub_reference` | err | ✅ |
+| `stale_uid_for_path` | warning | ✅ |
+| `invalid_node_unique_id` / `duplicate_node_unique_id` | err | ✅ |
 
-**CLI (planned):**
+**CLI:**
 
 ```bash
 godot-cli scene validate path/to/main.tscn --project-root .
 godot-cli resource validate path/to/material.tres --project-root .
 ```
 
-`scene inspect` / `resource inspect` already include an `issues` array when validation is enabled (default). A dedicated `validate` command would exit non-zero on errors for CI/MCP.
+`validate` returns exit code `1` when any `err`-severity issue is found (JSON `issues` still emitted).
 
 ## Verification strategy
 

@@ -5,6 +5,44 @@ const resource_uid = @import("../godot/resource_uid.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
 const text_format = @import("../godot/text_format/root.zig");
 const id_validate = @import("../godot/id_validate.zig");
+const project_config = @import("../godot/project_config.zig");
+
+const ValidateSetup = struct {
+    ctx: id_validate.ValidateContext,
+    owned_project_name: ?[]u8 = null,
+    owned_resource_path: ?[]u8 = null,
+    owned_cache: ?uid_cache.Cache = null,
+
+    pub fn deinit(self: *ValidateSetup, allocator: std.mem.Allocator) void {
+        if (self.owned_project_name) |name| allocator.free(name);
+        if (self.owned_resource_path) |path| allocator.free(path);
+        if (self.owned_cache) |*cache| cache.deinit(allocator);
+    }
+
+    pub fn init(cli: *const app_mod.App, inv: *const spec.Invocation, path: []const u8) !ValidateSetup {
+        var setup: ValidateSetup = .{ .ctx = .{} };
+
+        const root = projectRootFrom(inv) orelse return setup;
+        setup.ctx.project_root = root;
+        setup.ctx.io = cli.io;
+        setup.ctx.file_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited) catch null;
+
+        if (try loadCacheOptional(cli, inv)) |loaded| {
+            setup.owned_cache = loaded;
+            setup.ctx.cache = &setup.owned_cache.?;
+        }
+
+        setup.owned_project_name = project_config.readProjectName(cli.allocator, cli.io, root) catch null;
+        setup.ctx.project_name = setup.owned_project_name;
+
+        if (setup.owned_project_name != null) {
+            setup.owned_resource_path = try project_config.filesystemToResPath(cli.allocator, root, path);
+            setup.ctx.resource_path = setup.owned_resource_path;
+        }
+
+        return setup;
+    }
+};
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
@@ -12,6 +50,148 @@ fn appFrom(ctx: *anyopaque) *const app_mod.App {
 
 fn projectRootFrom(inv: *const spec.Invocation) ?[]const u8 {
     return inv.getOption("project-root");
+}
+
+fn saveSeedPath(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8) ![]const u8 {
+    if (inv.getOption("resource-path")) |path| {
+        return try cli.allocator.dupe(u8, path);
+    }
+    if (projectRootFrom(inv)) |root| {
+        if (try project_config.filesystemToResPath(cli.allocator, root, output_path)) |res| {
+            return res;
+        }
+    }
+    return try cli.allocator.dupe(u8, output_path);
+}
+
+fn prepareSaveOptions(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8) !?text_format.save_prepare.SaveOptions {
+    if (inv.flag("no-prepare-save")) return null;
+    const seed_path = try saveSeedPath(cli, inv, output_path);
+    return .{ .seed_path = seed_path };
+}
+
+fn loadCacheOptional(cli: *const app_mod.App, inv: *const spec.Invocation) !?uid_cache.Cache {
+    const root = projectRootFrom(inv) orelse return null;
+    const cache_path = try uid_cache.defaultCachePath(cli.allocator, root);
+    defer cli.allocator.free(cache_path);
+    return uid_cache.loadFromFile(cli.allocator, cli.io, cache_path) catch |err| switch (err) {
+        error.Io => null,
+        else => return err,
+    };
+}
+
+fn buildIssuesJson(cli: *const app_mod.App, report: *const id_validate.Report) !std.json.Array {
+    var issues = std.json.Array.init(cli.allocator);
+    for (report.issues.items) |issue| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "severity", .{ .string = @tagName(issue.severity) });
+        try row.put(cli.allocator, "kind", .{ .string = issue.kind });
+        try row.put(cli.allocator, "message", .{ .string = issue.message });
+        if (issue.line) |line| {
+            try row.put(cli.allocator, "line", .{ .integer = @intCast(line) });
+        }
+        try issues.append(.{ .object = row });
+    }
+    return issues;
+}
+
+fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const path = inv.positionals[0];
+
+    const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
+    var setup = try ValidateSetup.init(cli, inv, path);
+    defer setup.deinit(cli.allocator);
+
+    const report = try id_validate.validateDocument(cli.allocator, &doc, setup.ctx);
+
+    const issues = try buildIssuesJson(cli, &report);
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = path });
+    try data.put(cli.allocator, "kind", .{ .string = kind });
+    try data.put(cli.allocator, "issues", .{ .array = issues });
+    try data.put(cli.allocator, "error_count", .{ .integer = @intCast(countErrors(&report)) });
+
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "{s}: {d} issue(s), {d} error(s)",
+        .{ kind, report.issues.items.len, countErrors(&report) },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    if (id_validate.hasErrors(&report)) {
+        return .{
+            .data = .{ .object = data },
+            .messages = &.{},
+            .exit_code = .failure,
+        };
+    }
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+    };
+}
+
+fn countErrors(report: *const id_validate.Report) usize {
+    var total: usize = 0;
+    for (report.issues.items) |issue| {
+        if (issue.severity == .err) total += 1;
+    }
+    return total;
+}
+
+fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const property_name = inv.getOption("property") orelse return error.Usage;
+    const property_value = inv.getOption("value") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+
+    const section_index: usize = blk: {
+        if (inv.getOption("section-line")) |line_text| {
+            const line = std.fmt.parseInt(usize, line_text, 10) catch return error.InvalidValue;
+            break :blk text_format.document.findSectionIndexByLine(&doc, line) orelse return error.Usage;
+        }
+        if (inv.getOption("node-name")) |node_name| {
+            break :blk text_format.document.findSectionIndexByNodeName(&doc, node_name) orelse return error.Usage;
+        }
+        if (inv.getOption("section")) |section_name| {
+            break :blk text_format.document.findSectionIndexByTagName(&doc, section_name) orelse return error.Usage;
+        }
+        return error.Usage;
+    };
+
+    try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, property_name, property_value);
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        const prepare = try prepareSaveOptions(cli, inv, output_path);
+        try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare);
+    }
+
+    const section = doc.sections.items[section_index];
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "updated {s} property {s} on section line {d}",
+        .{ kind, property_name, section.line },
+    );
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = output_path });
+    try data.put(cli.allocator, "property", .{ .string = property_name });
+    try data.put(cli.allocator, "value", .{ .string = property_value });
+    try data.put(cli.allocator, "section_line", .{ .integer = @intCast(section.line) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+    };
 }
 
 fn uidCacheListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -107,29 +287,10 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
     try data.put(cli.allocator, "sections", .{ .array = arr });
 
     if (validate) {
-        var cache_storage: ?uid_cache.Cache = null;
-        if (projectRootFrom(inv)) |root| {
-            const cache_path = try uid_cache.defaultCachePath(cli.allocator, root);
-            defer cli.allocator.free(cache_path);
-            cache_storage = uid_cache.loadFromFile(cli.allocator, cli.io, cache_path) catch |err| switch (err) {
-                error.Io => null,
-                else => return err,
-            };
-        }
-        const cache_ptr: ?*const uid_cache.Cache = if (cache_storage) |*c| c else null;
-        const report = try id_validate.validateDocument(cli.allocator, &doc, cache_ptr);
-
-        var issues = std.json.Array.init(cli.allocator);
-        for (report.issues.items) |issue| {
-            var row: std.json.ObjectMap = .{};
-            try row.put(cli.allocator, "severity", .{ .string = @tagName(issue.severity) });
-            try row.put(cli.allocator, "kind", .{ .string = issue.kind });
-            try row.put(cli.allocator, "message", .{ .string = issue.message });
-            if (issue.line) |line| {
-                try row.put(cli.allocator, "line", .{ .integer = @intCast(line) });
-            }
-            try issues.append(.{ .object = row });
-        }
+        var setup = try ValidateSetup.init(cli, inv, path);
+        defer setup.deinit(cli.allocator);
+        const report = try id_validate.validateDocument(cli.allocator, &doc, setup.ctx);
+        const issues = try buildIssuesJson(cli, &report);
         try data.put(cli.allocator, "issues", .{ .array = issues });
     }
 
@@ -143,6 +304,57 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
         .data = .{ .object = data },
         .messages = &.{summary},
     };
+}
+
+fn normalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const output_path = inv.getOption("output") orelse input_path;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const prepare = try prepareSaveOptions(cli, inv, output_path);
+    if (!inv.flag("dry-run")) {
+        try text_format.writer.writeFile(cli.allocator, output_path, &doc, prepare);
+    } else if (prepare) |options| {
+        try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
+    }
+
+    const summary = try std.fmt.allocPrint(cli.allocator, "prepared {s} save for {s}", .{ kind, output_path });
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = output_path });
+    try data.put(cli.allocator, "kind", .{ .string = kind });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+    };
+}
+
+fn sceneNormalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return normalizeHandler(ctx, inv, "scene");
+}
+
+fn resourceNormalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return normalizeHandler(ctx, inv, "resource");
+}
+
+fn sceneValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return validateHandler(ctx, inv, "scene");
+}
+
+fn sceneSetPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return setPropertyHandler(ctx, inv, "scene");
+}
+
+fn resourceValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return validateHandler(ctx, inv, "resource");
+}
+
+fn resourceSetPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    return setPropertyHandler(ctx, inv, "resource");
 }
 
 fn sceneInspectHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -181,6 +393,26 @@ pub fn uidCacheCommands() spec.CommandSpec {
 }
 
 pub fn sceneCommands() spec.CommandSpec {
+    const project_root_opt = spec.OptionSpec{
+        .long = "project-root",
+        .kind = .path,
+        .description = "Godot project root for uid_cache lookup and res:// seed path",
+    };
+    const save_options = [_]spec.OptionSpec{
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
+        .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
+    };
+    const set_property_options = [_]spec.OptionSpec{
+        .{ .long = "property", .kind = .string, .description = "Property name to set" },
+        .{ .long = "value", .kind = .string, .description = "Raw property value (right-hand side of =)" },
+        .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },
+        .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
+        .{ .long = "section", .kind = .string, .description = "Target section by tag name (e.g. resource)" },
+    } ++ save_options;
+
     return .{
         .name = "scene",
         .summary = "Inspect and edit Godot scene files",
@@ -189,17 +421,53 @@ pub fn sceneCommands() spec.CommandSpec {
                 .name = "inspect",
                 .summary = "Parse a .tscn file and report structure and ID issues",
                 .description = "Reads section headers and runs ID validation. Pass --project-root to check uids against uid_cache.bin.",
-                .options = &.{
-                    .{ .long = "project-root", .kind = .path, .description = "Godot project root for uid_cache lookup" },
-                    .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" },
-                },
+                .options = &.{ project_root_opt, .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" } },
                 .handler = sceneInspectHandler,
+            },
+            .{
+                .name = "validate",
+                .summary = "Validate scene IDs and references (fails on errors)",
+                .options = &.{project_root_opt},
+                .handler = sceneValidateHandler,
+            },
+            .{
+                .name = "set-property",
+                .summary = "Set a property on a node section and save the scene",
+                .description = "Target a section with --node-name or --section-line. Value is written verbatim after =.",
+                .options = &set_property_options,
+                .handler = sceneSetPropertyHandler,
+            },
+            .{
+                .name = "normalize",
+                .summary = "Repair scene-local IDs and sort ext_resource sections for save",
+                .description = "Runs Godot-compatible save preparation without editing properties.",
+                .options = &save_options,
+                .handler = sceneNormalizeHandler,
             },
         },
     };
 }
 
 pub fn resourceCommands() spec.CommandSpec {
+    const project_root_opt = spec.OptionSpec{
+        .long = "project-root",
+        .kind = .path,
+        .description = "Godot project root for uid_cache lookup and res:// seed path",
+    };
+    const save_options = [_]spec.OptionSpec{
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
+        .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
+    };
+    const set_property_options = [_]spec.OptionSpec{
+        .{ .long = "property", .kind = .string, .description = "Property name to set" },
+        .{ .long = "value", .kind = .string, .description = "Raw property value (right-hand side of =)" },
+        .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
+        .{ .long = "section", .kind = .string, .description = "Target section by tag name (default: resource)" },
+    } ++ save_options;
+
     return .{
         .name = "resource",
         .summary = "Inspect and edit Godot resource files",
@@ -207,11 +475,26 @@ pub fn resourceCommands() spec.CommandSpec {
             .{
                 .name = "inspect",
                 .summary = "Parse a .tres file and report structure and ID issues",
-                .options = &.{
-                    .{ .long = "project-root", .kind = .path, .description = "Godot project root for uid_cache lookup" },
-                    .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" },
-                },
+                .options = &.{ project_root_opt, .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" } },
                 .handler = resourceInspectHandler,
+            },
+            .{
+                .name = "validate",
+                .summary = "Validate resource IDs and references (fails on errors)",
+                .options = &.{project_root_opt},
+                .handler = resourceValidateHandler,
+            },
+            .{
+                .name = "set-property",
+                .summary = "Set a property on a resource section and save",
+                .options = &set_property_options,
+                .handler = resourceSetPropertyHandler,
+            },
+            .{
+                .name = "normalize",
+                .summary = "Repair scene-local IDs and sort ext_resource sections for save",
+                .options = &save_options,
+                .handler = resourceNormalizeHandler,
             },
         },
     };

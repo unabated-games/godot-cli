@@ -33,6 +33,32 @@ pub const Tag = struct {
             else => null,
         };
     }
+
+    pub fn getInteger(self: *const Tag, key: []const u8) ?i64 {
+        const value = self.fields.get(key) orelse return null;
+        return switch (value) {
+            .integer => |n| n,
+            else => null,
+        };
+    }
+
+    pub fn setStringField(self: *Tag, allocator: std.mem.Allocator, key: []const u8, value: []const u8) !void {
+        const value_copy = try allocator.dupe(u8, value);
+        errdefer allocator.free(value_copy);
+
+        if (self.fields.getPtr(key)) |existing| {
+            switch (existing.*) {
+                .string => |s| allocator.free(s),
+                else => {},
+            }
+            existing.* = .{ .string = value_copy };
+            return;
+        }
+
+        const key_copy = try allocator.dupe(u8, key);
+        errdefer allocator.free(key_copy);
+        try self.fields.put(allocator, key_copy, .{ .string = value_copy });
+    }
 };
 
 pub const ParseError = error{
@@ -140,6 +166,67 @@ fn readValue(allocator: std.mem.Allocator, text: []const u8, index: *usize, end:
     } else |_| {}
 
     return .{ .string = try allocator.dupe(u8, token) };
+}
+
+pub fn formatLine(allocator: std.mem.Allocator, header: *const Tag) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+
+    try out.append(allocator, '[');
+    try out.appendSlice(allocator, header.name);
+
+    var it = header.fields.iterator();
+    while (it.next()) |entry| {
+        try out.append(allocator, ' ');
+        try out.appendSlice(allocator, entry.key_ptr.*);
+        try out.append(allocator, '=');
+        try formatValue(allocator, &out, entry.value_ptr.*);
+    }
+
+    try out.append(allocator, ']');
+    return try out.toOwnedSlice(allocator);
+}
+
+fn formatValue(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: Value) !void {
+    switch (value) {
+        .string => |s| try writeQuoted(allocator, out, s),
+        .integer => |n| {
+            var buf: [32]u8 = undefined;
+            try out.appendSlice(allocator, try std.fmt.bufPrint(&buf, "{d}", .{n}));
+        },
+        .float => |f| {
+            var buf: [64]u8 = undefined;
+            try out.appendSlice(allocator, try std.fmt.bufPrint(&buf, "{d}", .{f}));
+        },
+        .bool => |b| try out.appendSlice(allocator, if (b) "true" else "false"),
+    }
+}
+
+fn writeQuoted(allocator: std.mem.Allocator, out: *std.ArrayList(u8), text: []const u8) !void {
+    try out.append(allocator, '"');
+    for (text) |c| {
+        switch (c) {
+            '"', '\\' => {
+                try out.append(allocator, '\\');
+                try out.append(allocator, c);
+            },
+            else => try out.append(allocator, c),
+        }
+    }
+    try out.append(allocator, '"');
+}
+
+test "format ext_resource header" {
+    const allocator = std.testing.allocator;
+    var header = Tag{ .name = try allocator.dupe(u8, "ext_resource"), .fields = .{} };
+    defer header.deinit(allocator);
+    try header.fields.put(allocator, try allocator.dupe(u8, "type"), .{ .string = try allocator.dupe(u8, "Script") });
+    try header.fields.put(allocator, try allocator.dupe(u8, "path"), .{ .string = try allocator.dupe(u8, "res://foo.gd") });
+    try header.fields.put(allocator, try allocator.dupe(u8, "id"), .{ .string = try allocator.dupe(u8, "1_ldc4g") });
+
+    const line = try formatLine(allocator, &header);
+    defer allocator.free(line);
+    try std.testing.expectEqualStrings("[ext_resource type=\"Script\" path=\"res://foo.gd\" id=\"1_ldc4g\"]", line);
 }
 
 test "parse gd_scene header" {

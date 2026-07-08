@@ -6,7 +6,7 @@ Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripti
 
 ## Status
 
-Early development. The CLI framework and **Godot-compatible ID generation** are in place. **Scene/resource inspect** (read headers + ID validation) is available. Load/save editing is not yet implemented — see [ID generation plan](docs/id_generation_plan.md).
+Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, and **set-property** are available. Save preparation matches Godot's ID seeding and ext_resource ordering; full byte-identical round-trip vs the editor is still in progress — see [ID generation plan](docs/id_generation_plan.md).
 
 ## Requirements
 
@@ -55,8 +55,17 @@ godot-cli uid create-for-path --project-name TestProject --resource-path res://t
   test_fixtures/project/test.tscn
 godot-cli uid scene-id generate --seed 1290995245 --count 5
 godot-cli uid cache list --project-root test_fixtures/project
+# Inspect scenes/resources
 godot-cli scene inspect path/to/main.tscn --json
+# Validate (exit 1 on errors; use global --json for envelope)
+godot-cli scene validate test_fixtures/invalid_duplicate_id.tscn
+godot-cli scene validate path/to/main.tscn --project-root .   # enables stale uid checks
+godot-cli scene normalize --resource-path res://main.tscn --output out.tscn in.tscn
+godot-cli scene set-property --node-name Player --property visible --value true path/to/main.tscn
+
+# Resource files (.tres)
 godot-cli resource inspect path/to/material.tres --json
+godot-cli resource set-property --section resource --property albedo_color --value "Color(1, 0, 0, 1)" path/to/material.tres
 
 # JSON command descriptor (alternative to argv)
 godot-cli --request '{"command":["ping"]}'

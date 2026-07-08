@@ -125,7 +125,7 @@ pub const App = struct {
         };
 
         emit.emitSuccess(self.allocator, self.io, &stdout_buffer, inv.global.json_output, inv.path, result) catch {};
-        return .success;
+        return result.exit_code orelse .success;
     }
 
     fn loadInvocation(self: *const App, args: []const []const u8) spec.CliError!spec.Invocation {

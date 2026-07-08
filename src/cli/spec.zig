@@ -35,6 +35,7 @@ pub const GlobalOptions = struct {
 pub const Result = struct {
     data: std.json.Value = .null,
     messages: []const []const u8 = &.{},
+    exit_code: ?ExitCode = null,
 };
 
 pub const Invocation = struct {

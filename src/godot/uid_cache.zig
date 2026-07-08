@@ -102,7 +102,7 @@ pub fn encode(allocator: std.mem.Allocator, entries: []const Entry) ![]u8 {
 pub fn saveToFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8, entries: []const Entry) !void {
     const data = try encode(allocator, entries);
     defer allocator.free(data);
-    try std.Io.Dir.cwd().writeFile(io, path, data);
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data });
 }
 
 fn readU32(bytes: []const u8, offset: *usize) LoadError!u32 {

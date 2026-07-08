@@ -18,6 +18,20 @@ pub fn seedSceneUniqueId(seed: u32) void {
     seeded = true;
 }
 
+/// Seed from a Godot resource path using `String::hash()` (djb2, 32-bit).
+pub fn seedSceneUniqueIdFromPath(path: []const u8) void {
+    var code_units: [512]u21 = undefined;
+    if (path.len > code_units.len) {
+        const owned = std.heap.page_allocator.alloc(u21, path.len) catch @panic("oom");
+        defer std.heap.page_allocator.free(owned);
+        for (path, 0..) |c, i| owned[i] = c;
+        seedSceneUniqueId(@truncate(hash.hashUtf32(owned)));
+        return;
+    }
+    for (path, 0..) |c, i| code_units[i] = c;
+    seedSceneUniqueId(@truncate(hash.hashUtf32(code_units[0..path.len])));
+}
+
 /// Reset generator state (for tests).
 pub fn resetSceneUniqueIdGenerator() void {
     unique_id_gen = .{};
