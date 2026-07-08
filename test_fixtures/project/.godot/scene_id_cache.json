@@ -1,8 +1,0 @@
-{
-  "version": 1,
-  "referrers": {
-    "res://sample.tscn": {
-      "res://id_reference.gd": "1_a7oy8"
-    }
-  }
-}
