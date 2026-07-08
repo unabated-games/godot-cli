@@ -260,3 +260,60 @@ test "sample scene matches Godot headless save structure" {
 
     try std.testing.expect(documentsMatchGodotSave(allocator, &original, &saved));
 }
+
+test "byte-identical Godot save with id session and format stripping" {
+    const allocator = std.testing.allocator;
+    const save_prepare = @import("save_prepare.zig");
+    const id_session_mod = @import("../id_session.zig");
+
+    const sample =
+        \\[gd_scene load_steps=3 format=3 uid="uid://tidkmw585t0t"]
+        \\
+        \\[ext_resource type="Script" path="res://id_reference.gd" id="1_mf4mk"]
+        \\
+        \\[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_37kl0"]
+        \\radius = 0.5
+        \\height = 2.0
+        \\
+        \\[node name="Root" type="Node3D" unique_id=1290995245]
+        \\script = ExtResource("1_mf4mk")
+        \\visible = true
+        \\
+        \\[node name="Collision" type="CollisionShape3D" parent="Root" unique_id=987654321]
+        \\shape = SubResource("CapsuleShape3D_37kl0")
+        \\
+    ;
+    const godot_saved =
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="Script" path="res://id_reference.gd" id="1_a7oy8"]
+        \\
+        \\[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_37kl0"]
+        \\
+        \\[node name="Root" type="Node3D" unique_id=1290995245]
+        \\script = ExtResource("1_a7oy8")
+        \\visible = true
+        \\
+        \\[node name="Collision" type="CollisionShape3D" parent="Root" unique_id=987654321]
+        \\shape = SubResource("CapsuleShape3D_37kl0")
+        \\
+    ;
+
+    var session = id_session_mod.Session.init(allocator);
+    defer session.deinit(allocator);
+    try session.setExtId(allocator, "res://sample.tscn", "res://id_reference.gd", "1_a7oy8");
+
+    var doc = try document.parseBytes(allocator, sample);
+    defer doc.deinit(allocator);
+
+    try save_prepare.prepareDocument(allocator, &doc, .{
+        .seed_path = "res://sample.tscn",
+        .id_session = &session,
+        .godot_save_format = true,
+    });
+
+    const written = try writer.writeDocument(allocator, &doc);
+    defer allocator.free(written);
+
+    try std.testing.expectEqualStrings(godot_saved, written);
+}

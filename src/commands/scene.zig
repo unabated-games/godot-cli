@@ -48,19 +48,22 @@ const ValidateSetup = struct {
 
 const PreparedSave = struct {
     options: ?text_format.save_prepare.SaveOptions,
-    session: ?id_session.Session = null,
+    session: ?*id_session.Session = null,
     session_path: ?[]const u8 = null,
     seed_path_owned: ?[]const u8 = null,
 
     pub fn deinit(self: *PreparedSave, allocator: std.mem.Allocator) void {
         if (self.seed_path_owned) |path| allocator.free(path);
-        if (self.session) |*session| session.deinit(allocator);
+        if (self.session) |session| {
+            session.deinit(allocator);
+            allocator.destroy(session);
+        }
         if (self.session_path) |path| allocator.free(path);
     }
 
     pub fn persistSession(self: *PreparedSave, allocator: std.mem.Allocator) !void {
         if (self.session_path) |path| {
-            if (self.session) |*session| try session.saveToFile(path);
+            if (self.session) |session| try session.saveToFile(path);
         }
         _ = allocator;
     }
@@ -91,7 +94,10 @@ fn prepareSaveOptions(cli: *const app_mod.App, inv: *const spec.Invocation, outp
 
     const seed_path = try saveSeedPath(cli, inv, output_path);
     var prepared: PreparedSave = .{
-        .options = .{ .seed_path = seed_path },
+        .options = .{
+            .seed_path = seed_path,
+            .godot_save_format = inv.flag("godot-save-format"),
+        },
         .seed_path_owned = seed_path,
     };
 
@@ -105,9 +111,11 @@ fn prepareSaveOptions(cli: *const app_mod.App, inv: *const spec.Invocation, outp
 
         if (session_path) |path| {
             prepared.session_path = path;
-            prepared.session = id_session.Session.loadFromFile(cli.allocator, path) catch id_session.Session.init(cli.allocator);
+            const session = try cli.allocator.create(id_session.Session);
+            session.* = id_session.Session.loadFromFile(cli.allocator, path) catch id_session.Session.init(cli.allocator);
+            prepared.session = session;
             if (prepared.options) |*options| {
-                options.id_session = &prepared.session.?;
+                options.id_session = session;
             }
         }
     }
@@ -654,6 +662,7 @@ pub fn sceneCommands() spec.CommandSpec {
     const id_session_options = [_]spec.OptionSpec{
         .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
         .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
+        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
     };
     const save_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
@@ -759,6 +768,7 @@ pub fn resourceCommands() spec.CommandSpec {
     const id_session_options = [_]spec.OptionSpec{
         .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
         .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
+        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
     };
     const save_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },

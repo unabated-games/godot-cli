@@ -7,6 +7,7 @@ const node_id = @import("../node_id.zig");
 const id_validate = @import("../id_validate.zig");
 const id_session = @import("../id_session.zig");
 const document = @import("document.zig");
+const godot_format = @import("godot_format.zig");
 const tag = @import("tag.zig");
 
 pub const SaveOptions = struct {
@@ -17,6 +18,7 @@ pub const SaveOptions = struct {
     update_load_steps: bool = true,
     assign_node_unique_ids: bool = true,
     id_session: ?*id_session.Session = null,
+    godot_save_format: bool = false,
 };
 
 pub const PrepareError = error{
@@ -41,6 +43,9 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     }
     if (options.id_session) |session| {
         try recordExtResourceIds(allocator, doc, options.seed_path, session);
+    }
+    if (options.godot_save_format) {
+        try godot_format.applyGodotSaveFormat(allocator, doc);
     }
 }
 
@@ -191,7 +196,7 @@ fn applyIdRemap(allocator: std.mem.Allocator, doc: *document.Document, remap: *c
         for (section.properties.items, 0..) |prop, prop_index| {
             var changed = false;
             var out: std.ArrayList(u8) = .empty;
-            errdefer out.deinit(allocator);
+            defer out.deinit(allocator);
 
             var cursor: usize = 0;
             while (cursor < prop.raw.len) {

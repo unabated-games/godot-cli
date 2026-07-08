@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const io_util = @import("../io_util.zig");
+const document = @import("text_format/document.zig");
 
 pub const Session = struct {
     referrers: std.StringHashMap(ExtMap),
@@ -25,6 +26,24 @@ pub const Session = struct {
             entry.value_ptr.deinit();
         }
         self.referrers.deinit();
+    }
+
+    /// Import ext_resource path → id mappings from a parsed scene (e.g. Godot-saved reference).
+    pub fn importExtResourceIdsFromDocument(
+        self: *Session,
+        allocator: std.mem.Allocator,
+        referrer_path: []const u8,
+        doc: *const document.Document,
+    ) !usize {
+        var count: usize = 0;
+        for (doc.sections.items) |section| {
+            if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+            const ext_path = section.header.getString("path") orelse continue;
+            const id = section.header.getString("id") orelse continue;
+            try self.setExtId(allocator, referrer_path, ext_path, id);
+            count += 1;
+        }
+        return count;
     }
 
     pub fn getExtId(self: *const Session, referrer_path: []const u8, ext_path: []const u8) ?[]const u8 {

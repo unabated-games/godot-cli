@@ -148,6 +148,21 @@ pub fn build(b: *std.Build) void {
     compare_cmd.step.dependOn(&godot_cmd.step);
     compare_cmd.step.dependOn(b.getInstallStep());
     godot_step.dependOn(&compare_cmd.step);
+    const normalize_cmd = b.addRunArtifact(exe);
+    normalize_cmd.addArgs(&.{
+        "scene",           "normalize",
+        "test_fixtures/project/sample.tscn",
+        "--output",        "zig-out/sample_normalized.tscn",
+        "--project-root",  "test_fixtures/project",
+        "--resource-path", "res://sample.tscn",
+        "--godot-save-format",
+    });
+    normalize_cmd.step.dependOn(&godot_cmd.step);
+    normalize_cmd.step.dependOn(b.getInstallStep());
+    godot_step.dependOn(&normalize_cmd.step);
+    const cmp_cmd = b.addSystemCommand(&.{ "cmp", "zig-out/sample_normalized.tscn", "test_fixtures/project/sample_godot_saved.tscn" });
+    cmp_cmd.step.dependOn(&normalize_cmd.step);
+    godot_step.dependOn(&cmp_cmd.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //

@@ -76,9 +76,12 @@ pub const Tag = struct {
     }
 
     pub fn removeField(self: *Tag, allocator: std.mem.Allocator, key: []const u8) void {
-        const value = self.fields.fetchRemove(key) orelse return;
-        allocator.free(value.key);
-        switch (value.value) {
+        const index = self.fields.getIndex(key) orelse return;
+        const removed_key = self.fields.keys()[index];
+        const removed_value = self.fields.values()[index];
+        self.fields.swapRemoveAt(index);
+        allocator.free(removed_key);
+        switch (removed_value) {
             .string => |s| allocator.free(s),
             else => {},
         }

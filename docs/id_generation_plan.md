@@ -120,7 +120,7 @@ CLI commands under `godot-cli uid …`, `godot-cli scene …`, `godot-cli resour
 - [x] Round-trip structure test (`text_format/roundtrip.zig`) + CLI `round-trip`
 - [x] Godot reference fixture (`test_fixtures/project/sample_godot_saved.tscn`, `zig build test-godot`)
 - [x] Semantic Godot save compare (`documentsMatchGodotSave` — ext id remaps, default sub_resource fields)
-- [ ] Byte-identical round-trip vs Godot headless save (IDs are path-seeded; semantic match only)
+- [x] Byte-identical round-trip vs Godot headless save (with `--godot-save-format` + id session cache)
 - [x] Ext resource id session cache (`id_session.zig`, `.godot/scene_id_cache.json`)
 - [x] CLI: `scene compare-godot`, `resource compare-godot`
 - [x] Node `unique_id` assignment on save (`node_id.zig`, `save_prepare.assignNodeUniqueIds`)
