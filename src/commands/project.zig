@@ -5,6 +5,8 @@ const project_godot = @import("../godot/project_godot.zig");
 const project_input = @import("../godot/project_input.zig");
 const project_settings = @import("../godot/project_settings.zig");
 const project_autoload = @import("../godot/project_autoload.zig");
+const project_plugins = @import("../godot/project_plugins.zig");
+const project_rendering = @import("../godot/project_rendering.zig");
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
@@ -400,6 +402,241 @@ fn autoloadValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     };
 }
 
+fn pluginsListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse return error.Usage;
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const plugins = try project_plugins.listPlugins(cli.allocator, cli.io, root, loaded.doc.sectionMut("editor_plugins"));
+    defer {
+        for (plugins) |*plugin| plugin.deinit(cli.allocator);
+        cli.allocator.free(plugins);
+    }
+
+    var arr = std.json.Array.init(cli.allocator);
+    for (plugins) |plugin| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, plugin.name) });
+        try row.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, plugin.path) });
+        try row.put(cli.allocator, "enabled", .{ .bool = plugin.enabled });
+        try arr.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "plugins", .{ .array = arr });
+    try data.put(cli.allocator, "plugin_count", .{ .integer = @intCast(plugins.len) });
+    const summary = try std.fmt.allocPrint(cli.allocator, "listed {d} plugin(s)", .{plugins.len});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn pluginsEnableHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const plugin = inv.getOption("plugin") orelse inv.getOption("path") orelse return error.Usage;
+    const added = try project_plugins.enablePlugin(cli.allocator, &loaded.doc, plugin);
+
+    if (!inv.flag("dry-run") and added) {
+        try project_godot.writeFile(cli.allocator, cli.io, loaded.path, &loaded.doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "plugin", .{ .string = try cli.allocator.dupe(u8, plugin) });
+    try data.put(cli.allocator, "enabled", .{ .bool = added });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = if (added) "enabled plugin" else "plugin already enabled";
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.dupe(u8, summary) });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn pluginsDisableHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const plugin = inv.getOption("plugin") orelse inv.getOption("path") orelse return error.Usage;
+    const removed = try project_plugins.disablePlugin(cli.allocator, &loaded.doc, plugin);
+
+    if (!inv.flag("dry-run") and removed) {
+        try project_godot.writeFile(cli.allocator, cli.io, loaded.path, &loaded.doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "plugin", .{ .string = try cli.allocator.dupe(u8, plugin) });
+    try data.put(cli.allocator, "disabled", .{ .bool = removed });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = if (removed) "disabled plugin" else "plugin was not enabled";
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.dupe(u8, summary) });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn pluginsApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
+    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    defer cli.allocator.free(intent_bytes);
+
+    var applied = try project_plugins.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
+    defer applied.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try project_godot.writeFile(cli.allocator, cli.io, loaded.path, &loaded.doc);
+    }
+
+    var paths = std.json.Array.init(cli.allocator);
+    for (applied.enabled_paths) |path| {
+        try paths.append(.{ .string = try cli.allocator.dupe(u8, path) });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "intent", .{ .string = try cli.allocator.dupe(u8, intent_path) });
+    try data.put(cli.allocator, "enabled_paths", .{ .array = paths });
+    try data.put(cli.allocator, "enabled_count", .{ .integer = @intCast(applied.enabled_count) });
+    try data.put(cli.allocator, "disabled_count", .{ .integer = @intCast(applied.disabled_count) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "plugins: {d} enabled, {d} disabled",
+        .{ applied.enabled_count, applied.disabled_count },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn pluginsValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse return error.Usage;
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const issue_count = try project_plugins.validatePlugins(cli.allocator, cli.io, root, loaded.doc.sectionMut("editor_plugins"));
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "issue_count", .{ .integer = @intCast(issue_count) });
+    try data.put(cli.allocator, "ok", .{ .bool = issue_count == 0 });
+    const summary = try std.fmt.allocPrint(cli.allocator, "editor plugins: {d} issue(s)", .{issue_count});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+        .exit_code = if (issue_count > 0) .failure else .success,
+    };
+}
+
+fn renderingListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const settings = try project_settings.listAll(cli.allocator, &loaded.doc, "rendering");
+    defer {
+        for (settings) |*item| item.deinit(cli.allocator);
+        cli.allocator.free(settings);
+    }
+
+    var arr = std.json.Array.init(cli.allocator);
+    for (settings) |item| {
+        var row: std.json.ObjectMap = .{};
+        const alias = project_rendering.aliasForKey(item.key);
+        if (alias) |name| try row.put(cli.allocator, "alias", .{ .string = try cli.allocator.dupe(u8, name) });
+        try row.put(cli.allocator, "key", .{ .string = try cli.allocator.dupe(u8, item.key) });
+        try row.put(cli.allocator, "value", .{ .string = try cli.allocator.dupe(u8, item.value) });
+        try arr.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "settings", .{ .array = arr });
+    try data.put(cli.allocator, "setting_count", .{ .integer = @intCast(settings.len) });
+    const summary = try std.fmt.allocPrint(cli.allocator, "listed {d} rendering setting(s)", .{settings.len});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn renderingApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
+    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    defer cli.allocator.free(intent_bytes);
+
+    var applied = try project_rendering.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
+    defer applied.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try project_godot.writeFile(cli.allocator, cli.io, loaded.path, &loaded.doc);
+    }
+
+    var keys = std.json.Array.init(cli.allocator);
+    for (applied.applied_keys) |key| {
+        try keys.append(.{ .string = try cli.allocator.dupe(u8, key) });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "intent", .{ .string = try cli.allocator.dupe(u8, intent_path) });
+    try data.put(cli.allocator, "applied_keys", .{ .array = keys });
+    try data.put(cli.allocator, "added_count", .{ .integer = @intCast(applied.added_count) });
+    try data.put(cli.allocator, "replaced_count", .{ .integer = @intCast(applied.replaced_count) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "applied {d} rendering setting(s)",
+        .{applied.applied_keys.len},
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn renderingValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const issue_count = project_rendering.validateRenderingSection(&loaded.doc);
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "issue_count", .{ .integer = @intCast(issue_count) });
+    try data.put(cli.allocator, "ok", .{ .bool = issue_count == 0 });
+    const summary = try std.fmt.allocPrint(cli.allocator, "rendering: {d} issue(s)", .{issue_count});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+        .exit_code = if (issue_count > 0) .failure else .success,
+    };
+}
+
 pub fn commands() spec.CommandSpec {
     const project_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
@@ -432,10 +669,17 @@ pub fn commands() spec.CommandSpec {
         .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
     };
 
+    const plugin_toggle_options = [_]spec.OptionSpec{
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
+        .{ .long = "plugin", .kind = .string, .description = "Plugin path or addon folder name (res://addons/.../plugin.cfg)" },
+        .{ .long = "path", .kind = .string, .description = "Alias for --plugin" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
+    };
+
     return .{
         .name = "project",
         .summary = "Read and write Godot project.godot settings",
-        .description = "Project-level configuration: Input Map, autoloads, main scene, display, layer names.",
+        .description = "Project-level configuration: input, autoloads, plugins, rendering, display, layer names.",
         .options = &project_options,
         .children = &.{
             .{
@@ -465,6 +709,26 @@ pub fn commands() spec.CommandSpec {
                     .{ .name = "list", .summary = "List autoload entries", .options = &project_options, .handler = autoloadListHandler },
                     .{ .name = "apply", .summary = "Apply autoload intent JSON (merge by name; optional replace_all)", .options = &intent_apply_options, .handler = autoloadApplyHandler },
                     .{ .name = "validate", .summary = "Validate autoload paths and names", .options = &project_options, .handler = autoloadValidateHandler },
+                },
+            },
+            .{
+                .name = "plugins",
+                .summary = "Editor plugins enable/disable in project.godot",
+                .children = &.{
+                    .{ .name = "list", .summary = "List addons and enabled state", .options = &project_options, .handler = pluginsListHandler },
+                    .{ .name = "enable", .summary = "Enable one plugin", .options = &plugin_toggle_options, .handler = pluginsEnableHandler },
+                    .{ .name = "disable", .summary = "Disable one plugin", .options = &plugin_toggle_options, .handler = pluginsDisableHandler },
+                    .{ .name = "apply", .summary = "Apply plugin intent JSON (enable/disable lists)", .options = &intent_apply_options, .handler = pluginsApplyHandler },
+                    .{ .name = "validate", .summary = "Validate enabled plugin paths exist", .options = &project_options, .handler = pluginsValidateHandler },
+                },
+            },
+            .{
+                .name = "rendering",
+                .summary = "Rendering method and graphics driver settings",
+                .children = &.{
+                    .{ .name = "list", .summary = "List [rendering] section settings", .options = &project_options, .handler = renderingListHandler },
+                    .{ .name = "apply", .summary = "Apply rendering intent JSON (friendly aliases)", .options = &intent_apply_options, .handler = renderingApplyHandler },
+                    .{ .name = "validate", .summary = "Validate known rendering method/driver values", .options = &project_options, .handler = renderingValidateHandler },
                 },
             },
         },

@@ -92,6 +92,10 @@ godot-cli project input validate --project-root . --json
 # Main scene, display, layer names, autoloads
 godot-cli project settings apply --project-root . --intent intents/main_scene.json --json
 godot-cli project autoload apply --project-root . --intent intents/autoload_game_state.json --json
+
+# Editor plugins + rendering
+godot-cli project plugins enable --project-root . --plugin godot_power_ai --json
+godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
 ```
 
 Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Use with a movement script that calls `Input.get_vector("move_left", "move_right", "move_up", "move_down")`. Re-applying the same intent is idempotent (replaces each action by name).
@@ -131,6 +135,8 @@ Copy examples from `$GODOT_CLI_HOME/examples/intents/` (`player_with_icon.json`,
 | Set main scene | `project settings apply` with `main_scene.json` or `settings set --section application --key run/main_scene --value res://…` |
 | Game singleton | `project autoload apply` with `autoload_game_state.json` |
 | Physics layer names | `project settings apply` with `physics_layers.json` |
+| Enable editor plugin | `project plugins enable --plugin <addon_name>` (addon must exist under `addons/`) |
+| Rendering backend | `project rendering apply` with `rendering_forward_plus.json` |
 
 `player_2d` optional fields: `texture` / `sprite_texture` / `texture_path`, `modulate`, `position`, `script`, `shape_id_hint`, `radius`, `sprite` (bool).
 

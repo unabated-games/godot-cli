@@ -1,0 +1,5 @@
+{
+  "method": "forward_plus",
+  "method_mobile": "mobile",
+  "driver_windows": "d3d12"
+}

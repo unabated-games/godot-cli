@@ -377,6 +377,29 @@
       "argv": ["project", "autoload", "apply", "--project-root", "<path>"],
       "options": ["--intent", "--file", "--dry-run"],
       "json_request": { "argv": ["project", "autoload", "apply", "--project-root", ".", "--intent", "intents/autoload_game_state.json", "--json"] }
+    },
+    {
+      "name": "project_plugins_list",
+      "argv": ["project", "plugins", "list", "--project-root", "<path>"],
+      "json_request": { "argv": ["project", "plugins", "list", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "project_plugins_enable",
+      "argv": ["project", "plugins", "enable", "--project-root", "<path>"],
+      "options": ["--plugin", "--path", "--dry-run"],
+      "json_request": { "argv": ["project", "plugins", "enable", "--project-root", ".", "--plugin", "godot_power_ai", "--json"] }
+    },
+    {
+      "name": "project_plugins_apply",
+      "argv": ["project", "plugins", "apply", "--project-root", "<path>"],
+      "options": ["--intent", "--file", "--dry-run"],
+      "json_request": { "argv": ["project", "plugins", "apply", "--project-root", ".", "--intent", "intents/enable_sample_plugin.json", "--json"] }
+    },
+    {
+      "name": "project_rendering_apply",
+      "argv": ["project", "rendering", "apply", "--project-root", "<path>"],
+      "options": ["--intent", "--file", "--dry-run"],
+      "json_request": { "argv": ["project", "rendering", "apply", "--project-root", ".", "--intent", "intents/rendering_forward_plus.json", "--json"] }
     }
   ]
 }

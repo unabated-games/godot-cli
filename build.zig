@@ -439,6 +439,32 @@ pub fn build(b: *std.Build) void {
     project_autoload_list_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&project_autoload_list_smoke.step);
 
+    const project_plugins_enable_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\cp test_fixtures/project/project.godot "$tmp/project.godot" &&
+        \\cp -R test_fixtures/project/addons "$tmp/addons" &&
+        \\out=$(./zig-out/bin/godot-cli project plugins enable --project-root "$tmp" --plugin sample_plugin --json) &&
+        \\rm -rf "$tmp" &&
+        \\echo "$out" | grep -q '"enabled":true'
+    });
+    project_plugins_enable_smoke.setCwd(b.path("."));
+    project_plugins_enable_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_plugins_enable_smoke.step);
+
+    const project_rendering_apply_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\cp test_fixtures/project/project.godot "$tmp/project.godot" &&
+        \\out=$(./zig-out/bin/godot-cli project rendering apply --project-root "$tmp" --intent share/examples/intents/rendering_forward_plus.json --json) &&
+        \\rm -rf "$tmp" &&
+        \\echo "$out" | grep -q 'renderer/rendering_method' &&
+        \\echo "$out" | grep -q '"added_count":3'
+    });
+    project_rendering_apply_smoke.setCwd(b.path("."));
+    project_rendering_apply_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_rendering_apply_smoke.step);
+
     const material_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli resource inspect test_fixtures/project/sample_material.tres --json --no-validate) &&

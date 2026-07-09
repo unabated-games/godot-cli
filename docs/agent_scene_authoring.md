@@ -114,7 +114,38 @@ Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Semantics:
 
 Typical workflow: write `scripts/player.gd` on disk → attach via `player_2d` / `assign_ext` → `project input apply` → run the game.
 
-**Not yet in godot-cli:** editor plugins, rendering backend tuning — use the editor or hand-edit for now.
+### `project plugins` (enable/disable only)
+
+Addon must already exist at `addons/<name>/plugin.cfg` — godot-cli does not install from the Asset Library.
+
+```json
+{
+  "enable": ["godot_power_ai"],
+  "disable": ["old_plugin"]
+}
+```
+
+```bash
+godot-cli project plugins list --project-root . --json
+godot-cli project plugins enable --project-root . --plugin godot_power_ai --json
+godot-cli project plugins apply --project-root . --intent intents/enable_plugins.json --json
+```
+
+### `project rendering`
+
+```json
+{
+  "method": "forward_plus",
+  "method_mobile": "mobile",
+  "driver_windows": "d3d12"
+}
+```
+
+Aliases: `method` → `renderer/rendering_method`, `method_mobile` → `renderer/rendering_method.mobile`, `driver_windows` → `rendering_device/driver.windows`, etc.
+
+```bash
+godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
+```
 
 ### `project settings` intent shape
 
