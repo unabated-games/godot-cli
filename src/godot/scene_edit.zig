@@ -4,6 +4,7 @@ const std = @import("std");
 const document = @import("text_format/document.zig");
 const tag = @import("text_format/tag.zig");
 const node_tree = @import("node_tree.zig");
+const node_section_order = @import("node_section_order.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -79,12 +80,17 @@ pub fn addNode(
     var header = try makeNodeHeader(allocator, name, node_type, parent_attr);
     errdefer header.deinit(allocator);
 
-    const section_index = try document.appendSection(doc, allocator, .{
-        .line = 0,
-        .leading_blank_lines = 1,
-        .header = header,
-        .properties = .empty,
-    });
+    const insert_at = try node_section_order.insertIndexForNewChild(allocator, doc, parent.path);
+    const section_index = blk: {
+        const section = document.Section{
+            .line = 0,
+            .leading_blank_lines = 1,
+            .header = header,
+            .properties = .empty,
+        };
+        try document.insertSection(doc, allocator, insert_at, section);
+        break :blk insert_at;
+    };
 
     const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent.path, name });
 
@@ -265,6 +271,8 @@ pub fn reparentNode(
             }
         }
     }
+
+    try node_section_order.moveSubtreeAfterReparent(allocator, doc, section_index, new_parent.path);
 }
 
 pub fn findNodeSectionIndex(allocator: std.mem.Allocator, doc: *const document.Document, node_path: []const u8) Error!usize {
@@ -414,6 +422,36 @@ test "add remove rename reparent nodes" {
 
     try std.testing.expectEqual(@as(usize, 1), try removeNode(allocator, &doc, "/root/Main/Sprite", false));
     try std.testing.expectEqual(@as(usize, 1), try removeNode(allocator, &doc, "/root/Main/Hero", false));
+}
+
+test "reparent preserves parent-before-child section order" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\
+        \\[node name="Player" type="CharacterBody2D" parent="."]
+        \\
+        \\[node name="Enemy" type="CharacterBody2D" parent="."]
+        \\
+        \\[node name="HUD" type="CanvasLayer" parent="."]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    var playfield = try addNode(allocator, &doc, "/root/Main", "Playfield", "Node2D");
+    defer playfield.deinit(allocator);
+
+    try reparentNode(allocator, &doc, "/root/Main/Player", "/root/Main/Playfield");
+    try reparentNode(allocator, &doc, "/root/Main/Enemy", "/root/Main/Playfield");
+
+    const playfield_idx = document.findSectionIndexByNodeName(&doc, "Playfield").?;
+    const player_idx = document.findSectionIndexByNodeName(&doc, "Player").?;
+    const enemy_idx = document.findSectionIndexByNodeName(&doc, "Enemy").?;
+    try std.testing.expect(playfield_idx < player_idx);
+    try std.testing.expect(playfield_idx < enemy_idx);
 }
 
 test "viewport parent attr helpers" {

@@ -132,7 +132,9 @@ After create → intent → validate:
 - **Reusable UI cell** → `@tool` script + `instance_override` on root exports (`label`, `number`)
 - **Script node refs** → `--unique-name` when adding HUD widgets; use `%Name` in GDScript
 
-Writes auto-run save preparation; `scene normalize` re-preps existing files.
+Writes auto-run save preparation (ext/sub order, **node parent-before-child order**, id repair); `scene normalize` re-preps existing files.
+
+**Node order:** validate fails with `node_parent_order` if a child appears before its parent in the file. Never use Godot headless to fix order — normalize instead. Add parents before children in multi-step patches.
 
 Full pattern: `$GODOT_CLI_HOME/docs/agent_scene_authoring.md` (Wiring external resources).
 

@@ -8,6 +8,7 @@ const id_validate = @import("../id_validate.zig");
 const id_session = @import("../id_session.zig");
 const document = @import("document.zig");
 const godot_format = @import("godot_format.zig");
+const node_section_order = @import("../node_section_order.zig");
 const tag = @import("tag.zig");
 
 pub const SaveOptions = struct {
@@ -17,13 +18,14 @@ pub const SaveOptions = struct {
     sort_ext_resources: bool = true,
     update_load_steps: bool = true,
     assign_node_unique_ids: bool = true,
+    sort_node_sections: bool = true,
     id_session: ?*id_session.Session = null,
     godot_save_format: bool = false,
 };
 
 pub const PrepareError = error{
     OutOfMemory,
-};
+} || node_section_order.Error;
 
 pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, options: SaveOptions) PrepareError!void {
     scene_id.resetSceneUniqueIdGenerator();
@@ -41,6 +43,9 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     }
     if (options.assign_node_unique_ids) {
         try assignNodeUniqueIds(allocator, doc, options.seed_path);
+    }
+    if (options.sort_node_sections) {
+        try node_section_order.sortNodeSections(allocator, doc);
     }
     if (options.id_session) |session| {
         try recordExtResourceIds(allocator, doc, options.seed_path, session);

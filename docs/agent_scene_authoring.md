@@ -16,6 +16,7 @@
 4. **Prefer catalog ids for project UI.** `catalog show ui/button` then `scene instance add … --catalog-id ui/button`.
 5. **Use builtins for raw Godot nodes.** `godot/ui/Button` is document-only — `scene node add --type Button`, not instancing.
 6. **One command per concern, or a patch.** Sequential CLI calls are fine; for many edits use `scene apply --patch patch.json` (see [Patch format](#patch-format)).
+7. **Parent-before-child section order.** Godot loads `[node]` sections in file order; a child's `parent=` must refer to a node already declared above it (`packed_scene.cpp` — “parent path has vanished”). `node_add` and `node_reparent` keep loadable order; save prep / `scene normalize` re-sort if needed. **Never** use Godot headless to “fix” section order — run `scene validate` (fails with `node_parent_order`) then `scene normalize`. When patching manually, add parent nodes before children.
 
 ---
 

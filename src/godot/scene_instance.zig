@@ -6,6 +6,7 @@ const tag = @import("text_format/tag.zig");
 const node_tree = @import("node_tree.zig");
 const scene_edit = @import("scene_edit.zig");
 const scene_resources = @import("scene_resources.zig");
+const node_section_order = @import("node_section_order.zig");
 const project_config = @import("project_config.zig");
 
 pub const Error = error{
@@ -80,12 +81,14 @@ pub fn addPackedSceneInstance(
     try header.setStringField(allocator, "instance", instance_ref);
     allocator.free(instance_ref);
 
-    const section_index = try document.appendSection(doc, allocator, .{
+    const insert_at = try node_section_order.insertIndexForNewChild(allocator, doc, parent.path);
+    try document.insertSection(doc, allocator, insert_at, .{
         .line = 0,
         .leading_blank_lines = 1,
         .header = header,
         .properties = .empty,
     });
+    const section_index = insert_at;
 
     const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent.path, node_name });
     errdefer allocator.free(new_path);

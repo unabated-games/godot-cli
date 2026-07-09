@@ -513,6 +513,28 @@ pub fn build(b: *std.Build) void {
     scene_unique_name_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&scene_unique_name_smoke.step);
 
+    const node_order_validate_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene validate test_fixtures/project/bad_node_order.tscn --json || true) &&
+        \\echo "$out" | grep -q 'node_parent_order'
+    });
+    node_order_validate_smoke.setCwd(b.path("."));
+    node_order_validate_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&node_order_validate_smoke.step);
+
+    const node_order_normalize_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp) &&
+        \\cp test_fixtures/project/bad_node_order.tscn "$tmp" &&
+        \\./zig-out/bin/godot-cli scene normalize "$tmp" --json >/dev/null &&
+        \\out=$(./zig-out/bin/godot-cli scene validate "$tmp" --json) &&
+        \\rm "$tmp" &&
+        \\echo "$out" | grep -q '"error_count":0'
+    });
+    node_order_normalize_smoke.setCwd(b.path("."));
+    node_order_normalize_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&node_order_normalize_smoke.step);
+
     const material_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli resource inspect test_fixtures/project/sample_material.tres --json --no-validate) &&

@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[node name="Main" type="Node2D"]
+
+[node name="Player" type="CharacterBody2D" parent="Playfield"]
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Playfield" type="Node2D" parent="."]

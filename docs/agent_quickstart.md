@@ -162,7 +162,9 @@ Copy examples from `$GODOT_CLI_HOME/examples/intents/` (`player_with_icon.json`,
 
 `player_2d` optional fields: `texture` / `sprite_texture` / `texture_path`, `modulate`, `position`, `script`, `shape_id_hint`, `radius`, `sprite` (bool).
 
-Writes run **save preparation** by default (resource section order, id repair). Use `scene normalize` to re-run prep on an existing file; `--no-prepare-save` only for tests.
+Writes run **save preparation** by default (ext/sub section order, node parent-before-child order, id repair). Use `scene normalize` to re-run prep on an existing file; `--no-prepare-save` only for tests.
+
+**Node section order:** Godot instantiates nodes in file order. If `scene validate` reports `node_parent_order`, run `scene normalize` — do not use Godot headless as a scene pretty-printer. Add new parent nodes before reparenting children onto them when building multi-step patches.
 
 See `agent_scene_authoring.md` → “Wiring external resources” and “Multiple character bodies”.
 
@@ -197,3 +199,4 @@ Use `batch --file`, not top-level `--request`. See `agent_batch_commands.md`.
 - Instancing `godot/…` builtin ids
 - Skipping `scene validate` after edits
 - Forgetting `--project-root` when using `res://` or catalog ids
+- Using Godot headless to rewrite `.tscn` node order — use `scene normalize` instead

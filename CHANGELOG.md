@@ -18,8 +18,12 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 ### Fixed
 
 - `scene set-property` and `scene node add --property` wrote garbage for bool values (e.g. `unique_name_in_owner = true`) due to use-after-free when formatting Variant text.
+- `node_add` / `node_reparent` could leave `[node]` sections in child-before-parent file order (Godot instantiate: “parent path has vanished”). Save preparation and `scene normalize` now topologically sort node sections; reparent moves the subtree block under the new parent.
 
 ### Added
+
+- `scene validate` error `node_parent_order` when a node's `parent=` refers to a node declared later in the file.
+- Fixture `test_fixtures/project/bad_node_order.tscn` and smoke tests for validate + normalize.
 
 - Agent docs: **UI authoring (editor parity)** — scene-first Control styling, `@tool` export pattern, unique names, HUD layout, quoted patch strings (`agent_quickstart.md`, `agent_scene_authoring.md`, skill).
 - Example intent `hud_top_bar.json` (top bar with ColorRect, MarginContainer, theme overrides, unique name).

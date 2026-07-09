@@ -6,6 +6,7 @@ const resource_uid = @import("resource_uid.zig");
 const uid_cache = @import("uid_cache.zig");
 const project_config = @import("project_config.zig");
 const document = @import("text_format/document.zig");
+const node_section_order = @import("node_section_order.zig");
 
 pub const ValidateContext = struct {
     cache: ?*const uid_cache.Cache = null,
@@ -450,6 +451,8 @@ pub fn validateDocument(
             try report.add(allocator, .err, kind, message, null);
         }
     }
+
+    try node_section_order.validateNodeParentOrder(&report, allocator, doc);
 
     return report;
 }
