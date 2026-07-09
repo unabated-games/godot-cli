@@ -1,0 +1,11 @@
+{
+  "steps": [
+    {
+      "recipe": "catalog_button",
+      "parent": "/root/Root",
+      "name": "StartButton",
+      "catalog_id": "ui/button",
+      "label": "Start Game"
+    }
+  ]
+}

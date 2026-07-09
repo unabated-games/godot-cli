@@ -27,6 +27,34 @@ The original north star was **Godot-compatible ID generation and save round-trip
 
 A secondary motivation is **agent ergonomics**: LLMs struggle to edit Godot scene text directly. A CLI that returns structured JSON (`inspect`, `node list`, parsed properties) gives agents a reliable API instead of raw file bytes.
 
+## North star: editor-like scene authoring
+
+**The goal is scenes a human would build in the Godot editor — persisted in `.tscn` / `.tres`, not recreated at runtime in GDScript.**
+
+When a designer adds a button to a UI, they:
+
+1. Open the scene in the editor
+2. Add or instance a node in the scene tree
+3. Save — the hierarchy lives in the file (`[node …]`, `instance=ExtResource(…)`, properties)
+
+That is what agents should do too, via godot-cli commands (`scene node add`, `scene instance add`, `set-property`, etc.). The saved file is the source of truth.
+
+### Anti-pattern (explicitly out of scope)
+
+Do **not** teach or rely on this workaround:
+
+```gdscript
+func _ready() -> void:
+    var button_scene = load("res://ui/button/button.tscn")
+    add_child(button_scene.instantiate())
+```
+
+That pattern exists because raw TSCN is hard — it hides structure from `inspect` / `validate`, breaks the component catalog, and diverges from how humans work. godot-cli exists so agents **never need** runtime spawning for static scene composition.
+
+**Exception:** Runtime spawning is correct for *dynamic* gameplay (pooling enemies, procedural levels). godot-cli targets **authored** scene structure — the same edits you would make in the editor before pressing Play.
+
+See [scene_authoring_roadmap.md](scene_authoring_roadmap.md) and [development_principles.md](development_principles.md#scene-authoring-philosophy-agents).
+
 ## What it can do today
 
 Roughly four layers:
@@ -61,6 +89,8 @@ This is the compatibility core — verified against Godot 4.7.
 - **`--normalize-properties`** — rewrite all property values through the Variant parser (canonical float/color formatting, etc.)
 - **`--godot-save-format`** — aim for byte-identical output vs a Godot reference (with id session cache)
 - **`retarget-ext`** — bulk retarget `res://` paths in ext_resources
+- **Scene authoring** — `scene new`, `scene node add|remove|rename|reparent`, `scene ext add`, `scene sub add`, `scene instance add` (see [scene_authoring_roadmap.md](scene_authoring_roadmap.md))
+- **Component catalog** — `catalog scan|list|show|validate|search|export` (see [catalog_design.md](catalog_design.md))
 
 ## What it is good at vs what it is not
 
@@ -74,9 +104,9 @@ This is the compatibility core — verified against Godot 4.7.
 **Not (yet) meant for:**
 
 - Running gameplay, physics, or scripts
-- Full scene authoring (add nodes, reparent, build scenes from scratch — see [scene_authoring_roadmap.md](scene_authoring_roadmap.md))
 - Binary `.scn` / `.res` files
 - Replacing the Godot editor for creative work
+- Runtime scene composition in GDScript when the structure should live in `.tscn` (see [north star](#north-star-editor-like-scene-authoring))
 
 ## One-line summary
 
@@ -88,8 +118,9 @@ The bet is that **file-format fidelity + structured CLI output** is more valuabl
 
 | Doc | Purpose |
 |-----|---------|
-| [development_principles.md](development_principles.md) | CLI/JSON contracts |
+| [development_principles.md](development_principles.md) | CLI/JSON contracts and scene authoring philosophy |
 | [id_generation_plan.md](id_generation_plan.md) | Completed ID and I/O phases |
 | [mini_roadmap.md](mini_roadmap.md) | Post-phase-6 feature backlog |
 | [scene_authoring_roadmap.md](scene_authoring_roadmap.md) | LLM-first scene authoring plan |
+| [agent_scene_authoring.md](agent_scene_authoring.md) | Agent recipes and patch reference |
 | [mcp_tools.json](mcp_tools.json) | JSON request shapes for every command |

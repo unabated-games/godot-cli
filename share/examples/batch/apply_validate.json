@@ -1,0 +1,30 @@
+{
+  "mode": "stop",
+  "steps": [
+    {
+      "argv": [
+        "scene",
+        "apply",
+        "scenes/main.tscn",
+        "--intent",
+        "intents/hud_main.json",
+        "--project-root",
+        ".",
+        "--json"
+      ]
+    },
+    {
+      "argv": [
+        "scene",
+        "validate",
+        "scenes/main.tscn",
+        "--project-root",
+        ".",
+        "--json"
+      ]
+    },
+    {
+      "argv": ["scene", "node", "list", "scenes/main.tscn", "--json"]
+    }
+  ]
+}

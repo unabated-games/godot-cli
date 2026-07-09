@@ -1,0 +1,25 @@
+{
+  "ops": [
+    {
+      "op": "node_add",
+      "parent": "/root/Root",
+      "name": "Player",
+      "type": "CharacterBody2D"
+    },
+    {
+      "op": "sub_add",
+      "type": "CapsuleShape2D",
+      "id_hint": "shape",
+      "properties": { "radius": 8.0 }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Root/Player",
+      "name": "Collision",
+      "type": "CollisionShape2D",
+      "properties": {
+        "shape": "SubResource(\"CapsuleShape2D_shape\")"
+      }
+    }
+  ]
+}

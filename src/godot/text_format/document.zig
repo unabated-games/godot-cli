@@ -185,6 +185,73 @@ pub fn parseFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) Par
     return parseBytes(allocator, bytes);
 }
 
+fn cloneTagValue(allocator: std.mem.Allocator, value: tag.Value) ParseError!tag.Value {
+    return switch (value) {
+        .string => |s| .{ .string = try allocator.dupe(u8, s) },
+        .integer => |n| .{ .integer = n },
+        .float => |f| .{ .float = f },
+        .bool => |b| .{ .bool = b },
+    };
+}
+
+pub fn cloneDocument(allocator: std.mem.Allocator, src: *const Document) ParseError!Document {
+    var doc = Document.init(allocator);
+    errdefer doc.deinit(allocator);
+
+    for (src.sections.items) |section| {
+        var header = tag.Tag{ .name = try allocator.dupe(u8, section.header.name), .fields = .{} };
+        errdefer header.deinit(allocator);
+
+        var field_it = section.header.fields.iterator();
+        while (field_it.next()) |entry| {
+            const key = try allocator.dupe(u8, entry.key_ptr.*);
+            errdefer allocator.free(key);
+            try header.fields.put(allocator, key, try cloneTagValue(allocator, entry.value_ptr.*));
+        }
+
+        var props: std.ArrayList(PropertyLine) = .empty;
+        errdefer {
+            for (props.items) |prop| allocator.free(prop.raw);
+            props.deinit(allocator);
+        }
+        for (section.properties.items) |prop| {
+            try props.append(allocator, .{
+                .line = prop.line,
+                .raw = try allocator.dupe(u8, prop.raw),
+            });
+        }
+
+        try doc.sections.append(allocator, .{
+            .line = section.line,
+            .leading_blank_lines = section.leading_blank_lines,
+            .header = header,
+            .properties = props,
+        });
+    }
+
+    return doc;
+}
+
+test "clone document is independent" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\visible = true
+        \\
+    ;
+    var original = try parseBytes(allocator, source);
+    defer original.deinit(allocator);
+
+    var copy = try cloneDocument(allocator, &original);
+    defer copy.deinit(allocator);
+
+    try setSectionProperty(&copy, allocator, 1, "visible", "false");
+    try std.testing.expectEqualStrings("visible = true", original.sections.items[1].properties.items[0].raw);
+    try std.testing.expectEqualStrings("visible = false", copy.sections.items[1].properties.items[0].raw);
+}
+
 test "parse sample scene structure" {
     const allocator = std.testing.allocator;
     const source =

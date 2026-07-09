@@ -107,14 +107,15 @@
     {
       "name": "scene_node_list",
       "argv": ["scene", "node", "list", "<file.tscn>"],
-      "description": "List scene nodes with name, type, parent, viewport path, section_line, and unique_id.",
+      "options": ["--project-root"],
+      "description": "List scene nodes with name, type, parent, viewport path, section_line, and unique_id. --project-root is optional (ignored; file-only read).",
       "json_request": { "argv": ["scene", "node", "list", "main.tscn", "--json"] }
     },
     {
       "name": "scene_node_get",
       "argv": ["scene", "node", "get", "<file.tscn>", "<node-path>"],
-      "options": ["--node-name", "--parent"],
-      "description": "Get one node by viewport path positional or --node-name with optional --parent.",
+      "options": ["--node-name", "--parent", "--project-root"],
+      "description": "Get one node by viewport path positional or --node-name with optional --parent. --project-root optional (ignored).",
       "json_request": { "argv": ["scene", "node", "get", "main.tscn", "/root/Player", "--json"] }
     },
     {
@@ -195,6 +196,69 @@
       "json_request": { "argv": ["scene", "round-trip", "main.tscn", "--dry-run", "--json"] }
     },
     {
+      "name": "scene_instance_add",
+      "argv": ["scene", "instance", "add", "<file.tscn>"],
+      "options": ["--parent", "--name", "--scene", "--catalog-id", "--editable", "--output", "--project-root", "--dry-run"],
+      "description": "Instance a PackedScene under a parent. Use --scene or --catalog-id (project entries only).",
+      "json_request": {
+        "argv": ["scene", "instance", "add", "main.tscn", "--parent", "/root/Main", "--name", "StartButton", "--catalog-id", "ui/button", "--project-root", ".", "--json"]
+      }
+    },
+    {
+      "name": "scene_plan",
+      "argv": ["scene", "plan", "<file.tscn>", "--intent", "<intent.json>"],
+      "options": ["--patch", "--write-patch", "--project-root", "--dry-run"],
+      "description": "Expand intent recipes to patch JSON; optional dry-run preview against scene.",
+      "json_request": {
+        "argv": ["scene", "plan", "main.tscn", "--intent", "intents/hud.json", "--project-root", ".", "--json"]
+      }
+    },
+    {
+      "name": "scene_apply",
+      "argv": ["scene", "apply", "<file.tscn>", "--patch", "<patch.json>"],
+      "options": ["--intent", "--snapshot", "--auto-snapshot", "--record-undo", "--write-undo-patch", "--output", "--project-root", "--dry-run", "--preview-properties", "--no-strict"],
+      "description": "Apply patch or intent; dry-run returns preview_diff. Optional snapshot and undo patch. See docs/agent_scene_authoring.md.",
+      "json_request": {
+        "argv": ["scene", "apply", "main.tscn", "--patch", "patches/player.json", "--project-root", ".", "--json"]
+      }
+    },
+    {
+      "name": "scene_restore",
+      "argv": ["scene", "restore", "<file.tscn>", "--from", "<snapshot>"],
+      "description": "Restore scene file from a snapshot copy.",
+      "json_request": {
+        "argv": ["scene", "restore", "main.tscn", "--from", "main.tscn.godot-cli-snapshot", "--json"]
+      }
+    },
+    {
+      "name": "scene_diff",
+      "argv": ["scene", "diff", "<scene_a.tscn>", "<scene_b.tscn>"],
+      "options": ["--properties", "--project-root"],
+      "description": "Compare node trees; --properties includes property-level diff. --project-root optional (ignored).",
+      "json_request": {
+        "argv": ["scene", "diff", "before.tscn", "after.tscn", "--properties", "--json"]
+      }
+    },
+    {
+      "name": "scene_template_list",
+      "argv": ["scene", "template", "list"],
+      "options": ["--templates-root"],
+      "json_request": { "argv": ["scene", "template", "list", "--json"] }
+    },
+    {
+      "name": "scene_template_copy",
+      "argv": ["scene", "template", "copy", "<template-id>", "--output", "<path.tscn>"],
+      "options": ["--templates-root", "--project-root", "--no-prepare-save", "--dry-run"],
+      "json_request": { "argv": ["scene", "template", "copy", "2d/character_body", "--output", "player.tscn", "--json"] }
+    },
+    {
+      "name": "batch",
+      "argv": ["batch", "--file", "<batch.json>"],
+      "options": ["--json-body"],
+      "description": "Run multiple CLI steps in one call. Modes: stop, continue, atomic. See docs/agent_batch_commands.md.",
+      "json_request": { "argv": ["batch", "--file", "workflow.json", "--json"] }
+    },
+    {
       "name": "resource_inspect",
       "argv": ["resource", "inspect", "<file.tres>"],
       "options": ["--no-validate", "--no-parse-properties"],
@@ -232,6 +296,57 @@
       "name": "resource_round_trip",
       "argv": ["resource", "round-trip", "<file>"],
       "options": ["--dry-run"]
+    },
+    {
+      "name": "catalog_scan",
+      "argv": ["catalog", "scan", "--project-root", "<path>"],
+      "json_request": { "argv": ["catalog", "scan", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "catalog_list",
+      "argv": ["catalog", "list", "--project-root", "<path>"],
+      "json_request": { "argv": ["catalog", "list", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "catalog_show",
+      "argv": ["catalog", "show", "<id>", "--project-root", "<path>"],
+      "json_request": { "argv": ["catalog", "show", "ui/button", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "catalog_validate",
+      "argv": ["catalog", "validate", "--project-root", "<path>"],
+      "json_request": { "argv": ["catalog", "validate", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "catalog_search",
+      "argv": ["catalog", "search", "--project-root", "<path>"],
+      "options": ["--tags", "--query"],
+      "json_request": { "argv": ["catalog", "search", "--project-root", ".", "--tags", "ui,button", "--json"] }
+    },
+    {
+      "name": "catalog_export",
+      "argv": ["catalog", "export", "--project-root", "<path>"],
+      "options": ["--output", "--dry-run"],
+      "json_request": { "argv": ["catalog", "export", "--project-root", ".", "--output", "AGENTS.md", "--json"] }
+    },
+    {
+      "name": "project_input_list",
+      "argv": ["project", "input", "list", "--project-root", "<path>"],
+      "description": "List Input Map actions from project.godot [input] section.",
+      "json_request": { "argv": ["project", "input", "list", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "project_input_apply",
+      "argv": ["project", "input", "apply", "--project-root", "<path>"],
+      "options": ["--intent", "--file", "--dry-run"],
+      "description": "Apply input map intent JSON (idempotent per-action replace). Event types: key, joypad_button, joypad_motion.",
+      "json_request": { "argv": ["project", "input", "apply", "--project-root", ".", "--intent", "intents/wasd_movement.json", "--json"] }
+    },
+    {
+      "name": "project_input_validate",
+      "argv": ["project", "input", "validate", "--project-root", "<path>"],
+      "description": "Validate [input] action blocks and embedded Object(...) events.",
+      "json_request": { "argv": ["project", "input", "validate", "--project-root", ".", "--json"] }
     }
   ]
 }

@@ -16,9 +16,10 @@ This roadmap is ordered by priority for MCP/LLM agent use. Implement one item at
 | 4 | Variant gaps | **done** | `src/godot/variant/collection.zig`, arrays/dicts/typed/packed byte |
 | 5 | Fixture and CI hardening | **done** | `test_fixtures/project/rich_variants.tscn`, `.github/workflows/ci.yml` |
 | 6 | Thin MCP server | **deferred** | CLI-first; see [scene_authoring_roadmap.md](scene_authoring_roadmap.md) |
-| 7 | Scene authoring (LLM) | **next** | Phases A–G in [scene_authoring_roadmap.md](scene_authoring_roadmap.md) |
+| 7 | Scene authoring (LLM) | **done** | Phases A–H in [scene_authoring_roadmap.md](scene_authoring_roadmap.md) |
+| 8 | Batch CLI + Phase I polish | **done** | [agent_batch_commands.md](agent_batch_commands.md), `godot-cli batch` |
 
-**Start next session at scene authoring Phase A** ([roadmap](scene_authoring_roadmap.md)).
+**Start next session at scene authoring Phase I extensions** or MCP if needed ([roadmap](scene_authoring_roadmap.md)).
 
 ---
 
@@ -221,11 +222,17 @@ CLI + `--json` / `--request` is sufficient for agents; revisit only if a client 
 
 ---
 
-## 7. Scene authoring (LLM-first) — **next**
+## 7. Scene authoring (LLM-first) — **done**
 
-Full plan: **[scene_authoring_roadmap.md](scene_authoring_roadmap.md)**
+Full plan: **[scene_authoring_roadmap.md](scene_authoring_roadmap.md)** (Phases A–I)
 
-Phases: document mutations → node CRUD → ext/sub resources → templates → PackedScene instancing → declarative patch → agent docs.
+Batch workflows: **[agent_batch_commands.md](agent_batch_commands.md)**
+
+---
+
+## 8. Batch CLI (multi-step agent workflows) — **done**
+
+`godot-cli batch --file workflow.json` runs multiple subcommands in one invocation with `stop` / `continue` / `atomic` failure modes. See [agent_batch_commands.md](agent_batch_commands.md).
 
 ---
 

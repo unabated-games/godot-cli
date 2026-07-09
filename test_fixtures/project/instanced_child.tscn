@@ -1,0 +1,7 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" uid="uid://byhqeak2spha2" path="res://ui/button/button.tscn" id="1_refbtn"]
+
+[node name="Main" type="Node2D"]
+
+[node name="MyButton" parent="." instance=ExtResource("1_refbtn")]

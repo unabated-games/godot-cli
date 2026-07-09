@@ -1,0 +1,7 @@
+{
+  "mode": "stop",
+  "steps": [
+    { "argv": ["ping", "--json"] },
+    { "argv": ["ping", "--json"] }
+  ]
+}

@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://byhqeak2spha2"]
+
+[ext_resource type="Script" path="res://ui/button/button.gd" id="1_o8ei0"]
+
+[node name="Button" type="MarginContainer"]
+script = ExtResource("1_o8ei0")
+
+[node name="Label" type="Label" parent="."]
+text = "Label Text"

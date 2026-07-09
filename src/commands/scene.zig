@@ -12,6 +12,15 @@ const node_tree = @import("../godot/node_tree.zig");
 const scene_edit = @import("../godot/scene_edit.zig");
 const scene_refs = @import("../godot/scene_refs.zig");
 const scene_resources = @import("../godot/scene_resources.zig");
+const scene_instance = @import("../godot/scene_instance.zig");
+const resource_uid_lookup = @import("../godot/resource_uid_lookup.zig");
+const scene_patch = @import("../godot/scene_patch.zig");
+const scene_plan = @import("../godot/scene_plan.zig");
+const scene_diff = @import("../godot/scene_diff.zig");
+const scene_undo = @import("../godot/scene_undo.zig");
+const scene_templates = @import("../godot/scene_templates.zig");
+const catalog_scan = @import("../godot/catalog_scan.zig");
+const catalog_builtins = @import("../godot/catalog_builtins.zig");
 
 const ValidateSetup = struct {
     ctx: id_validate.ValidateContext,
@@ -726,8 +735,17 @@ fn sceneExtAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     const seed_path = try saveSeedPath(cli, inv, output_path);
     defer cli.allocator.free(seed_path);
 
+    var scene_uid: ?[]const u8 = null;
+    defer if (scene_uid) |uid| cli.allocator.free(uid);
+    if (projectRootFrom(inv)) |project_root| {
+        scene_uid = try resource_uid_lookup.resolveExtResourceUid(cli.allocator, cli.io, project_root, res_path);
+    }
+
     var added = try scene_resources.addExtResource(cli.allocator, &doc, seed_path, res_type, res_path);
     defer added.deinit(cli.allocator);
+    if (scene_uid) |uid| {
+        try doc.sections.items[added.section_index].header.setStringField(cli.allocator, "uid", uid);
+    }
 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
@@ -1065,6 +1083,468 @@ fn compareGodotHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []con
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
+fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const parent_path = inv.getOption("parent") orelse return error.Usage;
+    const node_name = inv.getOption("name") orelse return error.Usage;
+
+    const scene_option = inv.getOption("scene");
+    const catalog_id = inv.getOption("catalog-id");
+    if ((scene_option == null and catalog_id == null) or (scene_option != null and catalog_id != null)) {
+        return error.Usage;
+    }
+
+    var scene_res_path_owned: ?[]u8 = null;
+    defer if (scene_res_path_owned) |path| cli.allocator.free(path);
+
+    var scene_uid_owned: ?[]const u8 = null;
+    defer if (scene_uid_owned) |uid| cli.allocator.free(uid);
+
+    const scene_res_path: []const u8 = blk: {
+        if (scene_option) |path| break :blk path;
+        const id = catalog_id.?;
+        if (catalog_builtins.isBuiltinId(id)) return error.BuiltinCatalogEntry;
+        const project_root = projectRootFrom(inv) orelse return error.Usage;
+        var scan = try catalog_scan.scanProject(cli.allocator, cli.io, project_root, null);
+        defer scan.deinit(cli.allocator);
+        const entry = catalog_scan.findValidEntryById(scan.entries, id) orelse return error.CatalogEntryNotFound;
+        scene_res_path_owned = try cli.allocator.dupe(u8, entry.scene);
+        if (entry.scene_uid.len > 0) {
+            scene_uid_owned = try cli.allocator.dupe(u8, entry.scene_uid);
+        }
+        break :blk scene_res_path_owned.?;
+    };
+
+    if (scene_uid_owned == null) {
+        if (projectRootFrom(inv)) |project_root| {
+            scene_uid_owned = try scene_instance.readSceneUidFromResPath(cli.allocator, cli.io, project_root, scene_res_path);
+        }
+    }
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const output_path = inv.getOption("output") orelse input_path;
+    const seed_path = try saveSeedPath(cli, inv, output_path);
+    defer cli.allocator.free(seed_path);
+
+    var added = try scene_instance.addPackedSceneInstance(
+        cli.allocator,
+        &doc,
+        seed_path,
+        parent_path,
+        node_name,
+        scene_res_path,
+        scene_uid_owned,
+        inv.flag("editable"),
+    );
+    defer added.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        var prepare = try prepareSaveOptions(cli, inv, output_path);
+        defer prepare.deinit(cli.allocator);
+        if (prepare.options) |options| {
+            try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
+        }
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, added.path) });
+    try data.put(cli.allocator, "parent", .{ .string = try cli.allocator.dupe(u8, parent_path) });
+    try data.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, node_name) });
+    try data.put(cli.allocator, "scene", .{ .string = try cli.allocator.dupe(u8, scene_res_path) });
+    try data.put(cli.allocator, "ext_resource_id", .{ .string = try cli.allocator.dupe(u8, added.ext_resource_id) });
+    try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
+    try data.put(cli.allocator, "editable", .{ .bool = added.editable });
+    if (catalog_id) |id| {
+        try data.put(cli.allocator, "catalog_id", .{ .string = try cli.allocator.dupe(u8, id) });
+    }
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "instanced {s} at {s} from {s}", .{ node_name, added.path, scene_res_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn scenePlanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const intent_path = inv.getOption("intent");
+    const patch_path = inv.getOption("patch");
+    if ((intent_path == null and patch_path == null) or (intent_path != null and patch_path != null)) {
+        return error.Usage;
+    }
+
+    const input_bytes = blk: {
+        const path = intent_path orelse patch_path.?;
+        break :blk try std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited);
+    };
+    defer cli.allocator.free(input_bytes);
+
+    const scene_path = if (inv.positionals.len > 0) inv.positionals[0] else null;
+    var doc_storage: ?text_format.document.Document = null;
+    defer if (doc_storage) |*d| d.deinit(cli.allocator);
+
+    const seed_path = if (scene_path) |path| blk: {
+        const output_path = inv.getOption("output") orelse path;
+        break :blk try saveSeedPath(cli, inv, output_path);
+    } else try cli.allocator.dupe(u8, "res://scene.tscn");
+    defer cli.allocator.free(seed_path);
+
+    if (scene_path) |path| {
+        doc_storage = try text_format.document.parseFile(cli.allocator, cli.io, path);
+    }
+
+    var planned = try scene_plan.planFromInput(cli.allocator, input_bytes, if (doc_storage) |*d| d else null, .{
+        .seed_path = seed_path,
+        .project_root = projectRootFrom(inv),
+        .io = cli.io,
+    });
+    defer planned.deinit(cli.allocator);
+
+    if (inv.getOption("write-patch")) |patch_out| {
+        try std.Io.Dir.cwd().writeFile(cli.io, .{ .sub_path = patch_out, .data = planned.patch_json });
+    }
+
+    var steps_json = std.json.Array.init(cli.allocator);
+    for (planned.steps) |*step| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "index", .{ .integer = @intCast(step.index) });
+        try row.put(cli.allocator, "recipe", .{ .string = try cli.allocator.dupe(u8, step.recipe) });
+        try row.put(cli.allocator, "summary", .{ .string = try cli.allocator.dupe(u8, step.summary) });
+        try row.put(cli.allocator, "op_count", .{ .integer = @intCast(step.op_count) });
+        try steps_json.append(.{ .object = row });
+    }
+
+    var preview_json: ?std.json.Array = null;
+    if (planned.preview) |preview| {
+        var arr = std.json.Array.init(cli.allocator);
+        for (preview.results) |*item| {
+            var row: std.json.ObjectMap = .{};
+            try row.put(cli.allocator, "index", .{ .integer = @intCast(item.index) });
+            try row.put(cli.allocator, "op", .{ .string = try cli.allocator.dupe(u8, item.op) });
+            try row.put(cli.allocator, "summary", .{ .string = try cli.allocator.dupe(u8, item.summary) });
+            try arr.append(.{ .object = row });
+        }
+        preview_json = arr;
+    }
+
+    var op_count: usize = 0;
+    for (planned.steps) |step| op_count += step.op_count;
+
+    var data: std.json.ObjectMap = .{};
+    if (scene_path) |path| {
+        try data.put(cli.allocator, "scene", .{ .string = try cli.allocator.dupe(u8, path) });
+    }
+    if (intent_path) |path| {
+        try data.put(cli.allocator, "intent", .{ .string = try cli.allocator.dupe(u8, path) });
+    }
+    if (patch_path) |path| {
+        try data.put(cli.allocator, "patch_input", .{ .string = try cli.allocator.dupe(u8, path) });
+    }
+    try data.put(cli.allocator, "patch", .{ .string = try cli.allocator.dupe(u8, planned.patch_json) });
+    try data.put(cli.allocator, "steps", .{ .array = steps_json });
+    if (preview_json) |arr| {
+        try data.put(cli.allocator, "preview", .{ .array = arr });
+        try data.put(cli.allocator, "preview_op_count", .{ .integer = @intCast(planned.preview.?.applied_count) });
+    }
+    try data.put(cli.allocator, "op_count", .{ .integer = @intCast(op_count) });
+    const summary = try std.fmt.allocPrint(cli.allocator, "planned {d} patch op(s)", .{op_count});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const patch_path_opt = inv.getOption("patch");
+    const intent_path_opt = inv.getOption("intent");
+    if ((patch_path_opt == null and intent_path_opt == null) or (patch_path_opt != null and intent_path_opt != null)) {
+        return error.Usage;
+    }
+
+    var snapshot_path_owned: ?[]const u8 = null;
+    defer if (snapshot_path_owned) |path| cli.allocator.free(path);
+
+    const snapshot_path: ?[]const u8 = blk: {
+        if (inv.getOption("snapshot")) |path| break :blk path;
+        if (inv.flag("auto-snapshot")) {
+            snapshot_path_owned = try scene_undo.defaultSnapshotPath(cli.allocator, input_path);
+            break :blk snapshot_path_owned.?;
+        }
+        break :blk null;
+    };
+
+    if (snapshot_path) |path| {
+        if (!inv.flag("dry-run")) {
+            try scene_undo.writeSnapshot(cli.io, input_path, path);
+        }
+    }
+
+    var undo_recorder_storage: ?scene_undo.UndoRecorder = null;
+    const record_undo = inv.flag("record-undo") or inv.getOption("write-undo-patch") != null;
+    if (record_undo) {
+        undo_recorder_storage = scene_undo.UndoRecorder.init(cli.allocator);
+    }
+    defer if (undo_recorder_storage) |*recorder| recorder.deinit();
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    var doc_before = try text_format.document.cloneDocument(cli.allocator, &doc);
+    defer doc_before.deinit(cli.allocator);
+    const output_path = inv.getOption("output") orelse input_path;
+    const seed_path = try saveSeedPath(cli, inv, output_path);
+    defer cli.allocator.free(seed_path);
+
+    var patch_file_bytes: ?[]const u8 = null;
+    defer if (patch_file_bytes) |bytes| cli.allocator.free(bytes);
+    var planned_patch_bytes: ?[]const u8 = null;
+    defer if (planned_patch_bytes) |bytes| cli.allocator.free(bytes);
+
+    const patch_bytes: []const u8 = blk: {
+        if (patch_path_opt) |patch_path| {
+            patch_file_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, patch_path, cli.allocator, .unlimited) catch return error.Io;
+            break :blk patch_file_bytes.?;
+        }
+        const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path_opt.?, cli.allocator, .unlimited) catch return error.Io;
+        defer cli.allocator.free(intent_bytes);
+
+        var planned = try scene_plan.planFromInput(cli.allocator, intent_bytes, null, .{
+            .seed_path = seed_path,
+            .project_root = projectRootFrom(inv),
+            .io = cli.io,
+        });
+        defer planned.deinit(cli.allocator);
+
+        planned_patch_bytes = try cli.allocator.dupe(u8, planned.patch_json);
+        break :blk planned_patch_bytes.?;
+    };
+
+    const strict = !inv.flag("no-strict");
+    var applied = try scene_patch.applyPatchJson(cli.allocator, &doc, patch_bytes, .{
+        .seed_path = seed_path,
+        .project_root = projectRootFrom(inv),
+        .io = cli.io,
+        .strict = strict,
+        .undo = if (undo_recorder_storage) |*recorder| recorder else null,
+    });
+    defer applied.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        var prepare = try prepareSaveOptions(cli, inv, output_path);
+        defer prepare.deinit(cli.allocator);
+        if (prepare.options) |options| {
+            try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
+            try text_format.save_prepare.prepareDocument(cli.allocator, &doc_before, options);
+        }
+    }
+
+    var preview_diff: ?std.json.ObjectMap = null;
+    if (inv.flag("dry-run")) {
+        var diff = try scene_diff.diffDocuments(cli.allocator, &doc_before, &doc, .{
+            .include_properties = inv.flag("preview-properties"),
+        });
+        defer diff.deinit(cli.allocator);
+        preview_diff = try scene_diff.diffToObjectMap(cli.allocator, &diff);
+    }
+
+    var op_results = std.json.Array.init(cli.allocator);
+    for (applied.results) |*item| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "index", .{ .integer = @intCast(item.index) });
+        try row.put(cli.allocator, "op", .{ .string = try cli.allocator.dupe(u8, item.op) });
+        try row.put(cli.allocator, "summary", .{ .string = try cli.allocator.dupe(u8, item.summary) });
+        try op_results.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    if (patch_path_opt) |patch_path| {
+        try data.put(cli.allocator, "patch", .{ .string = try cli.allocator.dupe(u8, patch_path) });
+    }
+    if (intent_path_opt) |intent_path| {
+        try data.put(cli.allocator, "intent", .{ .string = try cli.allocator.dupe(u8, intent_path) });
+    }
+    if (snapshot_path) |path| {
+        try data.put(cli.allocator, "snapshot", .{ .string = try cli.allocator.dupe(u8, path) });
+    }
+    if (undo_recorder_storage) |*recorder| {
+        const undo_json = try recorder.toPatchJson(cli.allocator);
+        defer cli.allocator.free(undo_json);
+        if (inv.getOption("write-undo-patch")) |undo_path| {
+            try std.Io.Dir.cwd().writeFile(cli.io, .{ .sub_path = undo_path, .data = undo_json });
+            try data.put(cli.allocator, "undo_patch_path", .{ .string = try cli.allocator.dupe(u8, undo_path) });
+        }
+        try data.put(cli.allocator, "undo_patch", .{ .string = try cli.allocator.dupe(u8, undo_json) });
+    }
+    try data.put(cli.allocator, "applied_count", .{ .integer = @intCast(applied.applied_count) });
+    try data.put(cli.allocator, "results", .{ .array = op_results });
+    try data.put(cli.allocator, "strict", .{ .bool = strict });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    if (preview_diff) |diff_map| {
+        try data.put(cli.allocator, "preview_diff", .{ .object = diff_map });
+    }
+    const summary = try std.fmt.allocPrint(cli.allocator, "applied {d} patch op(s) to {s}", .{ applied.applied_count, output_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneDiffHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const path_a = inv.positionals[0];
+    const path_b = inv.positionals[1];
+    const include_properties = inv.flag("properties");
+
+    var doc_a = try text_format.document.parseFile(cli.allocator, cli.io, path_a);
+    defer doc_a.deinit(cli.allocator);
+    var doc_b = try text_format.document.parseFile(cli.allocator, cli.io, path_b);
+    defer doc_b.deinit(cli.allocator);
+
+    var diff = try scene_diff.diffDocuments(cli.allocator, &doc_a, &doc_b, .{
+        .include_properties = include_properties,
+    });
+    defer diff.deinit(cli.allocator);
+
+    var data = try scene_diff.diffToObjectMap(cli.allocator, &diff);
+    try data.put(cli.allocator, "scene_a", .{ .string = try cli.allocator.dupe(u8, path_a) });
+    try data.put(cli.allocator, "scene_b", .{ .string = try cli.allocator.dupe(u8, path_b) });
+
+    const total_diffs = diff.nodes.len + diff.properties.len;
+    const summary = if (diff.identical)
+        try std.fmt.allocPrint(cli.allocator, "{s} and {s} are identical", .{ path_a, path_b })
+    else
+        try std.fmt.allocPrint(cli.allocator, "{d} difference(s) between {s} and {s}", .{ total_diffs, path_a, path_b });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn templatesRootFrom(inv: *const spec.Invocation) []const u8 {
+    return scene_templates.resolveTemplatesRoot(inv.getOption("templates-root"));
+}
+
+fn sceneTemplateListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var items = std.json.Array.init(cli.allocator);
+    for (scene_templates.listTemplates()) |template| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, template.id) });
+        try row.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, template.relative_path) });
+        try row.put(cli.allocator, "description", .{ .string = try cli.allocator.dupe(u8, template.description) });
+        try items.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "templates_root", .{ .string = try cli.allocator.dupe(u8, templatesRootFrom(inv)) });
+    try data.put(cli.allocator, "count", .{ .integer = @intCast(items.items.len) });
+    try data.put(cli.allocator, "templates", .{ .array = items });
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "{d} built-in template(s)", .{items.items.len}) });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneTemplateShowHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const template_id = inv.positionals[0];
+    const info = scene_templates.findTemplate(template_id) orelse return error.Usage;
+
+    const bytes = try scene_templates.readTemplateBytes(cli.allocator, cli.io, templatesRootFrom(inv), template_id);
+    defer cli.allocator.free(bytes);
+
+    var doc = try text_format.document.parseBytes(cli.allocator, bytes);
+    defer doc.deinit(cli.allocator);
+
+    const parse_properties = !inv.flag("no-parse-properties");
+    const show = try scene_templates.buildShowData(cli.allocator, &doc, parse_properties);
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, info.id) });
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, info.relative_path) });
+    try data.put(cli.allocator, "description", .{ .string = try cli.allocator.dupe(u8, info.description) });
+    try data.put(cli.allocator, "section_count", .{ .integer = @intCast(show.section_count) });
+    try data.put(cli.allocator, "node_count", .{ .integer = @intCast(show.node_count) });
+    try data.put(cli.allocator, "nodes", .{ .array = show.nodes });
+    try data.put(cli.allocator, "sections", .{ .array = show.sections });
+    if (inv.flag("content")) {
+        try data.put(cli.allocator, "content", .{ .string = try cli.allocator.dupe(u8, bytes) });
+    }
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "template {s}: {d} node(s), {d} section(s)", .{ template_id, show.node_count, show.section_count }) });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneTemplateCopyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const template_id = inv.positionals[0];
+    const output_path = inv.getOption("output") orelse return error.Usage;
+    _ = scene_templates.findTemplate(template_id) orelse return error.Usage;
+
+    var renames: []scene_templates.RenamePair = &.{};
+    defer if (renames.len > 0) scene_templates.freeRenameList(cli.allocator, renames);
+    if (inv.getOption("rename-node")) |rename_text| {
+        renames = try scene_templates.parseRenameList(cli.allocator, rename_text);
+    }
+
+    var property_sets: []scene_templates.PropertySet = &.{};
+    defer if (property_sets.len > 0) scene_templates.freePropertyList(cli.allocator, property_sets);
+    if (inv.getOption("set-property")) |property_text| {
+        property_sets = try scene_templates.parsePropertyList(cli.allocator, property_text);
+    }
+
+    if (!inv.flag("dry-run")) {
+        var prepare = try prepareSaveOptions(cli, inv, output_path);
+        defer prepare.deinit(cli.allocator);
+        try scene_templates.copyTemplateToFile(
+            cli.allocator,
+            cli.io,
+            templatesRootFrom(inv),
+            template_id,
+            output_path,
+            prepare.options,
+            .{
+                .renames = renames,
+                .property_sets = property_sets,
+            },
+        );
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "template", .{ .string = try cli.allocator.dupe(u8, template_id) });
+    try data.put(cli.allocator, "output", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "rename_count", .{ .integer = @intCast(renames.len) });
+    try data.put(cli.allocator, "property_set_count", .{ .integer = @intCast(property_sets.len) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "copied template {s} to {s}", .{ template_id, output_path }) });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneRestoreHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const target_path = inv.positionals[0];
+    const snapshot_path = inv.getOption("from") orelse inv.getOption("snapshot") orelse return error.Usage;
+
+    if (!inv.flag("dry-run")) {
+        try scene_undo.writeSnapshot(cli.io, snapshot_path, target_path);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, target_path) });
+    try data.put(cli.allocator, "snapshot", .{ .string = try cli.allocator.dupe(u8, snapshot_path) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "restored {s} from {s}", .{ target_path, snapshot_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
 fn sceneCompareGodotHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     return compareGodotHandler(ctx, inv, "scene");
 }
@@ -1146,15 +1626,24 @@ pub fn sceneCommands() spec.CommandSpec {
     const compare_godot_options = [_]spec.OptionSpec{
         .{ .long = "reference", .kind = .path, .description = "Godot-saved reference file (default: second positional)" },
     };
+    const optional_project_root_opt = spec.OptionSpec{
+        .long = "project-root",
+        .kind = .path,
+        .description = "Godot project root (optional; ignored for file-only reads)",
+    };
     const inspect_options = [_]spec.OptionSpec{
         project_root_opt,
         .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" },
         .{ .long = "parse-properties", .kind = .flag, .description = "Include parsed property values in JSON output" },
         .{ .long = "no-parse-properties", .kind = .flag, .description = "Omit parsed properties (faster for large files)" },
     };
+    const node_list_options = [_]spec.OptionSpec{
+        optional_project_root_opt,
+    };
     const node_get_options = [_]spec.OptionSpec{
         .{ .long = "node-name", .kind = .string, .description = "Node name to look up (alternative to node path positional)" },
         .{ .long = "parent", .kind = .string, .description = "Parent attribute filter when using --node-name (e.g. \".\" or \"Root\")" },
+        optional_project_root_opt,
     };
     const node_edit_options = [_]spec.OptionSpec{
         .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)" },
@@ -1164,6 +1653,57 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text)" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "recursive", .kind = .flag, .description = "Remove descendant nodes as well" },
+    } ++ save_options;
+    const plan_options = [_]spec.OptionSpec{
+        .{ .long = "intent", .kind = .path, .description = "Intent JSON with steps/recipes (expands to patch ops)" },
+        .{ .long = "patch", .kind = .path, .description = "Existing patch JSON to validate and preview" },
+        .{ .long = "write-patch", .kind = .path, .description = "Write expanded patch JSON to this path" },
+        project_root_opt,
+    };
+    const apply_options = [_]spec.OptionSpec{
+        .{ .long = "patch", .kind = .path, .description = "JSON patch file with { \"ops\": [ … ] }" },
+        .{ .long = "intent", .kind = .path, .description = "Intent JSON (expands to patch ops via scene plan)" },
+        .{ .long = "snapshot", .kind = .path, .description = "Copy scene to this path before applying" },
+        .{ .long = "auto-snapshot", .kind = .flag, .description = "Save snapshot to <scene>.godot-cli-snapshot before apply" },
+        .{ .long = "record-undo", .kind = .flag, .description = "Record undo patch ops in JSON output" },
+        .{ .long = "write-undo-patch", .kind = .path, .description = "Write undo patch JSON to this path (implies --record-undo)" },
+        .{ .long = "no-strict", .kind = .flag, .description = "Continue applying ops after a failure (default: stop on first error)" },
+        .{ .long = "preview-properties", .kind = .flag, .description = "With --dry-run, include property-level changes in preview_diff" },
+    } ++ save_options;
+    const template_options = [_]spec.OptionSpec{
+        .{ .long = "templates-root", .kind = .path, .description = "Directory containing built-in templates (default: compile-time templates/)" },
+        .{ .long = "content", .kind = .flag, .description = "Include raw .tscn source in template show output" },
+        .{ .long = "no-parse-properties", .kind = .flag, .description = "Omit parsed properties from template show sections" },
+    };
+    const template_copy_options = [_]spec.OptionSpec{
+        .{ .long = "templates-root", .kind = .path, .description = "Directory containing built-in templates (default: compile-time templates/)" },
+        .{ .long = "rename-node", .kind = .string, .description = "Rename node(s) after copy: Old:New pairs, comma-separated" },
+        .{ .long = "set-property", .kind = .string, .description = "Set properties after copy: path/prop=value or path|prop|value, comma-separated" },
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
+        .{ .long = "output", .kind = .path, .description = "Output path (required)" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Report copy without writing" },
+        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
+        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
+        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
+        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format" },
+    };
+    const diff_options = [_]spec.OptionSpec{
+        .{ .long = "properties", .kind = .flag, .description = "Include node property diffs (added/removed/changed)" },
+        optional_project_root_opt,
+    };
+    const restore_options = [_]spec.OptionSpec{
+        .{ .long = "from", .kind = .path, .description = "Snapshot file to restore from" },
+        .{ .long = "snapshot", .kind = .path, .description = "Alias for --from" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Report restore without writing" },
+    };
+    const instance_add_options = [_]spec.OptionSpec{
+        .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)" },
+        .{ .long = "name", .kind = .string, .description = "Node name for the new instance" },
+        .{ .long = "scene", .kind = .string, .description = "PackedScene res:// path to instance" },
+        .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves scene path; requires --project-root)" },
+        .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
     } ++ save_options;
     const scene_new_options = [_]spec.OptionSpec{
         .{ .long = "output", .kind = .path, .description = "Output .tscn path (required)" },
@@ -1257,6 +1797,7 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "list",
                         .summary = "List all nodes in a scene with paths and section lines",
+                        .options = &node_list_options,
                         .handler = sceneNodeListHandler,
                     },
                     .{
@@ -1293,6 +1834,73 @@ pub fn sceneCommands() spec.CommandSpec {
                         .handler = sceneNodeReparentHandler,
                     },
                 },
+            },
+            .{
+                .name = "instance",
+                .summary = "Add instanced PackedScene nodes",
+                .children = &.{
+                    .{
+                        .name = "add",
+                        .summary = "Instance a PackedScene under a parent node",
+                        .description = "Adds ext_resource type=PackedScene and a node with instance=ExtResource(...). Use --scene or --catalog-id (project entries only).",
+                        .options = &instance_add_options,
+                        .handler = sceneInstanceAddHandler,
+                    },
+                },
+            },
+            .{
+                .name = "template",
+                .summary = "Built-in scene templates for scaffolding",
+                .children = &.{
+                    .{
+                        .name = "list",
+                        .summary = "List built-in scene templates",
+                        .options = &template_options,
+                        .handler = sceneTemplateListHandler,
+                    },
+                    .{
+                        .name = "show",
+                        .summary = "Show template metadata, node tree, and sections",
+                        .description = "Like scene inspect + node list for a built-in template. Use --content for raw .tscn text.",
+                        .options = &template_options,
+                        .handler = sceneTemplateShowHandler,
+                    },
+                    .{
+                        .name = "copy",
+                        .summary = "Copy a template to a new scene file",
+                        .description = "Requires --output. Optional --rename-node and --set-property apply edits before save preparation.",
+                        .options = &template_copy_options,
+                        .handler = sceneTemplateCopyHandler,
+                    },
+                },
+            },
+            .{
+                .name = "plan",
+                .summary = "Expand intent JSON to a patch and preview (no write)",
+                .description = "Accepts --intent or --patch. Optional scene path positional dry-runs the patch. See docs/agent_scene_authoring.md.",
+                .options = &plan_options,
+                .handler = scenePlanHandler,
+            },
+            .{
+                .name = "apply",
+                .summary = "Apply a declarative JSON patch to a scene",
+                .description = "Batch node/resource/instance edits. Use --patch or --intent. See docs/agent_scene_authoring.md.",
+                .options = &apply_options,
+                .handler = sceneApplyHandler,
+            },
+            .{
+                .name = "diff",
+                .summary = "Compare node trees between two scenes",
+                .description = "Reports added, removed, and type-changed nodes. Use --properties for property-level diff.",
+                .options = &diff_options,
+                .handler = sceneDiffHandler,
+            },
+            .{
+                .name = "restore",
+                .summary = "Restore a scene from a snapshot file",
+                .description = "Copies --from snapshot over the target scene (full file restore).",
+                .options = &restore_options,
+                .handler = sceneRestoreHandler,
             },
             .{
                 .name = "validate",

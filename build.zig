@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
 
     const version_options = b.addOptions();
     version_options.addOption([]const u8, "version", version_string);
+    version_options.addOption([]const u8, "templates_root", "templates");
 
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
@@ -139,7 +140,9 @@ pub fn build(b: *std.Build) void {
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli scene node list test_fixtures/project/sample.tscn --json) &&
         \\echo "$out" | grep -q '"nodes"' &&
-        \\echo "$out" | grep -q '"/root/Root/Collision"'
+        \\echo "$out" | grep -q '"/root/Root/Collision"' &&
+        \\out2=$(./zig-out/bin/godot-cli scene node list test_fixtures/project/sample.tscn --project-root test_fixtures/project --json) &&
+        \\echo "$out2" | grep -q '"nodes"'
     });
     node_list_smoke.setCwd(b.path("."));
     node_list_smoke.step.dependOn(b.getInstallStep());
@@ -161,6 +164,161 @@ pub fn build(b: *std.Build) void {
     scene_author_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&scene_author_smoke.step);
 
+    const scene_instance_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp) &&
+        \\cp test_fixtures/project/test.tscn "$tmp" &&
+        \\./zig-out/bin/godot-cli scene instance add "$tmp" --parent /root/Root --name MyButton --scene res://ui/button/button.tscn --project-root test_fixtures/project --no-prepare-save &&
+        \\./zig-out/bin/godot-cli scene instance add "$tmp" --parent /root/Root --name CatalogButton --catalog-id ui/button --project-root test_fixtures/project --no-prepare-save &&
+        \\grep -q 'instance=ExtResource' "$tmp" &&
+        \\grep -q 'res://ui/button/button.tscn' "$tmp" &&
+        \\rm -f "$tmp"
+    });
+    scene_instance_smoke.setCwd(b.path("."));
+    scene_instance_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_instance_smoke.step);
+
+    const scene_apply_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp) &&
+        \\cp test_fixtures/project/test.tscn "$tmp" &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp" --patch test_fixtures/project/patches/player_collision.json --project-root test_fixtures/project --no-prepare-save &&
+        \\./zig-out/bin/godot-cli scene node list "$tmp" --json | grep -q '/root/Root/Player/Collision' &&
+        \\rm -f "$tmp"
+    });
+    scene_apply_smoke.setCwd(b.path("."));
+    scene_apply_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_apply_smoke.step);
+
+    const scene_plan_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene plan test_fixtures/project/test.tscn \
+        \\  --intent test_fixtures/project/intents/hud_player.json \
+        \\  --project-root test_fixtures/project --json) &&
+        \\echo "$out" | grep -q '"recipe":"player_2d"' &&
+        \\echo "$out" | grep -q '"op":"node_add"' &&
+        \\echo "$out" | grep -q '"op_count":'
+    });
+    scene_plan_smoke.setCwd(b.path("."));
+    scene_plan_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_plan_smoke.step);
+
+    const scene_plan_catalog_button_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene plan test_fixtures/project/test.tscn \
+        \\  --intent test_fixtures/project/intents/start_button_label.json \
+        \\  --project-root test_fixtures/project --json) &&
+        \\echo "$out" | grep -q '"recipe":"catalog_button"' &&
+        \\echo "$out" | grep -q 'instance_override' &&
+        \\echo "$out" | grep -q 'Start Game'
+    });
+    scene_plan_catalog_button_smoke.setCwd(b.path("."));
+    scene_plan_catalog_button_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_plan_catalog_button_smoke.step);
+
+    const scene_player_texture_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp /tmp/godot_cli_player_tex.XXXXXX) &&
+        \\tmp="${tmp}.tscn" &&
+        \\mv "${tmp%.tscn}" "$tmp" &&
+        \\./zig-out/bin/godot-cli scene new --output "$tmp" --root-name Main --root-type Node2D --no-prepare-save &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp" \
+        \\  --intent share/examples/intents/player_with_icon.json \
+        \\  --project-root test_fixtures/project --no-prepare-save &&
+        \\grep -q 'Texture2D_icon' "$tmp" &&
+        \\grep -q 'texture = ExtResource("Texture2D_icon")' "$tmp" &&
+        \\ext_line=$(grep -nF '[ext_resource' "$tmp" | head -1 | cut -d: -f1) &&
+        \\sub_line=$(grep -nF '[sub_resource' "$tmp" | head -1 | cut -d: -f1) &&
+        \\test -n "$ext_line" -a -n "$sub_line" -a "$ext_line" -lt "$sub_line" &&
+        \\rm -f "$tmp"
+    });
+    scene_player_texture_smoke.setCwd(b.path("."));
+    scene_player_texture_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_player_texture_smoke.step);
+
+    const scene_apply_intent_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp) &&
+        \\cp test_fixtures/project/test.tscn "$tmp" &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp" \
+        \\  --intent test_fixtures/project/intents/hud_player.json \
+        \\  --project-root test_fixtures/project --no-prepare-save &&
+        \\./zig-out/bin/godot-cli scene node list "$tmp" --json | grep -q '/root/Root/Player' &&
+        \\rm -f "$tmp"
+    });
+    scene_apply_intent_smoke.setCwd(b.path("."));
+    scene_apply_intent_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_apply_intent_smoke.step);
+
+    const scene_diff_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene diff test_fixtures/project/test.tscn test_fixtures/project/sample.tscn --properties --json) &&
+        \\echo "$out" | grep -q '"diff_count":' &&
+        \\echo "$out" | grep -q '"property_diff_count":'
+    });
+    scene_diff_smoke.setCwd(b.path("."));
+    scene_diff_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_diff_smoke.step);
+
+    const scene_undo_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp) &&
+        \\snap=$(mktemp) &&
+        \\undo=$(mktemp) &&
+        \\cp test_fixtures/project/test.tscn "$tmp" &&
+        \\cp test_fixtures/project/test.tscn "$snap" &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp" \
+        \\  --patch test_fixtures/project/patches/player_collision.json \
+        \\  --project-root test_fixtures/project --write-undo-patch "$undo" --no-prepare-save &&
+        \\./zig-out/bin/godot-cli scene node list "$tmp" --json | grep -q '/root/Root/Player' &&
+        \\grep -q 'node_remove' "$undo" &&
+        \\./zig-out/bin/godot-cli scene restore "$tmp" --from "$snap" &&
+        \\! ./zig-out/bin/godot-cli scene node list "$tmp" --json | grep -q '/root/Root/Player' &&
+        \\rm -f "$tmp" "$snap" "$undo"
+    });
+    scene_undo_smoke.setCwd(b.path("."));
+    scene_undo_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_undo_smoke.step);
+
+    const scene_apply_dry_run_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene apply test_fixtures/project/test.tscn \
+        \\  --patch test_fixtures/project/patches/player_collision.json \
+        \\  --project-root test_fixtures/project --dry-run --json) &&
+        \\echo "$out" | grep -q '"preview_diff":' &&
+        \\echo "$out" | grep -q '"node_diff_count":'
+    });
+    scene_apply_dry_run_smoke.setCwd(b.path("."));
+    scene_apply_dry_run_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_apply_dry_run_smoke.step);
+
+    const scene_template_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp /tmp/godot_cli_template.XXXXXX) &&
+        \\out=$(./zig-out/bin/godot-cli scene template show 2d/character_body --json) &&
+        \\echo "$out" | grep -q '"node_count":' &&
+        \\echo "$out" | grep -q '/root/Player' &&
+        \\./zig-out/bin/godot-cli scene template copy 2d/character_body --output "$tmp" \
+        \\  --rename-node Player:Hero --set-property '/root/Hero/visible=false' --no-prepare-save &&
+        \\grep -q 'CharacterBody2D' "$tmp" &&
+        \\grep -q 'visible = false' "$tmp" &&
+        \\grep -q 'name="Hero"' "$tmp" &&
+        \\rm -f "$tmp"
+    });
+    scene_template_smoke.setCwd(b.path("."));
+    scene_template_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_template_smoke.step);
+
+    const batch_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli batch --file test_fixtures/batch/ping_twice.json --json) &&
+        \\echo "$out" | grep -q '"succeeded_count":2' &&
+        \\echo "$out" | grep -q '"step_count":2'
+    });
+    batch_smoke.setCwd(b.path("."));
+    batch_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&batch_smoke.step);
+
     const rich_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli scene inspect test_fixtures/project/rich_variants.tscn --json --no-validate) &&
@@ -171,6 +329,89 @@ pub fn build(b: *std.Build) void {
     rich_inspect_smoke.setCwd(b.path("."));
     rich_inspect_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&rich_inspect_smoke.step);
+
+    const catalog_scan_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli catalog scan --project-root test_fixtures/project --json) &&
+        \\echo "$out" | grep -q '"id":"ui/button"' &&
+        \\echo "$out" | grep -q '"valid":true' &&
+        \\echo "$out" | grep -q 'button_pressed'
+    });
+    catalog_scan_smoke.setCwd(b.path("."));
+    catalog_scan_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_scan_smoke.step);
+
+    const catalog_show_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli catalog show ui/button --project-root test_fixtures/project --json) &&
+        \\echo "$out" | grep -q '"exports_source":"gdscript_heuristic"' &&
+        \\echo "$out" | grep -q 'label_text' &&
+        \\echo "$out" | grep -q 'button_pressed'
+    });
+    catalog_show_smoke.setCwd(b.path("."));
+    catalog_show_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_show_smoke.step);
+
+    const catalog_builtin_show_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli catalog show godot/ui/Button --json) &&
+        \\echo "$out" | grep -q '"source":"builtin"' &&
+        \\echo "$out" | grep -q '"class_name":"Button"'
+    });
+    catalog_builtin_show_smoke.setCwd(b.path("."));
+    catalog_builtin_show_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_builtin_show_smoke.step);
+
+    const catalog_validate_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\./zig-out/bin/godot-cli catalog validate --project-root test_fixtures/project --json | grep -q '"valid":true'
+    });
+    catalog_validate_smoke.setCwd(b.path("."));
+    catalog_validate_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_validate_smoke.step);
+
+    const catalog_search_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli catalog search --project-root test_fixtures/project --tags ui,button --json) &&
+        \\echo "$out" | grep -q '"id":"ui/button"'
+    });
+    catalog_search_smoke.setCwd(b.path("."));
+    catalog_search_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_search_smoke.step);
+
+    const catalog_export_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli catalog export --project-root test_fixtures/project --output .catalog_export_smoke.md --json) &&
+        \\echo "$out" | grep -q '"wrote_file":true' &&
+        \\grep -q 'ui/button' test_fixtures/project/.catalog_export_smoke.md &&
+        \\rm -f test_fixtures/project/.catalog_export_smoke.md
+    });
+    catalog_export_smoke.setCwd(b.path("."));
+    catalog_export_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_export_smoke.step);
+
+    const project_input_apply_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli project input apply --project-root test_fixtures/project --intent share/examples/intents/wasd_movement.json --dry-run --json) &&
+        \\echo "$out" | grep -q 'move_left' &&
+        \\echo "$out" | grep -q '"added_count":4'
+    });
+    project_input_apply_smoke.setCwd(b.path("."));
+    project_input_apply_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_input_apply_smoke.step);
+
+    const project_input_list_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\cp test_fixtures/project/input_map_snippet.godot "$tmp/project.godot" &&
+        \\out=$(./zig-out/bin/godot-cli project input list --project-root "$tmp" --json) &&
+        \\rm -rf "$tmp" &&
+        \\echo "$out" | grep -q '"action_count":2' &&
+        \\echo "$out" | grep -q 'move_left'
+    });
+    project_input_list_smoke.setCwd(b.path("."));
+    project_input_list_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_input_list_smoke.step);
 
     const material_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",

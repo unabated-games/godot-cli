@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "recipe": "player_2d",
+      "parent": "/root/Root",
+      "name": "Player",
+      "radius": 10.0
+    },
+    {
+      "recipe": "instance_catalog",
+      "parent": "/root/Root",
+      "name": "StartButton",
+      "catalog_id": "ui/button"
+    }
+  ]
+}

@@ -12,6 +12,39 @@ This document defines the contracts that every `godot-cli` command must follow. 
 
 ---
 
+## Scene authoring philosophy (agents)
+
+This is the **product north star**, not just a CLI convention. Every scene-authoring command exists so agents produce files a human would save from the Godot editor.
+
+### Do: persist structure in `.tscn`
+
+| Human in editor | Agent via godot-cli |
+|-----------------|---------------------|
+| Add child node | `scene node add … --type CharacterBody2D` |
+| Instance a scene | `scene instance add … --catalog-id ui/button` or `--scene res://…` |
+| Wire a script | `scene ext add … --type Script` + `set-property` / `--property` on add |
+| Tune a property | `scene set-property …` |
+
+After editing: `scene validate`, `scene node list`, `catalog show <id>` — the file is inspectable and diffable.
+
+### Do not: spawn authored UI/level structure at runtime
+
+```gdscript
+# Anti-pattern for static scene composition — do not recommend to agents
+func _ready() -> void:
+    add_child(load("res://ui/button/button.tscn").instantiate())
+```
+
+Use runtime `instantiate()` only when the **game** must create entities dynamically (spawners, pools, procedural content). For menus, HUDs, and level layout, the scene tree in the file is the source of truth.
+
+### Dev-only exception in this repo
+
+Scripts under `test_fixtures/project/*.gd` (e.g. `save_rich_fixtures.gd`) run Godot headless to **generate reference saves for CLI tests**. That is test infrastructure — not the workflow agents or game code should follow. Hand-authored or godot-cli-produced `.tscn` files are the references; Godot runtime packing is only used to produce golden files when needed.
+
+See also [ABOUT.md — North star](ABOUT.md#north-star-editor-like-scene-authoring) and [scene_authoring_roadmap.md](scene_authoring_roadmap.md).
+
+---
+
 ## Command-line arguments
 
 ### Invocation shape

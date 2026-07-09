@@ -1,0 +1,16 @@
+{
+  "ops": [
+    {
+      "op": "ext_add",
+      "type": "Texture2D",
+      "path": "res://icon.svg",
+      "id_hint": "icon"
+    },
+    {
+      "op": "node_set",
+      "path": "/root/Main/Player/Sprite",
+      "property": "texture",
+      "value": "ExtResource(\"Texture2D_icon\")"
+    }
+  ]
+}

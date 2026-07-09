@@ -4,11 +4,13 @@ Create, edit, and manipulate Godot scenes and resource files from the command li
 
 Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripting, and tool integration via a consistent JSON interface.
 
+See **[CHANGELOG.md](CHANGELOG.md)** for recent changes.
+
 ## Status
 
-Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, **set-property**, and **Godot save round-trip** are available. Save preparation matches Godot's ID seeding, ext_resource ordering, and optional byte-identical output via `--godot-save-format` + id session cache — see [ID generation plan](docs/id_generation_plan.md).
+Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, **set-property**, and **Godot save round-trip** are available. Scene authoring Phases A–D (node CRUD, ext/sub resources, PackedScene instancing) and **catalog** commands are implemented — see [scene authoring roadmap](docs/scene_authoring_roadmap.md) and [catalog design](docs/catalog_design.md).
 
-**Next work:** [Scene authoring](docs/scene_authoring_roadmap.md) Phase E (templates). Phases A–C done: scene new, node CRUD, ext/sub resources, `scene refs`.
+**North star:** agents author **editor-like scenes** in `.tscn` — not runtime `instantiate()` workarounds. See [ABOUT.md](docs/ABOUT.md#north-star-editor-like-scene-authoring).
 
 ## Requirements
 
@@ -35,6 +37,45 @@ Optional build flag:
 ```bash
 zig build -Dversion-string=0.2.0
 ```
+
+## Install for agents (macOS)
+
+Package the binary, templates, docs, and examples into a self-contained install — no source-tree references needed:
+
+```bash
+./install.sh                         # build + install to ~/.godot-cli
+./install.sh --install-skill         # also install skill for Cursor, Claude Code, OpenCode, ~/.agents
+./install.sh --skills-only           # refresh skills after editing skills/godot-scene-authoring/
+```
+
+Activate in your shell (add to `~/.zshrc` for persistence):
+
+```bash
+source "$HOME/.godot-cli/env.sh"
+godot-cli ping --json
+```
+
+Install layout:
+
+| Path | Contents |
+|------|----------|
+| `~/.godot-cli/bin/godot-cli` | Binary |
+| `~/.godot-cli/templates/` | Scene templates (`scene template copy`) |
+| `~/.godot-cli/docs/` | Agent guides + `mcp_tools.json` |
+| `~/.godot-cli/examples/` | Intent and batch JSON examples |
+| `~/.godot-cli/skills/` | Bundled skill copy |
+| `~/.godot-cli/env.sh` | Sets `GODOT_CLI`, `GODOT_CLI_HOME`, `GODOT_CLI_TEMPLATES_ROOT` |
+
+**Agent skill** (`skills/godot-scene-authoring/` in repo) installs globally with `--install-skill`:
+
+| Tool | Path |
+|------|------|
+| Cursor | `~/.cursor/skills/godot-scene-authoring/` |
+| Claude Code | `~/.claude/skills/godot-scene-authoring/` |
+| OpenCode | `~/.config/opencode/skills/godot-scene-authoring/` |
+| Other agents | `~/.agents/skills/godot-scene-authoring/` |
+
+Agent quickstart: `$GODOT_CLI_HOME/docs/agent_quickstart.md`
 
 ## Usage
 
@@ -88,6 +129,9 @@ godot-cli --request-stdin < request.json
 ## Documentation
 
 - [About godot-cli](docs/ABOUT.md) — what it is, what it can do, why it exists
+- [Agent quickstart](docs/agent_quickstart.md) — one-page guide for LLM agents (installed to `~/.godot-cli/docs/`)
+- [Agent scene authoring](docs/agent_scene_authoring.md) — full recipes and patch/intent format
+- [Agent batch commands](docs/agent_batch_commands.md) — multi-step workflows
 - [Scene authoring roadmap](docs/scene_authoring_roadmap.md) — LLM-first plan for full scene authoring
 - [Development principles](docs/development_principles.md) — CLI argument conventions, result shapes, and JSON contracts
 - [MCP tool catalog](docs/mcp_tools.json) — JSON request shapes for every command

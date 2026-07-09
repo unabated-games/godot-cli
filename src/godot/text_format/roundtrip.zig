@@ -84,6 +84,7 @@ fn nodeHeadersEquivalent(a: tag.Tag, b: tag.Tag) bool {
     return headerFieldEqual(&a, &b, "name") and
         headerFieldEqual(&a, &b, "type") and
         headerFieldEqual(&a, &b, "parent") and
+        headerFieldEqual(&a, &b, "instance") and
         headerFieldEqual(&a, &b, "unique_id");
 }
 

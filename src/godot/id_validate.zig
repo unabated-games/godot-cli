@@ -283,8 +283,20 @@ pub fn validateDocument(
     var seen_node_unique_ids = std.AutoHashMap(i64, void).init(allocator);
     defer seen_node_unique_ids.deinit();
 
+    var seen_sub_resource = false;
     for (doc.sections.items) |section| {
         const name = section.header.name;
+
+        if (seen_sub_resource and std.mem.eql(u8, name, "ext_resource")) {
+            try report.add(
+                allocator,
+                .err,
+                "resource_section_order",
+                "ext_resource must appear before sub_resource sections (Godot parse error)",
+                section.line,
+            );
+        }
+        if (std.mem.eql(u8, name, "sub_resource")) seen_sub_resource = true;
 
         if (std.mem.eql(u8, name, "gd_scene") or std.mem.eql(u8, name, "gd_resource")) {
             if (section.header.getString("uid")) |uid_text| {

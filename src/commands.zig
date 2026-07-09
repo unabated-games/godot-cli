@@ -2,6 +2,9 @@ const std = @import("std");
 const spec = @import("cli/spec.zig");
 const uid = @import("commands/uid.zig");
 const scene = @import("commands/scene.zig");
+const catalog = @import("commands/catalog.zig");
+const batch = @import("commands/batch.zig");
+const project = @import("commands/project.zig");
 
 fn pingHandler(ctx: *anyopaque, inv: *const spec.Invocation) anyerror!spec.Result {
     _ = ctx;
@@ -30,11 +33,17 @@ pub const root = spec.CommandSpec{
         uid.commands(),
         scene.sceneCommands(),
         scene.resourceCommands(),
+        catalog.commands(),
+        batch.commands(),
+        project.commands(),
     },
 };
 
 test "root exposes uid commands" {
-    try std.testing.expectEqual(@as(usize, 5), root.children.len);
+    try std.testing.expectEqual(@as(usize, 8), root.children.len);
     try std.testing.expectEqualStrings("uid", root.children[2].name);
     try std.testing.expectEqualStrings("scene", root.children[3].name);
+    try std.testing.expectEqualStrings("catalog", root.children[5].name);
+    try std.testing.expectEqualStrings("batch", root.children[6].name);
+    try std.testing.expectEqualStrings("project", root.children[7].name);
 }

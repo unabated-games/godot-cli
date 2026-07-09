@@ -20,18 +20,19 @@ LLMs are bad at Godot scene authoring for predictable reasons:
 | “Just use a script” workaround | `_ready()` spawns children because the model cannot reason about the file tree |
 | Property syntax | Variant text is easy to get subtly wrong even when structure is right |
 
-**Today godot-cli helps read and patch** (inspect, node list, set-property) but cannot **create or restructure** the tree. Agents still have to emit raw TSCN for new nodes — which is where quality collapses.
+**Today godot-cli can create and restructure scenes** via tree commands (`scene node add`, `scene instance add`, ext/sub resources). Agents should use those instead of editing raw TSCN or spawning nodes in `_ready()`.
 
 ---
 
 ## Design principles
 
-1. **Tree operations, not text edits.** Agents call `scene node add`, not “insert these lines after line 42.”
-2. **Every mutation validates.** Return structured errors (duplicate name, unknown parent, invalid type) before write.
-3. **Godot save path on write.** All mutations go through existing `save_prepare` (IDs, `load_steps`, ordering).
-4. **JSON in, JSON out.** Batch ops via `--request` / patch documents; human argv for shell use.
-5. **Templates over imagination.** Ship canonical mini-scenes (2D player, UI, 3D body) agents copy and specialize.
-6. **Inspect before and after.** `node list`, `inspect`, and `validate` are the agent feedback loop.
+1. **Editor scenes, not runtime spawning.** Persist nodes, instances, and properties in `.tscn` the way a human would in the Godot editor. Use `scene node add` / `scene instance add` — not `load().instantiate()` in GDScript — for static UI and level structure. See [ABOUT.md — North star](ABOUT.md#north-star-editor-like-scene-authoring).
+2. **Tree operations, not text edits.** Agents call `scene node add`, not “insert these lines after line 42.”
+3. **Every mutation validates.** Return structured errors (duplicate name, unknown parent, invalid type) before write.
+4. **Godot save path on write.** All mutations go through existing `save_prepare` (IDs, `load_steps`, ordering).
+5. **JSON in, JSON out.** Batch ops via `--request` / patch documents; human argv for shell use.
+6. **Catalog over imagination.** Project manifests and builtins tell agents *which* PackedScene to instance and when — not ad-hoc `load()` paths.
+7. **Inspect before and after.** `node list`, `inspect`, and `validate` are the agent feedback loop.
 
 ---
 
@@ -106,9 +107,9 @@ godot-cli scene node add main.tscn --parent /root/Main/Player --name Collision \
 
 ---
 
-### Phase D — PackedScene instancing
+### Phase D — PackedScene instancing — **done**
 
-**Problem:** LLMs constantly confuse `instance`, `instance=ExtResource`, and child overrides.
+**Problem:** LLMs constantly confuse `instance`, `instance=ExtResource`, and child overrides — or fall back to `load().instantiate()` in scripts.
 
 **Commands:**
 
@@ -117,22 +118,38 @@ godot-cli scene instance add main.tscn --parent /root/Main \
   --scene res://enemies/slime.tscn --name Slime
 godot-cli scene instance add main.tscn --parent /root/Main --scene res://ui/hud.tscn \
   --name HUD --editable
+godot-cli scene instance add main.tscn --parent /root/Main \
+  --catalog-id ui/button --name MyButton --project-root .
 ```
 
 **Behaviour:**
 
 - Add `ext_resource type="PackedScene" path="..." id="N_xxxx"`
 - Add node with `instance=ExtResource("N_xxxx")` and correct `parent`
-- Optional `--editable` (Godot `instance=ExtResource(...)` editable children pattern — match Godot 4.x save format from fixture)
-- Document in agent guide: when to instance vs duplicate inline
+- Optional `--editable` adds `[editable path="..."]` (Godot 4.x save format)
+- `--catalog-id` resolves scene path from project catalog manifests (not builtins)
 
-**Fixtures:** `test_fixtures/project/instanced_child.tscn` — minimal parent + instanced child, Godot-saved reference.
+**Implementation:** `src/godot/scene_instance.zig`
 
-**Done when:** `test-godot` or compare against Godot save for instance fixture.
+**Fixtures:** `test_fixtures/project/instanced_child.tscn`, `instanced_child_godot_saved.tscn`
 
 ---
 
-### Phase E — Scene templates (built-in patterns)
+### Phase E — Component catalog (replaces simple template folder)
+
+**Design:** [catalog_design.md](catalog_design.md)
+
+**Problem:** LLMs need project semantics (which button, which player ship, when to use builtins) — not just TSCN syntax. Cold-start skeletons are a subset of this.
+
+**Authoring:** [Godot Power AI](https://github.com/godotengine/godot_power_ai) addon — `PowerAICatalogManifest` `.tres` edited in the Inspector.
+
+**Consumption:** `godot-cli catalog scan|list|show|validate|search|export` + builtin JSON (`godot/ui/Button`, document-only).
+
+---
+
+### Phase E (legacy note) — Scene templates (built-in patterns)
+
+Superseded by the component catalog for project entries. Builtin **document-only** Godot entries replace shipping `.tscn` template files into user projects.
 
 **Problem:** Cold-start authoring is hardest. Templates give LLMs a correct skeleton to modify.
 
@@ -169,50 +186,52 @@ godot-cli scene template copy 2d/character_body --output player.tscn \
 
 ---
 
-### Phase F — Declarative patch (batch authoring)
+### Phase F — Declarative patch (batch authoring) — **done**
 
 **Problem:** Ten sequential CLI calls are slow and brittle for agents.
 
 **Command:**
 
 ```bash
-godot-cli scene apply main.tscn --patch patch.json --output main.tscn
+godot-cli scene apply main.tscn --patch patch.json --output main.tscn --project-root .
 ```
 
-**Patch schema (sketch):**
+**Patch schema:** see [agent_scene_authoring.md](agent_scene_authoring.md#patch-format).
 
-```json
-{
-  "ops": [
-    { "op": "node_add", "parent": "/root/Main", "name": "Player", "type": "CharacterBody2D",
-      "properties": { "position": "Vector2(100, 200)" } },
-    { "op": "sub_add", "type": "CircleShape2D", "id_hint": "shape",
-      "properties": { "radius": 8.0 } },
-    { "op": "node_add", "parent": "/root/Main/Player", "name": "Collision",
-      "type": "CollisionShape2D", "properties": { "shape": "SubResource(\"CircleShape2D_shape\")" } },
-    { "op": "ext_add", "type": "Script", "path": "res://player.gd", "id_hint": "script" },
-    { "op": "node_set", "path": "/root/Main/Player", "property": "script", "value": "ExtResource(\"1_script\")" }
-  ]
-}
-```
-
-**Behaviour:**
-
-- Apply ops in order; collect all errors or fail fast (`--strict`)
-- `id_hint` maps to generated ext/sub IDs within the patch
-- `--dry-run` returns planned diff / resulting tree JSON without write
+**Implementation:** `src/godot/scene_patch.zig`
 
 **Done when:** Single patch builds Phase B–D equivalent of sample scene; round-trip validates.
 
 ---
 
-### Phase G — Agent ergonomics (no MCP required)
+### Phase G — Agent ergonomics (no MCP required) — **done**
 
-- **`docs/agent_scene_authoring.md`** — recipes: “add 2D player”, “instance UI”, “fix parenting”
-- **Cursor rule / skill** pointing at `mcp_tools.json` + templates
-- **`scene plan`** (optional) — read natural language / JSON intent, emit patch JSON only (no write); keeps logic in CLI
+- **`docs/agent_scene_authoring.md`** — **done** — recipes, patch reference, anti-patterns, `scene plan` workflow
+- **Cursor rule** `.cursor/rules/godot-scene-authoring.mdc` — **done**
+- **`scene plan`** — **done** — expand intent JSON to patch JSON; optional dry-run preview; `--write-patch`
 
 Defer MCP server; CLI + patch JSON is enough.
+
+---
+
+### Phase H — Verification and iteration — **done**
+
+- **`scene diff`** — **done** — node tree + `--properties` for property-level diff
+- **`scene apply --intent`** — **done** — one-shot expand + apply
+- **Undo snapshots** — **done** — `--snapshot`, `--auto-snapshot`, `--write-undo-patch`, `scene restore`
+- **More intent recipes** — **done** — `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`
+
+---
+
+### Phase I — Polish and agent throughput — **done**
+
+- **`scene apply --dry-run`** — **done** — returns `preview_diff` (node tree; `--preview-properties` for property diffs)
+- **`ext_remove` / `sub_remove` patch ops** — **done** — with undo via `ext_add` / `sub_add` capture
+- **`instance_override` patch op** — **done** — instance property or editable child override (`child`, `type`, `editable`)
+- **`scene template list|show|copy`** — **done** — built-ins in `templates/` (`2d/character_body`, `ui/control_root`)
+- **`godot-cli batch`** — **done** — multi-step workflows; modes `stop`, `continue`, `atomic`; see [agent_batch_commands.md](agent_batch_commands.md)
+
+Defer MCP server; CLI + batch + patch JSON is enough.
 
 ---
 
@@ -223,10 +242,12 @@ Defer MCP server; CLI + patch JSON is enough.
 | 1 | A | Document mutations | **done** |
 | 2 | B | Node CRUD + scene refs | **done** |
 | 3 | C | ext/sub resources | **done** |
-| 4 | E | Templates | **next** |
-| 5 | D | Instancing is common but error-prone — needs good fixtures |
-| 6 | F | Batch patch once single ops are stable |
-| 7 | G | Documentation and agent workflows |
+| 4 | E | Component catalog | **done** (scan/list/show/validate/search/export) |
+| 5 | D | PackedScene instancing | **done** |
+| 6 | F | Batch patch | **done** |
+| 7 | G | Documentation and agent workflows | **done** |
+| 8 | H | Verification (`diff`, apply intent, recipes, undo) | **done** |
+| 9 | I | Dry-run diff, resource remove ops, instance overrides, templates, batch CLI | **done** |
 
 ---
 

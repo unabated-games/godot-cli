@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="PowerAICatalogManifest" format=3 uid="uid://catalogfixture01"]
+
+[ext_resource type="Script" path="res://addons/godot_power_ai/power_ai_catalog_manifest.gd" id="1_fixture"]
+
+[resource]
+script = ExtResource("1_fixture")
+catalog_format_version = 1
+id = "ui/button"
+uid = "7c6bc183-7a76-4bce-a82e-a4e88cf5c1e9"
+scene = "res://ui/button/button.tscn"
+scene_uid = "uid://byhqeak2spha2"
+tags = PackedStringArray("ui", "button", "input")
+summary = "Project standard animated UI button"
+when_to_use = "Use when adding a button to a UI scene"
+when_not_to_use = "Debug panels — use godot/ui/Button instead"
+related_ids = PackedStringArray("godot/ui/Button")
+signal_docs = Array[Dictionary]([{
+"connect_example": "MyButton.button_pressed.connect(_on_my_button)",
+"doc": "Emitted when the user left-clicks the control.",
+"name": "button_pressed"
+}])

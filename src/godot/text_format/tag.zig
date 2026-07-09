@@ -216,7 +216,13 @@ pub fn formatLine(allocator: std.mem.Allocator, header: *const Tag) ![]u8 {
 
 fn formatValue(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: Value) !void {
     switch (value) {
-        .string => |s| try writeQuoted(allocator, out, s),
+        .string => |s| {
+            if (isUnquotedHeaderValue(s)) {
+                try out.appendSlice(allocator, s);
+            } else {
+                try writeQuoted(allocator, out, s);
+            }
+        },
         .integer => |n| {
             var buf: [32]u8 = undefined;
             try out.appendSlice(allocator, try std.fmt.bufPrint(&buf, "{d}", .{n}));
@@ -227,6 +233,10 @@ fn formatValue(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: Val
         },
         .bool => |b| try out.appendSlice(allocator, if (b) "true" else "false"),
     }
+}
+
+fn isUnquotedHeaderValue(text: []const u8) bool {
+    return std.mem.startsWith(u8, text, "ExtResource(") or std.mem.startsWith(u8, text, "SubResource(");
 }
 
 fn writeQuoted(allocator: std.mem.Allocator, out: *std.ArrayList(u8), text: []const u8) !void {
@@ -264,6 +274,19 @@ test "parse gd_scene header" {
     try std.testing.expectEqualStrings("gd_scene", tag.name);
     try std.testing.expectEqual(@as(i64, 3), tag.fields.get("format").?.integer);
     try std.testing.expectEqualStrings("uid://c8wekfd5ql7bc", tag.getString("uid").?);
+}
+
+test "format node instance header" {
+    const allocator = std.testing.allocator;
+    var header = Tag{ .name = try allocator.dupe(u8, "node"), .fields = .{} };
+    defer header.deinit(allocator);
+    try header.setStringField(allocator, "name", "Button");
+    try header.setStringField(allocator, "parent", ".");
+    try header.setStringField(allocator, "instance", "ExtResource(\"1_pq8q7\")");
+
+    const line = try formatLine(allocator, &header);
+    defer allocator.free(line);
+    try std.testing.expectEqualStrings("[node name=\"Button\" parent=\".\" instance=ExtResource(\"1_pq8q7\")]", line);
 }
 
 test "parse ext_resource header" {

@@ -33,6 +33,7 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
         try assignSceneIds(allocator, doc, options);
     }
     if (options.sort_ext_resources) {
+        try sortResourceSections(allocator, doc);
         try sortExtResourceSections(allocator, doc);
     }
     if (options.update_load_steps) {
@@ -244,6 +245,62 @@ fn extResourceIdLessThan(ctx: ExtSortCtx, a_index: usize, b_index: usize) bool {
     const a_id = ctx.doc.sections.items[a_index].header.getString("id") orelse "";
     const b_id = ctx.doc.sections.items[b_index].header.getString("id") orelse "";
     return naturalLessThan(a_id, b_id);
+}
+
+fn sortResourceSections(allocator: std.mem.Allocator, doc: *document.Document) !void {
+    var seen_sub = false;
+    var needs_sort = false;
+    for (doc.sections.items) |section| {
+        if (std.mem.eql(u8, section.header.name, "sub_resource")) seen_sub = true;
+        if (seen_sub and std.mem.eql(u8, section.header.name, "ext_resource")) {
+            needs_sort = true;
+            break;
+        }
+    }
+    if (!needs_sort) return;
+
+    var header: std.ArrayList(usize) = .empty;
+    defer header.deinit(allocator);
+    var ext: std.ArrayList(usize) = .empty;
+    defer ext.deinit(allocator);
+    var sub: std.ArrayList(usize) = .empty;
+    defer sub.deinit(allocator);
+    var rest: std.ArrayList(usize) = .empty;
+    defer rest.deinit(allocator);
+
+    for (doc.sections.items, 0..) |section, index| {
+        const name = section.header.name;
+        if (std.mem.eql(u8, name, "gd_scene") or std.mem.eql(u8, name, "gd_resource")) {
+            try header.append(allocator, index);
+        } else if (std.mem.eql(u8, name, "ext_resource")) {
+            try ext.append(allocator, index);
+        } else if (std.mem.eql(u8, name, "sub_resource")) {
+            try sub.append(allocator, index);
+        } else {
+            try rest.append(allocator, index);
+        }
+    }
+
+    var order: std.ArrayList(usize) = .empty;
+    defer order.deinit(allocator);
+    try order.appendSlice(allocator, header.items);
+    try order.appendSlice(allocator, ext.items);
+    try order.appendSlice(allocator, sub.items);
+    try order.appendSlice(allocator, rest.items);
+
+    var reordered: std.ArrayList(document.Section) = .empty;
+    try reordered.ensureTotalCapacity(allocator, doc.sections.items.len);
+    for (order.items) |idx| try reordered.append(allocator, doc.sections.items[idx]);
+
+    for (doc.sections.items) |*section| {
+        section.* = document.Section{
+            .line = 0,
+            .header = tag.Tag{ .name = "", .fields = .{} },
+            .properties = .empty,
+        };
+    }
+    doc.sections.deinit(allocator);
+    doc.sections = reordered;
 }
 
 fn sortExtResourceSections(allocator: std.mem.Allocator, doc: *document.Document) !void {

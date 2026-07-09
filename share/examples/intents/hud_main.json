@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "recipe": "player_2d",
+      "parent": "/root/Main",
+      "name": "Player",
+      "radius": 10.0
+    },
+    {
+      "recipe": "camera_2d",
+      "parent": "/root/Main",
+      "name": "Camera"
+    }
+  ]
+}

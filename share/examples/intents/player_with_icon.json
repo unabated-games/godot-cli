@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "recipe": "player_2d",
+      "parent": "/root/Main",
+      "name": "Player",
+      "radius": 10.0,
+      "texture": "res://icon.svg"
+    },
+    {
+      "recipe": "camera_2d",
+      "parent": "/root/Main",
+      "name": "Camera"
+    }
+  ]
+}

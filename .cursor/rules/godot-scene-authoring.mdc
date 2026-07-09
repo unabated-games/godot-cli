@@ -1,0 +1,41 @@
+---
+description: Godot scene authoring with godot-cli — editor-like .tscn, not runtime spawns
+globs: "**/*.{tscn,tres,gd}"
+alwaysApply: false
+---
+
+# Godot scene authoring (godot-cli)
+
+## North star
+
+Persist scene structure in `.tscn` the way a human would in the Godot editor. **Do not** use `load().instantiate()` in `_ready()` for static UI, HUDs, or level layout.
+
+Read: `docs/agent_scene_authoring.md`
+
+## Workflow
+
+1. `catalog export --project-root .` or `catalog show <id> --json` when using project components
+2. `scene node list <file.tscn> --json` before editing (`--project-root` optional)
+3. Edit via CLI (`scene node add`, `scene instance add --catalog-id`, `scene apply`, etc.) — use `--project-root .`
+4. `scene validate <file.tscn> --project-root .` after edits
+
+## Prefer
+
+| Task | Command |
+|------|---------|
+| New scene | `scene new --output … --root-name Main --root-type Node2D` |
+| Add node | `scene node add … --parent /root/Main --name X --type Y` |
+| Instance catalog entry | `scene instance add … --catalog-id ui/button --project-root .` |
+| Batch edits | `scene plan … --intent intent.json` then `scene apply … --patch out.json` |
+| Raw Godot control | `catalog show godot/ui/Button` → `scene node add --type Button` |
+
+## Never
+
+- Hand-edit `[node]` / `parent=` / `instance=` lines in `.tscn` when a CLI command exists
+- `add_child(load("res://….tscn").instantiate())` for authored hierarchy
+- Instance builtin catalog ids (`godot/…`) — they are document-only
+
+## Tool reference
+
+- `docs/mcp_tools.json` — all commands with `--json` request shapes
+- `docs/catalog_design.md` — manifests and builtins

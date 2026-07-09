@@ -1,0 +1,16 @@
+---
+description: Keep CHANGELOG.md updated when making user-facing changes
+alwaysApply: true
+---
+
+# Changelog maintenance
+
+This repo keeps a local changelog at **`CHANGELOG.md`** (Keep a Changelog style).
+
+When you complete work that users, testers, or agents would notice:
+
+1. Add concise bullets under **`## [Unreleased]`** in the appropriate section (`Added`, `Changed`, `Fixed`, `Removed`, `Deprecated`).
+2. Include CLI behaviour, error/JSON shape changes, install/skill/docs updates, and recipe/patch semantics — not internal refactors unless they affect usage.
+3. Do **not** create a git commit for changelog-only updates unless the user asks; still update the file as part of the same task when shipping other changes.
+
+On version release (when requested): move `[Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh `[Unreleased]` section.

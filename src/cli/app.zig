@@ -5,6 +5,7 @@ const json_input = @import("json_input.zig");
 const parser = @import("parser.zig");
 const spec = @import("spec.zig");
 const emit = @import("../output/emit.zig");
+const scene_resources = @import("../godot/scene_resources.zig");
 
 pub const App = struct {
     root: *const spec.CommandSpec,
@@ -116,16 +117,42 @@ pub const App = struct {
 
         const ctx: *anyopaque = @ptrCast(@constCast(self));
         const result = handler(ctx, &inv) catch |err| {
-            const failure = emit.Failure{
+            var failure = emit.Failure{
                 .kind = "command_failed",
                 .message = @errorName(err),
             };
+            if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId") or
+                std.mem.eql(u8, @errorName(err), "DuplicateExtPath"))
+            {
+                if (scene_resources.conflictDetailsJson(self.allocator) catch null) |details| {
+                    failure.kind = @errorName(err);
+                    failure.message = if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId"))
+                        "scene resource id already exists in file"
+                    else
+                        "ext_resource path already exists in file";
+                    failure.details = .{ .object = details };
+                }
+            }
             emit.emitFailure(self.allocator, self.io, &stdout_buffer, &stderr_buffer, inv.global.json_output, inv.path, failure) catch {};
             return .failure;
         };
 
         emit.emitSuccess(self.allocator, self.io, &stdout_buffer, inv.global.json_output, inv.path, result) catch {};
         return result.exit_code orelse .success;
+    }
+
+    pub fn invoke(self: *const App, argv: []const []const u8, json_output: bool) anyerror!spec.Result {
+        var invocation = try parser.parseArgv(self.allocator, self.root, argv);
+        defer invocation.deinit(self.allocator);
+        invocation.global.json_output = json_output;
+
+        if (invocation.path.len == 0) return error.Usage;
+
+        const command = help.findCommand(self.root, invocation.path) orelse return error.UnknownCommand;
+        const handler = command.handler orelse return error.Usage;
+
+        const ctx: *anyopaque = @ptrCast(@constCast(self));
+        return handler(ctx, &invocation);
     }
 
     fn loadInvocation(self: *const App, args: []const []const u8) spec.CliError!spec.Invocation {

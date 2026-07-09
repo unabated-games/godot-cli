@@ -1,0 +1,32 @@
+{
+  "actions": [
+    {
+      "name": "move_left",
+      "events": [
+        { "type": "key", "keycode": "A", "physical": true },
+        { "type": "joypad_motion", "axis": "left_x", "axis_value": -1.0 }
+      ]
+    },
+    {
+      "name": "move_right",
+      "events": [
+        { "type": "key", "keycode": "D", "physical": true },
+        { "type": "joypad_motion", "axis": "left_x", "axis_value": 1.0 }
+      ]
+    },
+    {
+      "name": "move_up",
+      "events": [
+        { "type": "key", "keycode": "W", "physical": true },
+        { "type": "joypad_motion", "axis": "left_y", "axis_value": -1.0 }
+      ]
+    },
+    {
+      "name": "move_down",
+      "events": [
+        { "type": "key", "keycode": "S", "physical": true },
+        { "type": "joypad_motion", "axis": "left_y", "axis_value": 1.0 }
+      ]
+    }
+  ]
+}

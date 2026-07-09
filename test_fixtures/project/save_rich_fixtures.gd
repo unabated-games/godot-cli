@@ -1,6 +1,11 @@
 extends SceneTree
 
 ## Headless script: save Godot-authored variant fixtures for CLI tests.
+##
+## DEV / TEST INFRASTRUCTURE ONLY — not the scene authoring pattern this project promotes.
+## Agents and game code should persist structure in .tscn (scene node add, scene instance add),
+## not build scenes at runtime with PackedScene.pack() / instantiate().
+##
 ## Run: godot --headless --path test_fixtures/project --script save_rich_fixtures.gd
 
 const SCENE_PATH := "res://rich_variants.tscn"

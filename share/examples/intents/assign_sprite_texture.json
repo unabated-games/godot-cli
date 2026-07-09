@@ -1,0 +1,12 @@
+{
+  "steps": [
+    {
+      "recipe": "assign_ext",
+      "path": "/root/Main/Player/Sprite",
+      "property": "texture",
+      "ext_type": "Texture2D",
+      "res_path": "res://icon.svg",
+      "id_hint": "icon"
+    }
+  ]
+}

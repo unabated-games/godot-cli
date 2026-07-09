@@ -1,0 +1,44 @@
+[
+  {
+    "id": "godot/ui/Button",
+    "class_name": "Button",
+    "inherits": "BaseButton",
+    "tags": ["ui", "control", "input", "godot"],
+    "summary": "Standard Godot push button control.",
+    "when_to_use": "Simple debug or editor UI where no project button manifest applies.",
+    "when_not_to_use": "Player-facing menus and HUD — prefer project catalog entries.",
+    "related_ids": ["godot/ui/BaseButton"],
+    "properties": [],
+    "signals": [
+      {
+        "name": "pressed",
+        "doc": "Emitted when the button is toggled on (button is pressed down)."
+      },
+      {
+        "name": "button_down",
+        "doc": "Emitted when the button starts being held down."
+      },
+      {
+        "name": "button_up",
+        "doc": "Emitted when the button stops being held down."
+      }
+    ]
+  },
+  {
+    "id": "godot/ui/BaseButton",
+    "class_name": "BaseButton",
+    "inherits": "Control",
+    "tags": ["ui", "control", "input", "godot"],
+    "summary": "Abstract base class for button-like controls.",
+    "when_to_use": "Rarely instanced directly; prefer Button or project catalog entries.",
+    "when_not_to_use": "Almost always use Button or a project manifest instead.",
+    "related_ids": ["godot/ui/Button"],
+    "properties": [],
+    "signals": [
+      {
+        "name": "pressed",
+        "doc": "Emitted when the button is toggled on."
+      }
+    ]
+  }
+]
