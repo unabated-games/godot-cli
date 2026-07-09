@@ -121,7 +121,7 @@
     {
       "name": "scene_node_add",
       "argv": ["scene", "node", "add", "<file.tscn>"],
-      "options": ["--parent", "--name", "--type", "--property", "--value", "--output", "--project-root", "--dry-run"],
+      "options": ["--parent", "--name", "--type", "--property", "--value", "--unique-name", "--output", "--project-root", "--dry-run"],
       "description": "Add a child node under a viewport parent path (e.g. /root/Main).",
       "json_request": { "argv": ["scene", "node", "add", "main.tscn", "--parent", "/root/Main", "--name", "Player", "--type", "CharacterBody2D", "--json"] }
     },
@@ -198,7 +198,7 @@
     {
       "name": "scene_instance_add",
       "argv": ["scene", "instance", "add", "<file.tscn>"],
-      "options": ["--parent", "--name", "--scene", "--catalog-id", "--editable", "--output", "--project-root", "--dry-run"],
+      "options": ["--parent", "--name", "--scene", "--catalog-id", "--editable", "--unique-name", "--output", "--project-root", "--dry-run"],
       "description": "Instance a PackedScene under a parent. Use --scene or --catalog-id (project entries only).",
       "json_request": {
         "argv": ["scene", "instance", "add", "main.tscn", "--parent", "/root/Main", "--name", "StartButton", "--catalog-id", "ui/button", "--project-root", ".", "--json"]

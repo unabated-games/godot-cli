@@ -105,6 +105,16 @@ godot-cli project apply --project-root . --intent intents/project_bootstrap.json
 
 Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Use with a movement script that calls `Input.get_vector("move_left", "move_right", "move_up", "move_down")`. Re-applying the same intent is idempotent (replaces each action by name).
 
+## UI authoring (editor parity)
+
+1. **Scene properties first** — font size, colors, min size, anchors, margins via `scene apply` / `node_set` / instance overrides. Do not set static theme look only in `_ready()`.
+2. **Reusable widgets** — root script is `@tool`; `@export` fields use setters that push into child Controls (`get_node_or_null`). Instance overrides then preview in-editor.
+3. **Unique names** — `--unique-name` on `scene node add` / `instance add`, or `unique_name_in_owner` via `node_set`. Reference with `%Name` from owner scripts.
+4. **Bars / HUDs** — `Bar (Control)` → `ColorRect` + `MarginContainer` → content. Full-width: top-wide anchors; padding via MarginContainer theme margins.
+5. **Quoted strings in patches** — instance override text values need Godot quotes: `"value": "\"Score\""`. JSON `properties` on `add_node` use plain JSON strings.
+
+Example: `$GODOT_CLI_HOME/examples/intents/hud_top_bar.json`. Full detail: `agent_scene_authoring.md`.
+
 ## Intent recipes
 
 `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `instance_scene`, `catalog_button`, `assign_ext`, `instance_override`, `node_set`, `add_node`
@@ -145,6 +155,10 @@ Copy examples from `$GODOT_CLI_HOME/examples/intents/` (`player_with_icon.json`,
 | Physics engine (e.g. Jolt) | `project physics apply` with `physics_jolt.json` |
 | Bootstrap project config | `project apply` with `project_bootstrap.json` (settings + input + autoload + rendering + physics) |
 | Project overview | `project show --json` |
+| HUD / Control styling | Scene properties (`theme_override_*`, anchors, `custom_minimum_size`) — not `_ready()` only; see `agent_scene_authoring.md` § UI authoring |
+| Reusable UI widget | `@tool` script + export setters; instance overrides on root exports |
+| Unique node paths in scripts | `--unique-name` on `scene node add` / `instance add`, or `unique_name_in_owner` via `node_set` → `%Name` |
+| HUD top bar layout | `hud_top_bar.json` intent example |
 
 `player_2d` optional fields: `texture` / `sprite_texture` / `texture_path`, `modulate`, `position`, `script`, `shape_id_hint`, `radius`, `sprite` (bool).
 

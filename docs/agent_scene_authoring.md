@@ -85,6 +85,8 @@ godot-cli scene set-property scenes/main.tscn \
 
 Or combine in one `node add` with `--property script --value 'ExtResource("…")'`.
 
+**Reusable UI widgets:** if the script drives child Controls from `@export` fields, use `@tool` + export setters (see [UI authoring (editor parity)](agent_scene_authoring.md#ui-authoring-editor-parity)). Attach the script, then set presentation via scene properties — not only `_ready()` overrides.
+
 ---
 
 ## Recipe: player movement input (Input Map)
@@ -220,6 +222,87 @@ Set `"replace_all": true` to remove autoloads not listed in the intent (use spar
 godot-cli project autoload list --project-root . --json
 godot-cli project autoload apply --project-root . --intent intents/autoload_game_state.json --json
 ```
+
+---
+
+## UI authoring (editor parity)
+
+Agents can build Control trees with godot-cli, but **static look-and-feel must live in the `.tscn`**, not only in `_ready()` GDScript. Runtime code is for **dynamic** updates (score ticking, health bars); the editor and instance preview should match Play without running the game.
+
+### 1. Scene properties first (not `_ready()` styling)
+
+**Do** — set on nodes via `scene set-property`, patch `node_set`, or intent `properties` / `instance_override`:
+
+| Property family | Examples |
+|-----------------|----------|
+| Theme fonts | `theme_override_font_sizes/font_size` |
+| Theme margins | `theme_override_constants/margin_left` (and `_right`, `_top`, `_bottom`) |
+| Layout | `anchors_preset`, `anchor_*`, `offset_*`, `size_flags_horizontal`, `size_flags_vertical` |
+| Sizing | `custom_minimum_size` (e.g. `Vector2(160, 0)` for stable HUD cells) |
+| Color | `modulate`, `color` (on `ColorRect`) |
+
+**Don't** — presentation defaults only in script:
+
+```gdscript
+func _ready() -> void:
+    $Label.add_theme_font_size_override("font_size", 35)  # editor never sees this
+```
+
+### 2. Reusable widgets: `@tool` + export setters
+
+For packed scenes with root exports (`label`, `number`, …) that drive child Controls:
+
+- Script must be `@tool`.
+- Each `@export` uses a setter that calls `_apply_*()` with `get_node_or_null` (not bare `@onready` in apply helpers).
+- **Mutate via root exports** with `instance_override` / `node_set` on the instance — do not only set child `text` and ignore exports.
+
+**@tool checklist when attaching a script to a reusable UI widget:**
+
+1. Add `@tool` at top of script.
+2. Export fields use setters → `_apply_*()` helpers.
+3. `_ready()` calls the same `_apply_*()` once.
+4. Apply helpers use `get_node_or_null("ChildName")` so editor preview works before full ready.
+5. Instance overrides target **export names** on the instance root (`label`, `number`, …).
+
+### 3. Unique names (`%Name`) for script references
+
+Brittle paths break when layout changes (`$HUD/HBox/Score` → `$HUD/Bar/Margin/HBox/Score`). Prefer **Access as Unique Name** on HUD roots and reference `%Score` from the owner script.
+
+**godot-cli:**
+
+```bash
+# CLI flag on add / instance
+godot-cli scene node add main.tscn --parent /root/Main/HUD --name Score --type Label \
+  --unique-name --project-root .
+
+# Intent add_node
+{ "recipe": "add_node", "name": "Score", "type": "Label", "unique_name": true, … }
+
+# Patch / node_set
+{ "op": "node_set", "path": "/root/Main/HUD/Score", "property": "unique_name_in_owner", "value": "true" }
+```
+
+### 4. Layout patterns (bars / HUDs)
+
+| Goal | Structure |
+|------|-----------|
+| Full-width top bar | `Control` with top-wide anchors (`anchors_preset` 10) → background + content siblings |
+| Background behind content | `ColorRect` (full rect, first child) + `MarginContainer` (full rect) |
+| Content padding | `theme_override_constants/margin_*` on `MarginContainer`, not only HBox offsets |
+| Left / center / right stats | `HBox`: fixed-width item, expand spacer (`size_flags_horizontal` 3), item, spacer, item |
+| Stable cell width | `custom_minimum_size` on widget root |
+
+Example intent: `share/examples/intents/hud_top_bar.json` (CanvasLayer → bar → ColorRect + Margin → Label with theme overrides and `unique_name`).
+
+### 5. Quoted strings in patches and intents
+
+Godot `.tscn` string properties need Godot-quoted values in patch/intent `value` fields:
+
+```json
+{ "recipe": "instance_override", "path": "/root/Main/HUD/ScoreCell", "property": "label", "value": "\"Score\"" }
+```
+
+Bare `Score` corrupts or mis-parses text properties. In `node_add` / `properties` objects, JSON strings are formatted automatically (`"text": "Score: 0"` is fine).
 
 ---
 
@@ -557,7 +640,7 @@ Property diffs (with `--properties`): `property_added`, `property_removed`, `pro
 
 | `op` | Required fields | Notes |
 |------|-----------------|-------|
-| `node_add` | `parent`, `name`, `type` | Optional `properties` object |
+| `node_add` | `parent`, `name`, `type` | Optional `properties` object; set `unique_name_in_owner`: true for `%Name` access |
 | `node_remove` | `path` | Optional `recursive`: true |
 | `node_rename` | `path`, `name` | |
 | `node_reparent` | `path`, `parent` | Viewport path for new parent |

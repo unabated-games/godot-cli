@@ -286,6 +286,27 @@ test "set section property replaces existing" {
     try std.testing.expectEqualStrings("visible = false", doc.sections.items[0].properties.items[0].raw);
 }
 
+test "set bool property after variant format" {
+    const allocator = std.testing.allocator;
+    const variant_mod = @import("../variant/root.zig");
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Root" type="Node"]
+        \\
+    ;
+    var doc = try parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    var parsed = try variant_mod.parse.parsePropertyValue(allocator, "true");
+    const formatted = try parsed.formatForWrite(allocator);
+    parsed.deinit(allocator);
+    defer allocator.free(formatted);
+
+    try setSectionProperty(&doc, allocator, 1, "unique_name_in_owner", formatted);
+    try std.testing.expectEqualStrings("unique_name_in_owner = true", doc.sections.items[1].properties.items[0].raw);
+}
+
 test "insert and remove sections" {
     const allocator = std.testing.allocator;
     const source =

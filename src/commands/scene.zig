@@ -217,6 +217,18 @@ fn countErrors(report: *const id_validate.Report) usize {
     return total;
 }
 
+fn formatPropertyValueForWrite(
+    allocator: std.mem.Allocator,
+    property_value: []const u8,
+    raw: bool,
+) ![]const u8 {
+    if (raw) return try allocator.dupe(u8, property_value);
+    var parsed = try variant.parse.parsePropertyValue(allocator, property_value);
+    const formatted = try parsed.formatForWrite(allocator);
+    parsed.deinit(allocator);
+    return formatted;
+}
+
 fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
@@ -240,14 +252,8 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         return error.Usage;
     };
 
-    const written_value: []const u8 = if (inv.flag("raw-value")) property_value else blk: {
-        var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
-        defer parsed.deinit(cli.allocator);
-        break :blk try parsed.formatForWrite(cli.allocator);
-    };
-    if (!inv.flag("raw-value")) {
-        defer cli.allocator.free(written_value);
-    }
+    const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+    defer cli.allocator.free(written_value);
 
     try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, property_name, written_value);
 
@@ -597,13 +603,13 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
 
     if (inv.getOption("property")) |property_name| {
         const property_value = inv.getOption("value") orelse return error.Usage;
-        const written_value: []const u8 = if (inv.flag("raw-value")) property_value else blk: {
-            var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
-            defer parsed.deinit(cli.allocator);
-            break :blk try parsed.formatForWrite(cli.allocator);
-        };
-        defer if (!inv.flag("raw-value")) cli.allocator.free(written_value);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+        defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, property_name, written_value);
+    }
+
+    if (inv.flag("unique-name")) {
+        try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, "unique_name_in_owner", "true");
     }
 
     const output_path = inv.getOption("output") orelse input_path;
@@ -1140,6 +1146,10 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     );
     defer added.deinit(cli.allocator);
 
+    if (inv.flag("unique-name")) {
+        try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, "unique_name_in_owner", "true");
+    }
+
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
     } else {
@@ -1652,6 +1662,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "property", .kind = .string, .description = "Optional property to set on the new node" },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text)" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
+        .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
         .{ .long = "recursive", .kind = .flag, .description = "Remove descendant nodes as well" },
     } ++ save_options;
     const plan_options = [_]spec.OptionSpec{
@@ -1704,6 +1715,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "scene", .kind = .string, .description = "PackedScene res:// path to instance" },
         .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves scene path; requires --project-root)" },
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
+        .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the instance root (%Name from owner scripts)" },
     } ++ save_options;
     const scene_new_options = [_]spec.OptionSpec{
         .{ .long = "output", .kind = .path, .description = "Output .tscn path (required)" },

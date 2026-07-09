@@ -151,6 +151,11 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         if (step.get("properties")) |props| {
             const last = &ops.items[ops.items.len - 1];
             try last.object.put(ops_alloc, "properties", props);
+        } else if (readBool(step.get("unique_name")) orelse false) {
+            var props: std.json.ObjectMap = .{};
+            try props.put(ops_alloc, "unique_name_in_owner", .{ .bool = true });
+            const last = &ops.items[ops.items.len - 1];
+            try last.object.put(ops_alloc, "properties", .{ .object = props });
         }
         return;
     }

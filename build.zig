@@ -501,6 +501,18 @@ pub fn build(b: *std.Build) void {
     project_apply_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&project_apply_smoke.step);
 
+    const scene_unique_name_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp) &&
+        \\cp test_fixtures/project/test.tscn "$tmp" &&
+        \\./zig-out/bin/godot-cli scene set-property "$tmp" --node-name Root --property unique_name_in_owner --value true --json >/dev/null &&
+        \\grep -q 'unique_name_in_owner = true' "$tmp" &&
+        \\rm "$tmp"
+    });
+    scene_unique_name_smoke.setCwd(b.path("."));
+    scene_unique_name_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&scene_unique_name_smoke.step);
+
     const material_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli resource inspect test_fixtures/project/sample_material.tres --json --no-validate) &&

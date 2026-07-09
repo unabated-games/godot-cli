@@ -89,6 +89,16 @@ godot-cli project apply --project-root . --intent intents/project_bootstrap.json
 3. **Builtins** (`godot/ui/Button`) → `scene node add --type Button` only
 4. **Validate after every edit**
 5. **Many steps** → `scene apply --intent` or `batch --file`
+6. **UI editor parity** — static Control look in `.tscn` properties (`theme_override_*`, anchors, min size); `@tool` + export setters on reusable widgets; `%Name` via `--unique-name`; see `agent_scene_authoring.md` § UI authoring
+
+## UI authoring (short)
+
+- **Don't** set font size / theme / layout only in `_ready()` — editor won't match Play.
+- **Do** use `node_set` / `instance_override` / intent `properties` for presentation.
+- **Reusable widgets:** `@tool` + export setters → `get_node_or_null` into children.
+- **Stable script refs:** `--unique-name` on HUD nodes → `%Score` in GDScript.
+- **Patch strings:** `"value": "\"Score\""` for instance override text properties.
+- Example: `$GODOT_CLI_HOME/examples/intents/hud_top_bar.json`
 
 ## Intent example
 
@@ -118,6 +128,9 @@ After create → intent → validate:
 - **Reuse existing texture** → `assign_ext` or reference `ExtResource("<id>")` from inspect/refs
 - **Instance catalog UI** → already covered
 - **Player movement (WASD / joypad)** → `project input apply` with `wasd_movement.json` after attaching a script that uses `move_*` actions
+- **HUD styling** → theme/anchor/min-size on nodes via intent; not `_ready()` only (`hud_top_bar.json`)
+- **Reusable UI cell** → `@tool` script + `instance_override` on root exports (`label`, `number`)
+- **Script node refs** → `--unique-name` when adding HUD widgets; use `%Name` in GDScript
 
 Writes auto-run save preparation; `scene normalize` re-preps existing files.
 

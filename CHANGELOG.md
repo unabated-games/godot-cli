@@ -15,8 +15,16 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Fixed
+
+- `scene set-property` and `scene node add --property` wrote garbage for bool values (e.g. `unique_name_in_owner = true`) due to use-after-free when formatting Variant text.
+
 ### Added
 
+- Agent docs: **UI authoring (editor parity)** — scene-first Control styling, `@tool` export pattern, unique names, HUD layout, quoted patch strings (`agent_quickstart.md`, `agent_scene_authoring.md`, skill).
+- Example intent `hud_top_bar.json` (top bar with ColorRect, MarginContainer, theme overrides, unique name).
+- `--unique-name` flag on `scene node add` and `scene instance add` (sets `unique_name_in_owner`).
+- Intent `add_node` recipe: optional `"unique_name": true`.
 - `install.sh` — local install to `~/.godot-cli` (binary, templates, docs, examples, `env.sh`); `--install-skill` for Cursor, Claude Code, OpenCode, and `~/.agents/skills/`.
 - Agent docs: `docs/agent_quickstart.md`, `docs/agent_scene_authoring.md`, `docs/agent_batch_commands.md`.
 - Skill package: `skills/godot-scene-authoring/` (symlinked from `.cursor/skills/`).
