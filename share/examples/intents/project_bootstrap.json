@@ -1,0 +1,29 @@
+{
+  "settings": {
+    "application": {
+      "run/main_scene": "res://scenes/main.tscn"
+    }
+  },
+  "input": {
+    "actions": [
+      {
+        "name": "move_left",
+        "events": [
+          { "type": "key", "keycode": "A", "physical": true }
+        ]
+      }
+    ]
+  },
+  "autoload": {
+    "autoloads": [
+      { "name": "GameState", "path": "res://scripts/game_state.gd", "singleton": true }
+    ]
+  },
+  "rendering": {
+    "method": "forward_plus"
+  },
+  "physics": {
+    "engine_3d": "Jolt Physics",
+    "gravity_3d": 980
+  }
+}

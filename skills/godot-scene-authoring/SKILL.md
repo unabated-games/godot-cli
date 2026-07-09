@@ -71,10 +71,15 @@ godot-cli batch --file workflow.json --json
 # Input Map (after movement script uses Input.get_vector actions)
 godot-cli project input apply --project-root . --intent intents/wasd_movement.json --json
 
-# Main scene + autoloads + plugins + rendering
+# Main scene + autoloads + plugins + rendering + physics
 godot-cli project settings apply --project-root . --intent intents/main_scene.json --json
 godot-cli project plugins enable --project-root . --plugin godot_power_ai --json
 godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
+godot-cli project physics apply --project-root . --intent intents/physics_jolt.json --json
+
+# Unified bootstrap (optional — one intent for multiple sections)
+godot-cli project show --project-root . --json
+godot-cli project apply --project-root . --intent intents/project_bootstrap.json --json
 ```
 
 ## Rules

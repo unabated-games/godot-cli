@@ -465,6 +465,42 @@ pub fn build(b: *std.Build) void {
     project_rendering_apply_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&project_rendering_apply_smoke.step);
 
+    const project_physics_apply_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\cp test_fixtures/project/project.godot "$tmp/project.godot" &&
+        \\out=$(./zig-out/bin/godot-cli project physics apply --project-root "$tmp" --intent share/examples/intents/physics_jolt.json --json) &&
+        \\rm -rf "$tmp" &&
+        \\echo "$out" | grep -q 'physics/3d/physics_engine' &&
+        \\echo "$out" | grep -q '"added_count":2'
+    });
+    project_physics_apply_smoke.setCwd(b.path("."));
+    project_physics_apply_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_physics_apply_smoke.step);
+
+    const project_show_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli project show --project-root test_fixtures/project --json) &&
+        \\echo "$out" | grep -q '"input_action_count"' &&
+        \\echo "$out" | grep -q 'project summary'
+    });
+    project_show_smoke.setCwd(b.path("."));
+    project_show_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_show_smoke.step);
+
+    const project_apply_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\cp test_fixtures/project/project.godot "$tmp/project.godot" &&
+        \\out=$(./zig-out/bin/godot-cli project apply --project-root "$tmp" --intent share/examples/intents/project_bootstrap.json --dry-run --json) &&
+        \\rm -rf "$tmp" &&
+        \\echo "$out" | grep -q '"section_count":5' &&
+        \\echo "$out" | grep -q 'input'
+    });
+    project_apply_smoke.setCwd(b.path("."));
+    project_apply_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_apply_smoke.step);
+
     const material_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli resource inspect test_fixtures/project/sample_material.tres --json --no-validate) &&

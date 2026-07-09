@@ -32,7 +32,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 - **`project autoload`** — autoload singletons: `list`, `apply` (merge by name; optional `replace_all`), `validate`.
 - **`project plugins`** — editor plugin enable/disable: `list`, `enable`, `disable`, `apply`, `validate` (no install).
 - **`project rendering`** — rendering method and platform drivers via friendly aliases (`method`, `driver_windows`, …).
-- Example intents: `wasd_movement.json`, `main_scene.json`, `display_stretch.json`, `physics_layers.json`, `autoload_game_state.json`, `enable_sample_plugin.json`, `rendering_forward_plus.json`.
+- **`project physics`** — physics engine and gravity via friendly aliases (`engine_3d`, `gravity_3d`, …).
+- **`project show`** — summarize project name, main scene, input/autoload/plugin counts, rendering and physics backends.
+- **`project apply`** — unified intent JSON applying any combination of `input`, `settings`, `autoload`, `plugins`, `rendering`, `physics` sections in one write.
+- Example intents: `wasd_movement.json`, `main_scene.json`, `display_stretch.json`, `physics_layers.json`, `autoload_game_state.json`, `enable_sample_plugin.json`, `rendering_forward_plus.json`, `physics_jolt.json`, `project_bootstrap.json`.
 - `project_godot` parser/writer for INI-style sections and brace multiline values (Input Map blocks).
 - Validation error `resource_section_order` when `ext_resource` appears after `sub_resource`.
 - `DuplicateResourceId` / `DuplicateExtPath` failure `details` in JSON output (`id`, `path`, `section_name`, `existing_line`, …).

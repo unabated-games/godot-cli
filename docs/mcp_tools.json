@@ -400,6 +400,25 @@
       "argv": ["project", "rendering", "apply", "--project-root", "<path>"],
       "options": ["--intent", "--file", "--dry-run"],
       "json_request": { "argv": ["project", "rendering", "apply", "--project-root", ".", "--intent", "intents/rendering_forward_plus.json", "--json"] }
+    },
+    {
+      "name": "project_physics_apply",
+      "argv": ["project", "physics", "apply", "--project-root", "<path>"],
+      "options": ["--intent", "--file", "--dry-run"],
+      "json_request": { "argv": ["project", "physics", "apply", "--project-root", ".", "--intent", "intents/physics_jolt.json", "--json"] }
+    },
+    {
+      "name": "project_show",
+      "argv": ["project", "show", "--project-root", "<path>"],
+      "description": "Summarize key project.godot configuration (main scene, input count, autoloads, plugins, rendering, physics).",
+      "json_request": { "argv": ["project", "show", "--project-root", ".", "--json"] }
+    },
+    {
+      "name": "project_apply",
+      "argv": ["project", "apply", "--project-root", "<path>"],
+      "options": ["--intent", "--file", "--dry-run"],
+      "description": "Unified project intent: optional keys input, settings, autoload, plugins, rendering, physics.",
+      "json_request": { "argv": ["project", "apply", "--project-root", ".", "--intent", "intents/project_bootstrap.json", "--dry-run", "--json"] }
     }
   ]
 }

@@ -93,9 +93,14 @@ godot-cli project input validate --project-root . --json
 godot-cli project settings apply --project-root . --intent intents/main_scene.json --json
 godot-cli project autoload apply --project-root . --intent intents/autoload_game_state.json --json
 
-# Editor plugins + rendering
+# Editor plugins + rendering + physics
 godot-cli project plugins enable --project-root . --plugin godot_power_ai --json
 godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
+godot-cli project physics apply --project-root . --intent intents/physics_jolt.json --json
+
+# Unified bootstrap (one intent, multiple sections)
+godot-cli project show --project-root . --json
+godot-cli project apply --project-root . --intent intents/project_bootstrap.json --dry-run --json
 ```
 
 Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Use with a movement script that calls `Input.get_vector("move_left", "move_right", "move_up", "move_down")`. Re-applying the same intent is idempotent (replaces each action by name).
@@ -137,6 +142,9 @@ Copy examples from `$GODOT_CLI_HOME/examples/intents/` (`player_with_icon.json`,
 | Physics layer names | `project settings apply` with `physics_layers.json` |
 | Enable editor plugin | `project plugins enable --plugin <addon_name>` (addon must exist under `addons/`) |
 | Rendering backend | `project rendering apply` with `rendering_forward_plus.json` |
+| Physics engine (e.g. Jolt) | `project physics apply` with `physics_jolt.json` |
+| Bootstrap project config | `project apply` with `project_bootstrap.json` (settings + input + autoload + rendering + physics) |
+| Project overview | `project show --json` |
 
 `player_2d` optional fields: `texture` / `sprite_texture` / `texture_path`, `modulate`, `position`, `script`, `shape_id_hint`, `radius`, `sprite` (bool).
 

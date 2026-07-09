@@ -7,6 +7,8 @@ const project_settings = @import("../godot/project_settings.zig");
 const project_autoload = @import("../godot/project_autoload.zig");
 const project_plugins = @import("../godot/project_plugins.zig");
 const project_rendering = @import("../godot/project_rendering.zig");
+const project_physics = @import("../godot/project_physics.zig");
+const project_unified = @import("../godot/project_unified.zig");
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
@@ -637,6 +639,162 @@ fn renderingValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     };
 }
 
+fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse return error.Usage;
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    var summary = try project_unified.buildSummary(cli.allocator, cli.io, root, &loaded.doc);
+    defer summary.deinit(cli.allocator);
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    if (summary.project_name) |name| try data.put(cli.allocator, "project_name", .{ .string = try cli.allocator.dupe(u8, name) });
+    if (summary.main_scene) |scene| try data.put(cli.allocator, "main_scene", .{ .string = try cli.allocator.dupe(u8, scene) });
+    try data.put(cli.allocator, "input_action_count", .{ .integer = @intCast(summary.input_action_count) });
+    try data.put(cli.allocator, "autoload_count", .{ .integer = @intCast(summary.autoload_count) });
+    try data.put(cli.allocator, "enabled_plugin_count", .{ .integer = @intCast(summary.enabled_plugin_count) });
+    if (summary.rendering_method) |method| try data.put(cli.allocator, "rendering_method", .{ .string = try cli.allocator.dupe(u8, method) });
+    if (summary.physics_engine_3d) |engine| try data.put(cli.allocator, "physics_engine_3d", .{ .string = try cli.allocator.dupe(u8, engine) });
+
+    const text = try std.fmt.allocPrint(
+        cli.allocator,
+        "project summary: {d} input actions, {d} autoloads, {d} plugins",
+        .{ summary.input_action_count, summary.autoload_count, summary.enabled_plugin_count },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = text });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn projectApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
+    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    defer cli.allocator.free(intent_bytes);
+
+    var applied = try project_unified.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
+    defer applied.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try project_godot.writeFile(cli.allocator, cli.io, loaded.path, &loaded.doc);
+    }
+
+    var sections = std.json.Array.init(cli.allocator);
+    for (applied.sections) |section| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, section.name) });
+        try row.put(cli.allocator, "summary", .{ .string = try cli.allocator.dupe(u8, section.summary) });
+        try sections.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "intent", .{ .string = try cli.allocator.dupe(u8, intent_path) });
+    try data.put(cli.allocator, "sections", .{ .array = sections });
+    try data.put(cli.allocator, "section_count", .{ .integer = @intCast(applied.sections.len) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "applied {d} project section(s)", .{applied.sections.len});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn physicsListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const settings = try project_settings.listAll(cli.allocator, &loaded.doc, "physics");
+    defer {
+        for (settings) |*item| item.deinit(cli.allocator);
+        cli.allocator.free(settings);
+    }
+
+    var arr = std.json.Array.init(cli.allocator);
+    for (settings) |item| {
+        var row: std.json.ObjectMap = .{};
+        const alias = project_physics.aliasForKey(item.key);
+        if (alias) |name| try row.put(cli.allocator, "alias", .{ .string = try cli.allocator.dupe(u8, name) });
+        try row.put(cli.allocator, "key", .{ .string = try cli.allocator.dupe(u8, item.key) });
+        try row.put(cli.allocator, "value", .{ .string = try cli.allocator.dupe(u8, item.value) });
+        try arr.append(.{ .object = row });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "settings", .{ .array = arr });
+    try data.put(cli.allocator, "setting_count", .{ .integer = @intCast(settings.len) });
+    const summary = try std.fmt.allocPrint(cli.allocator, "listed {d} physics setting(s)", .{settings.len});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn physicsApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
+    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    defer cli.allocator.free(intent_bytes);
+
+    var applied = try project_physics.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
+    defer applied.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        try project_godot.writeFile(cli.allocator, cli.io, loaded.path, &loaded.doc);
+    }
+
+    var keys = std.json.Array.init(cli.allocator);
+    for (applied.applied_keys) |key| {
+        try keys.append(.{ .string = try cli.allocator.dupe(u8, key) });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "intent", .{ .string = try cli.allocator.dupe(u8, intent_path) });
+    try data.put(cli.allocator, "applied_keys", .{ .array = keys });
+    try data.put(cli.allocator, "added_count", .{ .integer = @intCast(applied.added_count) });
+    try data.put(cli.allocator, "replaced_count", .{ .integer = @intCast(applied.replaced_count) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "applied {d} physics setting(s)", .{applied.applied_keys.len});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn physicsValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const issue_count = project_physics.validatePhysicsSection(&loaded.doc);
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "issue_count", .{ .integer = @intCast(issue_count) });
+    try data.put(cli.allocator, "ok", .{ .bool = issue_count == 0 });
+    const summary = try std.fmt.allocPrint(cli.allocator, "physics: {d} issue(s)", .{issue_count});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+        .exit_code = if (issue_count > 0) .failure else .success,
+    };
+}
+
 pub fn commands() spec.CommandSpec {
     const project_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
@@ -679,9 +837,21 @@ pub fn commands() spec.CommandSpec {
     return .{
         .name = "project",
         .summary = "Read and write Godot project.godot settings",
-        .description = "Project-level configuration: input, autoloads, plugins, rendering, display, layer names.",
+        .description = "Project-level configuration: input, autoloads, plugins, rendering, physics, display, layer names.",
         .options = &project_options,
         .children = &.{
+            .{
+                .name = "show",
+                .summary = "Summarize key project.godot configuration",
+                .options = &project_options,
+                .handler = showHandler,
+            },
+            .{
+                .name = "apply",
+                .summary = "Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics)",
+                .options = &intent_apply_options,
+                .handler = projectApplyHandler,
+            },
             .{
                 .name = "input",
                 .summary = "Input Map actions in project.godot",
@@ -729,6 +899,15 @@ pub fn commands() spec.CommandSpec {
                     .{ .name = "list", .summary = "List [rendering] section settings", .options = &project_options, .handler = renderingListHandler },
                     .{ .name = "apply", .summary = "Apply rendering intent JSON (friendly aliases)", .options = &intent_apply_options, .handler = renderingApplyHandler },
                     .{ .name = "validate", .summary = "Validate known rendering method/driver values", .options = &project_options, .handler = renderingValidateHandler },
+                },
+            },
+            .{
+                .name = "physics",
+                .summary = "Physics engine and gravity settings",
+                .children = &.{
+                    .{ .name = "list", .summary = "List [physics] section settings", .options = &project_options, .handler = physicsListHandler },
+                    .{ .name = "apply", .summary = "Apply physics intent JSON (friendly aliases)", .options = &intent_apply_options, .handler = physicsApplyHandler },
+                    .{ .name = "validate", .summary = "Validate known physics engine and scalar values", .options = &project_options, .handler = physicsValidateHandler },
                 },
             },
         },

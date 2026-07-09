@@ -147,6 +147,40 @@ Aliases: `method` → `renderer/rendering_method`, `method_mobile` → `renderer
 godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
 ```
 
+### `project physics`
+
+```json
+{
+  "engine_3d": "Jolt Physics",
+  "gravity_3d": 980
+}
+```
+
+Aliases: `engine_3d` → `3d/physics_engine`, `gravity_3d` → `3d/default_gravity`, `engine_2d` → `2d/physics_engine`, etc.
+
+```bash
+godot-cli project physics apply --project-root . --intent intents/physics_jolt.json --json
+```
+
+### `project apply` (unified)
+
+One intent file can combine any subset of section keys. Each subsection uses the same shape as the standalone `project <section> apply` command.
+
+```json
+{
+  "settings": { "application": { "run/main_scene": "res://scenes/main.tscn" } },
+  "input": { "actions": [ { "name": "move_left", "events": [ { "type": "key", "keycode": "A" } ] } ] },
+  "autoload": { "autoloads": [ { "name": "GameState", "path": "res://scripts/game_state.gd" } ] },
+  "rendering": { "method": "forward_plus" },
+  "physics": { "engine_3d": "Jolt Physics" }
+}
+```
+
+```bash
+godot-cli project show --project-root . --json
+godot-cli project apply --project-root . --intent intents/project_bootstrap.json --json
+```
+
 ### `project settings` intent shape
 
 ```json

@@ -1,0 +1,4 @@
+{
+  "engine_3d": "Jolt Physics",
+  "gravity_3d": 980
+}
