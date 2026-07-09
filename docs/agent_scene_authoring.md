@@ -114,7 +114,47 @@ Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Semantics:
 
 Typical workflow: write `scripts/player.gd` on disk → attach via `player_2d` / `assign_ext` → `project input apply` → run the game.
 
-**Not yet in godot-cli:** autoloads, main scene, display settings — use the editor or hand-edit for now.
+**Not yet in godot-cli:** editor plugins, rendering backend tuning — use the editor or hand-edit for now.
+
+### `project settings` intent shape
+
+```json
+{
+  "application": {
+    "run/main_scene": "res://scenes/main.tscn"
+  },
+  "display": {
+    "window/stretch/mode": "canvas_items",
+    "window/size/viewport_width": 1280
+  },
+  "layer_names": {
+    "2d_physics/layer_1": "player",
+    "2d_physics/layer_2": "enemy"
+  }
+}
+```
+
+```bash
+godot-cli project settings apply --project-root . --intent intents/main_scene.json --json
+godot-cli project settings get --project-root . --section application --key run/main_scene --json
+```
+
+### `project autoload` intent shape
+
+```json
+{
+  "autoloads": [
+    { "name": "GameState", "path": "res://scripts/game_state.gd", "singleton": true }
+  ]
+}
+```
+
+Set `"replace_all": true` to remove autoloads not listed in the intent (use sparingly).
+
+```bash
+godot-cli project autoload list --project-root . --json
+godot-cli project autoload apply --project-root . --intent intents/autoload_game_state.json --json
+```
 
 ---
 

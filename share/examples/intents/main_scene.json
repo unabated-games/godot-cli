@@ -1,0 +1,5 @@
+{
+  "application": {
+    "run/main_scene": "res://scenes/main.tscn"
+  }
+}

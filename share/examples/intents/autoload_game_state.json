@@ -1,0 +1,5 @@
+{
+  "autoloads": [
+    { "name": "GameState", "path": "res://scripts/game_state.gd", "singleton": true }
+  ]
+}

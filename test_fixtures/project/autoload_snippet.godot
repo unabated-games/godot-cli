@@ -1,0 +1,10 @@
+config_version=5
+
+[application]
+
+config/name="AutoloadFixture"
+
+[autoload]
+
+GameState="*res://id_reference.gd"
+SceneRouter="*res://ui/button/button.tscn"

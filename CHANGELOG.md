@@ -28,7 +28,9 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 - Component catalog commands and design (`docs/catalog_design.md`).
 - `batch` command for chained apply → validate → diff workflows.
 - **`project input`** — read/write Input Map actions in `project.godot` (`list`, `apply`, `validate`); idempotent per-action replace via intent JSON (keys, joypad buttons/motion).
-- Example intent: `share/examples/intents/wasd_movement.json` (`move_left` / `move_right` / `move_up` / `move_down` with WASD + left stick).
+- **`project settings`** — scalar sections (`application`, `display`, `layer_names`, …): `list`, `get`, `set`, `apply`, `validate` (checks `res://` paths).
+- **`project autoload`** — autoload singletons: `list`, `apply` (merge by name; optional `replace_all`), `validate`.
+- Example intents: `wasd_movement.json`, `main_scene.json`, `display_stretch.json`, `physics_layers.json`, `autoload_game_state.json`.
 - `project_godot` parser/writer for INI-style sections and brace multiline values (Input Map blocks).
 - Validation error `resource_section_order` when `ext_resource` appears after `sub_resource`.
 - `DuplicateResourceId` / `DuplicateExtPath` failure `details` in JSON output (`id`, `path`, `section_name`, `existing_line`, …).

@@ -31,6 +31,7 @@ Work from the **Godot project root** (folder containing `project.godot`). Pass `
 | `scene apply`, `scene plan`, `scene new`, `scene node add/remove/…`, `scene instance add`, `scene set-property`, `catalog *` | **Pass** — needed for `res://`, catalog ids, UID cache, save prep |
 | `scene validate`, `scene inspect`, `scene refs` | **Pass** — enables UID cache and `res://` resolution checks |
 | `project input *` | **Pass** — reads/writes `project.godot` under the project root |
+| `project settings *`, `project autoload *` | **Pass** — main scene, display, layer names, autoloads |
 | `scene node list`, `scene node get`, `scene diff` | **Optional** — accepted for uniformity; ignored (file-only reads) |
 
 Agents may pass `--project-root .` on all scene commands when working inside a Godot project; it is only *required* for writes, catalog, and validation that touches project paths.
@@ -87,6 +88,10 @@ godot-cli project input apply --project-root . \
 godot-cli project input apply --project-root . \
   --intent intents/wasd_movement.json --json
 godot-cli project input validate --project-root . --json
+
+# Main scene, display, layer names, autoloads
+godot-cli project settings apply --project-root . --intent intents/main_scene.json --json
+godot-cli project autoload apply --project-root . --intent intents/autoload_game_state.json --json
 ```
 
 Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Use with a movement script that calls `Input.get_vector("move_left", "move_right", "move_up", "move_down")`. Re-applying the same intent is idempotent (replaces each action by name).
@@ -123,6 +128,9 @@ Copy examples from `$GODOT_CLI_HOME/examples/intents/` (`player_with_icon.json`,
 | Reuse existing texture | `assign_ext` dedupes by `res://` path; in patches you may also set `ExtResource("<existing_id>")` from `scene inspect` / `scene refs` |
 | Instance catalog UI | `scene instance add --catalog-id` |
 | Player WASD + joypad | Write `scripts/player.gd`, attach via `player_2d`/`assign_ext`, then `project input apply` with `wasd_movement.json` |
+| Set main scene | `project settings apply` with `main_scene.json` or `settings set --section application --key run/main_scene --value res://…` |
+| Game singleton | `project autoload apply` with `autoload_game_state.json` |
+| Physics layer names | `project settings apply` with `physics_layers.json` |
 
 `player_2d` optional fields: `texture` / `sprite_texture` / `texture_path`, `modulate`, `position`, `script`, `shape_id_hint`, `radius`, `sprite` (bool).
 

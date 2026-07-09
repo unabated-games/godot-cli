@@ -36,6 +36,20 @@ pub const Section = struct {
         return null;
     }
 
+    pub fn getEntry(self: *const Section, key: []const u8) ?[]const u8 {
+        const index = self.findEntry(key) orelse return null;
+        return self.entries.items[index].value;
+    }
+
+    pub fn removeEntry(self: *Section, allocator: std.mem.Allocator, key: []const u8) bool {
+        const index = self.findEntry(key) orelse return false;
+        const old = self.entries.items[index];
+        allocator.free(old.key);
+        allocator.free(old.value);
+        _ = self.entries.orderedRemove(index);
+        return true;
+    }
+
     pub fn setEntry(self: *Section, allocator: std.mem.Allocator, key: []const u8, value: []const u8) Error!void {
         const key_copy = try allocator.dupe(u8, key);
         errdefer allocator.free(key_copy);
@@ -231,6 +245,35 @@ pub fn render(allocator: std.mem.Allocator, doc: *const Document) Error![]u8 {
     }
 
     return try out.toOwnedSlice(allocator);
+}
+
+pub fn unquoteValue(value: []const u8) ?[]const u8 {
+    if (value.len >= 2 and value[0] == '"' and value[value.len - 1] == '"') {
+        return value[1 .. value.len - 1];
+    }
+    return null;
+}
+
+pub fn formatQuotedString(allocator: std.mem.Allocator, text: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.append(allocator, '"');
+    for (text) |c| {
+        if (c == '"' or c == '\\') try out.append(allocator, '\\');
+        try out.append(allocator, c);
+    }
+    try out.append(allocator, '"');
+    return try out.toOwnedSlice(allocator);
+}
+
+pub fn formatGodotValue(allocator: std.mem.Allocator, value: std.json.Value) Error![]u8 {
+    return switch (value) {
+        .string => |text| formatQuotedString(allocator, text),
+        .integer => |n| try std.fmt.allocPrint(allocator, "{d}", .{n}),
+        .float => |f| try std.fmt.allocPrint(allocator, "{d}", .{f}),
+        .bool => |b| try std.fmt.allocPrint(allocator, "{s}", .{if (b) "true" else "false"}),
+        else => error.InvalidFormat,
+    };
 }
 
 test "parse project with input section" {

@@ -413,6 +413,32 @@ pub fn build(b: *std.Build) void {
     project_input_list_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&project_input_list_smoke.step);
 
+    const project_settings_apply_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\cp test_fixtures/project/project.godot "$tmp/project.godot" &&
+        \\out=$(./zig-out/bin/godot-cli project settings apply --project-root "$tmp" --intent share/examples/intents/main_scene.json --json) &&
+        \\rm -rf "$tmp" &&
+        \\echo "$out" | grep -q 'run/main_scene' &&
+        \\echo "$out" | grep -q '"added_count":1'
+    });
+    project_settings_apply_smoke.setCwd(b.path("."));
+    project_settings_apply_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_settings_apply_smoke.step);
+
+    const project_autoload_list_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\cp test_fixtures/project/autoload_snippet.godot "$tmp/project.godot" &&
+        \\out=$(./zig-out/bin/godot-cli project autoload list --project-root "$tmp" --json) &&
+        \\rm -rf "$tmp" &&
+        \\echo "$out" | grep -q '"autoload_count":2' &&
+        \\echo "$out" | grep -q 'GameState'
+    });
+    project_autoload_list_smoke.setCwd(b.path("."));
+    project_autoload_list_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_autoload_list_smoke.step);
+
     const material_inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli resource inspect test_fixtures/project/sample_material.tres --json --no-validate) &&
