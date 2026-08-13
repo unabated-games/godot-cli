@@ -1,5 +1,10 @@
 //! Godot `ResourceUID` encoding and deterministic path-based ID generation.
 //! Ported from `core/io/resource_uid.cpp`.
+//!
+//! Derived from the Godot Engine (MIT/Expat):
+//!   Copyright (c) 2014-present Godot Engine contributors.
+//!   Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
+//! See THIRDPARTY.md for the full notice.
 
 const std = @import("std");
 const hash = @import("hash.zig");

@@ -190,6 +190,10 @@ cp "$SCRIPT_DIR/docs/agent_quickstart.md" "$DOCS_DIR/"
 cp "$SCRIPT_DIR/docs/mcp_tools.json" "$DOCS_DIR/"
 cp -R "$SCRIPT_DIR/share/examples/." "$EXAMPLES_DIR/"
 
+# The MIT and Apache-2.0 notices have to travel with the binary.
+cp "$SCRIPT_DIR/LICENSE" "$SCRIPT_DIR/THIRDPARTY.md" "$PREFIX/"
+cp -R "$SCRIPT_DIR/third_party" "$PREFIX/third_party"
+
 # Bundled skill copy inside install prefix (used for --skills-only refresh)
 SKILL_SRC="$(skill_src_dir)" || SKILL_SRC="$SCRIPT_DIR/skills/godot-scene-authoring"
 rm -rf "$SKILLS_DIR"

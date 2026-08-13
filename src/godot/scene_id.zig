@@ -1,5 +1,10 @@
 //! Godot `Resource::generate_scene_unique_id` and seeding.
 //! Ported from `core/io/resource.cpp`.
+//!
+//! Derived from the Godot Engine (MIT/Expat):
+//!   Copyright (c) 2014-present Godot Engine contributors.
+//!   Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
+//! See THIRDPARTY.md for the full notice.
 
 const std = @import("std");
 const hash = @import("hash.zig");

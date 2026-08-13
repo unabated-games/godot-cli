@@ -1,5 +1,10 @@
 //! Godot-compatible hash functions ported from `core/templates/hashfuncs.h` and
 //! `core/string/ustring.cpp`.
+//!
+//! Derived from the Godot Engine (MIT/Expat):
+//!   Copyright (c) 2014-present Godot Engine contributors.
+//!   Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
+//! See THIRDPARTY.md for the full notice.
 
 pub const murmur3_seed: u32 = 0x7F07C65;
 

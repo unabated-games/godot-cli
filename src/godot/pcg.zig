@@ -1,5 +1,15 @@
 //! PCG32 random number generator used by Godot's `RandomPCG`.
-//! Ported from `thirdparty/misc/pcg.cpp`.
+//!
+//! Ported to Zig from the minimal PCG32 implementation Godot vendors as
+//! `thirdparty/misc/pcg.cpp`. That file is Apache-2.0, not Expat:
+//!
+//!   Copyright 2014 M.E. O'Neill — https://www.pcg-random.org/
+//!   Licensed under the Apache License, Version 2.0.
+//!   See third_party/licenses/Apache-2.0.txt for the full text.
+//!
+//! Changes from the original: translated from C to Zig using wrapping
+//! arithmetic operators and explicit integer types. Algorithm, constants, and
+//! output sequence are unchanged. See THIRDPARTY.md.
 
 pub const default_inc: u64 = 1442695040888963407;
 

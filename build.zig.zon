@@ -75,6 +75,11 @@
         "build.zig.zon",
         "src",
         "docs",
+        "templates",
+        "third_party",
         "README.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        "THIRDPARTY.md",
     },
 }
