@@ -587,6 +587,29 @@ pub fn build(b: *std.Build) void {
     catalog_update_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&catalog_update_smoke.step);
 
+    // `catalog relink` refuses to guess when the uid cache has not caught up
+    // with the move. The repair itself is unit-tested in catalog_relink.zig,
+    // which builds its own uid cache rather than needing Godot to regenerate one.
+    const catalog_relink_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d /tmp/godot_cli_relink.XXXXXX) &&
+        \\cp -R test_fixtures/project/. "$tmp/" &&
+        \\rm -f "$tmp/ui/button.manifest.tres" "$tmp/instanced_child.manifest.json" &&
+        \\./zig-out/bin/godot-cli catalog add res://ui/button/button.tscn \
+        \\  --project-root "$tmp" --id ui/button --summary "Standard button" \
+        \\  --when-to-use "UI" --tags ui,button --json >/dev/null &&
+        \\mkdir -p "$tmp/widgets" && mv "$tmp/ui/button" "$tmp/widgets/button" &&
+        \\if ./zig-out/bin/godot-cli catalog validate --project-root "$tmp" >/dev/null 2>&1; then exit 1; fi &&
+        \\out=$(./zig-out/bin/godot-cli catalog relink --project-root "$tmp" --json 2>/dev/null || true) &&
+        \\echo "$out" | grep -q '"unresolved":1' &&
+        \\echo "$out" | grep -q 'uid_cache.bin' &&
+        \\grep -q 'res://ui/button/button.tscn' "$tmp/widgets/button/button.manifest.json" &&
+        \\rm -rf "$tmp"
+    });
+    catalog_relink_smoke.setCwd(b.path("."));
+    catalog_relink_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_relink_smoke.step);
+
     // Regression: stdout must respect the shell-owned file offset. With a
     // positional-mode writer every invocation pwrites at offset 0 and clobbers
     // whatever the redirect target already holds.

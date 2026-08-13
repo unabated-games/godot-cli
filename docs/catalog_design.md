@@ -133,6 +133,47 @@ you have to fill in are already named and typed for you.
 rows for signals that no longer exist are dropped, and newly declared signals gain
 blank rows. Without `--update`, an existing manifest is never overwritten.
 
+### When a scene moves
+
+`scene` is a plain path string, and Godot does not rewrite it when a `.tscn` moves —
+its dependency tracking follows `ext_resource` and `uid://` references, not arbitrary
+string properties. This is true of both manifest formats. So a move leaves the
+manifest pointing at nothing:
+
+```
+$ godot-cli catalog validate --project-root .
+error  scene_not_found  scene file does not exist under project root
+exit 1
+```
+
+The failure is loud rather than silent: the entry becomes invalid, so it drops out of
+`catalog list` and out of the exported digest. An agent is never handed a component
+whose scene has vanished.
+
+`scene_uid` is the anchor that survives the move. The uid stays in the scene's
+`[gd_scene]` header, and Godot's `.godot/uid_cache.bin` maps it to the current path:
+
+```bash
+godot-cli catalog relink --project-root .          # --dry-run to preview
+```
+
+For every manifest whose scene is missing, this resolves `scene_uid` through the uid
+cache and rewrites `scene`. It works from the manifest outward, so it also repairs a
+manifest that did not travel with its scene. `id` and prose are preserved — a move
+never changes the catalog's public key.
+
+Two limits worth knowing:
+
+- **The uid cache must have caught up.** Godot refreshes it when the project is
+  opened or imported; a `git mv` with the editor closed leaves it stale. Relink
+  refuses to guess in that case, reporting `unresolved` and exiting 1 rather than
+  inventing a path.
+- **`.tres` manifests are not rewritten.** They are reported as `manual`, with the
+  `resource set-property` invocation to run.
+
+`catalog relink` exits 1 if any manifest is still unrepaired afterwards, so it can
+gate CI without a separate `validate` pass.
+
 Builtins and project entries are **peers** in search results. There is **no shadowing** — builtins are explicit alternatives, not silent fallbacks. Manifests may reference builtins via `related_ids` / `prefer_over_ids`.
 
 ---

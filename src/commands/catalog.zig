@@ -2,6 +2,7 @@ const std = @import("std");
 const spec = @import("../cli/spec.zig");
 const app_mod = @import("../cli/app.zig");
 const catalog_add = @import("../godot/catalog_add.zig");
+const catalog_relink = @import("../godot/catalog_relink.zig");
 const catalog_scan = @import("../godot/catalog_scan.zig");
 const catalog_show = @import("../godot/catalog_show.zig");
 const catalog_search = @import("../godot/catalog_search.zig");
@@ -270,6 +271,73 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 fn freeStringList(allocator: std.mem.Allocator, items: []const []const u8) void {
     for (items) |item| allocator.free(item);
     if (items.len > 0) allocator.free(items);
+}
+
+fn relinkHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const project_root = projectRootFrom(inv) orelse return error.Usage;
+    const dry_run = inv.flag("dry-run");
+
+    var owned_cache: ?uid_cache.Cache = null;
+    defer if (owned_cache) |*cache| cache.deinit(cli.allocator);
+    if (loadUidCacheOptional(cli, project_root)) |maybe_cache| {
+        owned_cache = maybe_cache;
+    } else |_| {}
+
+    var result = try catalog_relink.relinkProject(
+        cli.allocator,
+        cli.io,
+        project_root,
+        if (owned_cache) |*cache| cache else null,
+        dry_run,
+    );
+    defer result.deinit(cli.allocator);
+
+    var entries_json = std.json.Array.init(cli.allocator);
+    for (result.entries) |entry| {
+        var obj: std.json.ObjectMap = .{};
+        try obj.put(cli.allocator, "id", try jsonString(cli.allocator, entry.id));
+        try obj.put(cli.allocator, "manifest_path", try jsonString(cli.allocator, entry.manifest_path));
+        try obj.put(cli.allocator, "status", try jsonString(cli.allocator, entry.status.jsonString()));
+        try obj.put(cli.allocator, "scene", try jsonString(cli.allocator, entry.old_scene));
+        if (entry.new_scene.len > 0) {
+            try obj.put(cli.allocator, "new_scene", try jsonString(cli.allocator, entry.new_scene));
+        }
+        if (entry.reason.len > 0) {
+            try obj.put(cli.allocator, "reason", try jsonString(cli.allocator, entry.reason));
+        }
+        try entries_json.append(.{ .object = obj });
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "project_root", try jsonString(cli.allocator, result.project_root));
+    try data.put(cli.allocator, "checked", .{ .integer = @intCast(result.checked) });
+    try data.put(cli.allocator, "relinked", .{ .integer = @intCast(result.relinked) });
+    try data.put(cli.allocator, "unresolved", .{ .integer = @intCast(result.unresolved) });
+    try data.put(cli.allocator, "manual", .{ .integer = @intCast(result.manual) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = dry_run });
+    try data.put(cli.allocator, "entries", .{ .array = entries_json });
+
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "catalog relink: {d} checked, {d} relinked, {d} unresolved, {d} manual{s}",
+        .{
+            result.checked,
+            result.relinked,
+            result.unresolved,
+            result.manual,
+            if (dry_run) " (dry run)" else "",
+        },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{summary},
+        // Anything still pointing at a missing scene keeps this failing, so a
+        // relink step in CI does not go green on a half-repair.
+        .exit_code = if (result.hasUnrepaired()) .failure else null,
+    };
 }
 
 fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -573,6 +641,13 @@ pub fn commands() spec.CommandSpec {
                 .description = "Writes <scene>.manifest.json beside the scene, filling scene_uid from the scene header and scaffolding a row for each signal declared by the root script. With --update, prose already written is preserved.",
                 .options = &add_options,
                 .handler = addHandler,
+            },
+            .{
+                .name = "relink",
+                .summary = "Repoint manifests whose scene has moved",
+                .description = "For every manifest whose scene file is missing, resolves its scene_uid through .godot/uid_cache.bin and rewrites the scene path. Requires the project to have been opened in Godot since the move, since the editor is what refreshes that cache. Exits 1 if any manifest is still unrepaired.",
+                .options = &.{ project_root_opt, dry_run_opt },
+                .handler = relinkHandler,
             },
             .{
                 .name = "scan",

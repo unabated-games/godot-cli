@@ -17,6 +17,7 @@ pub const scene_refs = @import("scene_refs.zig");
 pub const scene_resources = @import("scene_resources.zig");
 pub const catalog_scan = @import("catalog_scan.zig");
 pub const catalog_add = @import("catalog_add.zig");
+pub const catalog_relink = @import("catalog_relink.zig");
 pub const catalog_builtins = @import("catalog_builtins.zig");
 pub const catalog_show = @import("catalog_show.zig");
 pub const catalog_search = @import("catalog_search.zig");

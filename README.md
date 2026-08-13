@@ -146,6 +146,7 @@ godot-cli catalog add res://ui/button/button.tscn --project-root . --update
 godot-cli catalog list --project-root . --json
 godot-cli catalog show ui/button --project-root . --json
 godot-cli catalog validate --project-root . --json
+godot-cli catalog relink --project-root . --dry-run   # repoint manifests whose scene moved
 godot-cli catalog search button --project-root . --json
 godot-cli catalog export --project-root . --output AGENTS.md
 
