@@ -1,40 +1,105 @@
 name: CI
 
-# Manual only — run from GitHub Actions → CI → Run workflow when you want remote checks.
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+
+# A newer push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: 0.16.0
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: ${{ env.ZIG_VERSION }}
 
-      - name: Run unit tests
+      - name: Check formatting
+        run: zig fmt --check src build.zig
+
+      - name: Run tests
         run: zig build test
 
-  test-godot:
+  cross-compile:
+    name: cross-compile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: ${{ env.ZIG_VERSION }}
 
-      - name: Install Godot 4
+      # Guards against host-only APIs (e.g. std.c.getenv without libc) creeping
+      # back in and silently breaking every non-macOS user.
+      - name: Build for every supported target
         run: |
-          GODOT_VERSION=4.4.1
-          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
-          unzip -q "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
-          chmod +x "Godot_v${GODOT_VERSION}-stable_linux.x86_64"
-          echo "GODOT=$(pwd)/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+          for target in \
+            x86_64-linux-gnu \
+            x86_64-linux-musl \
+            aarch64-linux-gnu \
+            x86_64-macos \
+            aarch64-macos \
+            x86_64-windows
+          do
+            echo "::group::$target"
+            zig build -Dtarget="$target" -Doptimize=ReleaseSafe
+            echo "::endgroup::"
+          done
+
+  test-godot:
+    name: godot round-trip
+    # Downloads the Godot editor, so keep it off every PR push.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.7"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: godot-bin
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Install Godot
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p godot-bin
+          asset="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${asset}.zip"
+          curl -fsSL -o godot.zip "$url"
+          unzip -q godot.zip -d godot-bin
+          chmod +x "godot-bin/${asset}"
 
       - name: Run Godot round-trip tests
-        run: zig build test-godot -Dgodot="$GODOT"
+        run: |
+          asset="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          zig build test-godot -Dgodot="$PWD/godot-bin/${asset}"

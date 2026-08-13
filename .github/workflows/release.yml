@@ -1,0 +1,109 @@
+name: Release
+
+# Tag a release with `git tag v0.1.0 && git push origin v0.1.0`.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (without the leading v), e.g. 0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-linux-musl
+          - aarch64-linux-musl
+          - x86_64-macos
+          - aarch64-macos
+          - x86_64-windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          zig build \
+            -Dtarget=${{ matrix.target }} \
+            -Doptimize=ReleaseFast \
+            -Dversion-string=${{ steps.version.outputs.version }} \
+            --prefix out
+
+      # Ship the templates and docs the binary expects, so the archive is a
+      # complete install rather than just an executable.
+      - name: Package
+        id: package
+        run: |
+          name="godot-cli-${{ steps.version.outputs.version }}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp -R out/bin "dist/$name/bin"
+          cp -R templates "dist/$name/templates"
+          mkdir -p "dist/$name/docs"
+          cp docs/agent_quickstart.md docs/agent_scene_authoring.md \
+             docs/agent_batch_commands.md docs/mcp_tools.json "dist/$name/docs/"
+          cp -R share/examples "dist/$name/examples"
+          cp -R skills "dist/$name/skills"
+          cp README.md CHANGELOG.md LICENSE THIRDPARTY.md "dist/$name/"
+          cp -R third_party "dist/$name/third_party"
+          cd dist
+          if [ "${{ matrix.target }}" = "x86_64-windows" ]; then
+            zip -qr "$name.zip" "$name"
+            echo "artifact=dist/$name.zip" >> "$GITHUB_OUTPUT"
+          else
+            tar -czf "$name.tar.gz" "$name"
+            echo "artifact=dist/$name.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-cli-${{ matrix.target }}
+          path: ${{ steps.package.outputs.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: true

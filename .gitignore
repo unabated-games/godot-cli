@@ -10,3 +10,18 @@ docgen_tmp/
 # Godot editor cache (keep uid_cache.bin and scene_id_cache.json fixtures)
 test_fixtures/project/.godot/editor/
 .godot/
+
+### os ###
+.DS_Store
+._*
+Thumbs.db
+
+### editors ###
+.idea/
+*.swp
+
+# Skills are authored in skills/ and copied out by install.sh
+.cursor/skills/
+
+# Backups left behind if a batch run is interrupted
+*.godot-cli-batch-backup
