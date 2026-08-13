@@ -111,7 +111,7 @@ pub fn showById(
         return try showBuiltin(allocator, builtin);
     }
     const root = project_root orelse return error.ProjectRootRequired;
-    var scan = try catalog_scan.scanProject(allocator, io, root, cache);
+    var scan = try catalog_scan.scanProject(allocator, io, root);
     defer scan.deinit(allocator);
     const entry = findEntryById(scan.entries, id) orelse return error.CatalogEntryNotFound;
     return try showManifestEntry(allocator, io, root, cache, entry);
@@ -326,7 +326,6 @@ fn cloneManifestEntry(allocator: std.mem.Allocator, entry: *const catalog_scan.M
         .manifest_res_path = if (entry.manifest_res_path) |path| try allocator.dupe(u8, path) else null,
         .catalog_format_version = entry.catalog_format_version,
         .id = try allocator.dupe(u8, entry.id),
-        .uid = try allocator.dupe(u8, entry.uid),
         .scene = try allocator.dupe(u8, entry.scene),
         .scene_uid = try allocator.dupe(u8, entry.scene_uid),
         .tags = try tags.toOwnedSlice(allocator),

@@ -234,7 +234,7 @@ fn renderManifest(allocator: std.mem.Allocator, input: RenderInput) Error![]cons
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
-    try appendFmt(allocator, &out, "{{\n  \"catalog_format_version\": {d},\n", .{catalog_scan.catalog_format_version_json});
+    try appendFmt(allocator, &out, "{{\n  \"catalog_format_version\": {d},\n", .{catalog_scan.catalog_format_version_supported});
     try writeStringField(allocator, &out, "id", input.id, 1, true);
     try writeStringField(allocator, &out, "scene", input.scene, 1, true);
     if (input.scene_uid.len > 0) try writeStringField(allocator, &out, "scene_uid", input.scene_uid, 1, true);

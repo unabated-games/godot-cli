@@ -94,7 +94,7 @@ godot-cli project settings apply --project-root . --intent intents/main_scene.js
 godot-cli project autoload apply --project-root . --intent intents/autoload_game_state.json --json
 
 # Editor plugins + rendering + physics
-godot-cli project plugins enable --project-root . --plugin godot_power_ai --json
+godot-cli project plugins enable --project-root . --plugin my_addon --json
 godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
 godot-cli project physics apply --project-root . --intent intents/physics_jolt.json --json
 

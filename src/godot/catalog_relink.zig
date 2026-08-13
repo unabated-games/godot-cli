@@ -31,15 +31,12 @@ pub const Status = enum {
     relinked,
     /// Scene is missing and the uid could not be resolved to an existing file.
     unresolved,
-    /// Scene is missing and the manifest is a `.tres`, which this does not edit.
-    manual,
 
     pub fn jsonString(self: Status) []const u8 {
         return switch (self) {
             .ok => "ok",
             .relinked => "relinked",
             .unresolved => "unresolved",
-            .manual => "manual",
         };
     }
 };
@@ -66,12 +63,11 @@ pub const Result = struct {
     checked: usize = 0,
     relinked: usize = 0,
     unresolved: usize = 0,
-    manual: usize = 0,
     entries: []EntryResult,
 
     /// True when a manifest is still pointing at a missing scene afterwards.
     pub fn hasUnrepaired(self: *const Result) bool {
-        return self.unresolved > 0 or self.manual > 0;
+        return self.unresolved > 0;
     }
 
     pub fn deinit(self: *Result, allocator: std.mem.Allocator) void {
@@ -88,7 +84,7 @@ pub fn relinkProject(
     cache: ?*const uid_cache.Cache,
     dry_run: bool,
 ) Error!Result {
-    var scan = try catalog_scan.scanProject(allocator, io, project_root, cache);
+    var scan = try catalog_scan.scanProject(allocator, io, project_root);
     defer scan.deinit(allocator);
 
     var entries: std.ArrayList(EntryResult) = .empty;
@@ -99,7 +95,6 @@ pub fn relinkProject(
 
     var relinked: usize = 0;
     var unresolved: usize = 0;
-    var manual: usize = 0;
 
     for (scan.entries) |*entry| {
         if (!try sceneMissing(allocator, io, project_root, entry.scene)) {
@@ -110,19 +105,6 @@ pub fn relinkProject(
                 .old_scene = try allocator.dupe(u8, entry.scene),
                 .new_scene = try allocator.dupe(u8, ""),
                 .reason = try allocator.dupe(u8, ""),
-            });
-            continue;
-        }
-
-        if (entry.format == .tres) {
-            manual += 1;
-            try entries.append(allocator, .{
-                .id = try allocator.dupe(u8, entry.id),
-                .manifest_path = try allocator.dupe(u8, entry.manifest_path),
-                .status = .manual,
-                .old_scene = try allocator.dupe(u8, entry.scene),
-                .new_scene = try allocator.dupe(u8, ""),
-                .reason = try allocator.dupe(u8, "tres manifests are not rewritten; use resource set-property --section resource --property scene"),
             });
             continue;
         }
@@ -173,7 +155,6 @@ pub fn relinkProject(
         .checked = checked,
         .relinked = relinked,
         .unresolved = unresolved,
-        .manual = manual,
         .entries = try entries.toOwnedSlice(allocator),
     };
 }
@@ -363,7 +344,7 @@ test "relink repoints a manifest at the uid's current path" {
     try std.testing.expectEqualStrings("res://widgets/widget.tscn", result.entries[0].new_scene);
 
     // The rewritten manifest keeps its id and prose.
-    var rescan = try catalog_scan.scanProject(allocator, io, root, &cache);
+    var rescan = try catalog_scan.scanProject(allocator, io, root);
     defer rescan.deinit(allocator);
     try std.testing.expectEqual(@as(usize, 1), rescan.entries.len);
     const entry = &rescan.entries[0];
@@ -393,7 +374,7 @@ test "relink leaves the manifest alone on a dry run" {
     defer result.deinit(allocator);
     try std.testing.expectEqual(@as(usize, 1), result.relinked);
 
-    var rescan = try catalog_scan.scanProject(allocator, io, root, &cache);
+    var rescan = try catalog_scan.scanProject(allocator, io, root);
     defer rescan.deinit(allocator);
     try std.testing.expectEqualStrings("res://ui/widget.tscn", rescan.entries[0].scene);
     try std.testing.expect(!rescan.entries[0].valid);

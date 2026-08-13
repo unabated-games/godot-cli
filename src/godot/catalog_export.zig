@@ -33,7 +33,7 @@ pub fn exportCatalog(
     output_path: []const u8,
     dry_run: bool,
 ) ExportError!ExportResult {
-    var scan = try catalog_scan.scanProject(allocator, io, project_root, cache);
+    var scan = try catalog_scan.scanProject(allocator, io, project_root);
     defer scan.deinit(allocator);
 
     var project_shown: std.ArrayList(catalog_show.ShowResult) = .empty;

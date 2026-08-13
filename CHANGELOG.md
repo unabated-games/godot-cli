@@ -17,15 +17,15 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ### Added
 
-- **JSON catalog manifests (`*.manifest.json`, `catalog_format_version` 2).** Plain data, discovered by filename, requiring no editor addon installed in the project. A `.tres` manifest pins `res://addons/godot_power_ai/power_ai_catalog_manifest.gd` as an `ext_resource`, so the project cannot open it without that addon at that exact path; JSON manifests have no such coupling and an agent can write one directly.
-- **`catalog add`** — create or update a JSON manifest for a scene. Derives `id` from the scene path, fills `scene_uid` from the scene's `[gd_scene]` header, and scaffolds one row per signal declared by the root script using the same GDScript parser `catalog show` uses. `--update` preserves prose already written, drops rows for signals that no longer exist, and adds blank rows for new ones; without it an existing manifest is never overwritten.
-- `catalog scan` reports `json_files_scanned` alongside `tres_files_scanned`, and every entry carries its `format`.
-- **`catalog relink`** — repoint manifests whose scene has moved. A manifest's `scene` is a plain path string and Godot does not rewrite it on a move, since its dependency tracking follows `ext_resource` and `uid://` references rather than arbitrary string properties. `scene_uid` survives the move, so relink resolves it through `.godot/uid_cache.bin` and rewrites the path, preserving `id` and prose. It works from the manifest outward, so it also repairs a manifest that did not travel with its scene. Exits 1 if any manifest is still unrepaired. A stale uid cache — a `git mv` with the editor closed — is reported as `unresolved` rather than guessed at, and `.tres` manifests are reported as `manual`.
+- **Catalog manifests are `*.manifest.json`** (`catalog_format_version` 2) — plain data, identified by filename, needing nothing installed in the Godot project to read or write. An agent can author one directly.
+- **`catalog add`** — create or update a manifest for a scene. Derives `id` from the scene path, fills `scene_uid` from the scene's `[gd_scene]` header, and scaffolds one row per signal declared by the root script, reusing the GDScript parser behind `catalog show`. `--update` preserves prose already written, drops rows for signals that no longer exist, and adds blank rows for new ones; without it an existing manifest is never overwritten.
+- **`catalog relink`** — repoint manifests whose scene has moved. `scene` is a plain path string and Godot does not rewrite it on a move, since its dependency tracking follows `ext_resource` and `uid://` references rather than arbitrary string properties. `scene_uid` survives, so relink resolves it through `.godot/uid_cache.bin` and rewrites the path, preserving `id` and prose. It works from the manifest outward, so it also repairs a manifest that did not travel with its scene. A stale uid cache — a `git mv` with the editor closed — is reported as `unresolved` rather than guessed at. Exits 1 if any manifest is still unrepaired.
 
-### Changed
+### Removed
 
-- `catalog scan` walks for both `*.manifest.json` and `.tres` manifests in a single pass. Validation, deduplication, and all downstream commands are format-agnostic, so `list`, `show`, `search`, `export`, and `validate` treat the two identically — including duplicate `id` / `scene` detection across formats.
-- JSON manifests use `signals` / `functions` rather than `signal_docs` / `function_docs`, and do not carry a `uid`: `id` is the identity and is already uniqueness-checked. The `.tres` schema is unchanged.
+- **Resource-backed (`.tres`) catalog manifests.** They carried a `script_class` and pinned the defining GDScript by path as an `ext_resource`, so a project could not open its own manifests unless that script was installed at exactly that path — a dependency godot-cli itself never had, since it parses the file as text. Manifests are JSON only.
+- The manifest `uid` field, which existed so an editor could stamp one and which nothing consumed. `id` is the identity and is already uniqueness-checked.
+- `catalog scan` no longer reports `tres_files_scanned`; `manifest_files_found` covers it. `scanProject` and `searchCatalog` no longer take a uid cache, since only the `.tres` path used one.
 
 ### Fixed
 

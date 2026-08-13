@@ -1114,7 +1114,7 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
         const id = catalog_id.?;
         if (catalog_builtins.isBuiltinId(id)) return error.BuiltinCatalogEntry;
         const project_root = projectRootFrom(inv) orelse return error.Usage;
-        var scan = try catalog_scan.scanProject(cli.allocator, cli.io, project_root, null);
+        var scan = try catalog_scan.scanProject(cli.allocator, cli.io, project_root);
         defer scan.deinit(cli.allocator);
         const entry = catalog_scan.findValidEntryById(scan.entries, id) orelse return error.CatalogEntryNotFound;
         scene_res_path_owned = try cli.allocator.dupe(u8, entry.scene);

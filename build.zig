@@ -551,7 +551,7 @@ pub fn build(b: *std.Build) void {
         "bash", "-ec",
         \\tmp=$(mktemp -d /tmp/godot_cli_catalog.XXXXXX) &&
         \\cp -R test_fixtures/project/. "$tmp/" &&
-        \\rm -f "$tmp/ui/button.manifest.tres" "$tmp/instanced_child.manifest.json" &&
+        \\rm -f "$tmp/ui/button.manifest.json" "$tmp/instanced_child.manifest.json" &&
         \\out=$(./zig-out/bin/godot-cli catalog add res://ui/button/button.tscn \
         \\  --project-root "$tmp" --summary "A button" --when-to-use "UI" --tags ui,button --json) &&
         \\echo "$out" | grep -q '"signals_scaffolded":1' &&
@@ -573,7 +573,7 @@ pub fn build(b: *std.Build) void {
         "bash", "-ec",
         \\tmp=$(mktemp -d /tmp/godot_cli_catalog_up.XXXXXX) &&
         \\cp -R test_fixtures/project/. "$tmp/" &&
-        \\rm -f "$tmp/ui/button.manifest.tres" &&
+        \\rm -f "$tmp/ui/button.manifest.json" &&
         \\./zig-out/bin/godot-cli catalog add res://instanced_child.tscn \
         \\  --project-root "$tmp" --update --summary "Edited summary" --json >/dev/null &&
         \\grep -q '"summary": "Edited summary"' "$tmp/instanced_child.manifest.json" &&
@@ -594,7 +594,7 @@ pub fn build(b: *std.Build) void {
         "bash", "-ec",
         \\tmp=$(mktemp -d /tmp/godot_cli_relink.XXXXXX) &&
         \\cp -R test_fixtures/project/. "$tmp/" &&
-        \\rm -f "$tmp/ui/button.manifest.tres" "$tmp/instanced_child.manifest.json" &&
+        \\rm -f "$tmp/ui/button.manifest.json" "$tmp/instanced_child.manifest.json" &&
         \\./zig-out/bin/godot-cli catalog add res://ui/button/button.tscn \
         \\  --project-root "$tmp" --id ui/button --summary "Standard button" \
         \\  --when-to-use "UI" --tags ui,button --json >/dev/null &&

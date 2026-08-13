@@ -387,7 +387,7 @@
       "name": "project_plugins_enable",
       "argv": ["project", "plugins", "enable", "--project-root", "<path>"],
       "options": ["--plugin", "--path", "--dry-run"],
-      "json_request": { "argv": ["project", "plugins", "enable", "--project-root", ".", "--plugin", "godot_power_ai", "--json"] }
+      "json_request": { "argv": ["project", "plugins", "enable", "--project-root", ".", "--plugin", "my_addon", "--json"] }
     },
     {
       "name": "project_plugins_apply",

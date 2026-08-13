@@ -123,14 +123,14 @@ Addon must already exist at `addons/<name>/plugin.cfg` — godot-cli does not in
 
 ```json
 {
-  "enable": ["godot_power_ai"],
+  "enable": ["my_addon"],
   "disable": ["old_plugin"]
 }
 ```
 
 ```bash
 godot-cli project plugins list --project-root . --json
-godot-cli project plugins enable --project-root . --plugin godot_power_ai --json
+godot-cli project plugins enable --project-root . --plugin my_addon --json
 godot-cli project plugins apply --project-root . --intent intents/enable_plugins.json --json
 ```
 

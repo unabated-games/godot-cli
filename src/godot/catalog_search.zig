@@ -47,7 +47,6 @@ pub fn searchCatalog(
     allocator: std.mem.Allocator,
     io: std.Io,
     project_root: ?[]const u8,
-    cache: ?*const uid_cache.Cache,
     tag_filter: []const []const u8,
     query: []const u8,
 ) SearchError!SearchResult {
@@ -68,7 +67,7 @@ pub fn searchCatalog(
     }
 
     if (project_root) |root| {
-        var scan = try catalog_scan.scanProject(allocator, io, root, cache);
+        var scan = try catalog_scan.scanProject(allocator, io, root);
         defer scan.deinit(allocator);
         for (scan.entries) |*entry| {
             if (!entry.valid) continue;
@@ -199,7 +198,7 @@ fn hitFromManifest(allocator: std.mem.Allocator, entry: *const catalog_scan.Mani
 
 test "search by tag and query" {
     const allocator = std.testing.allocator;
-    var result = try searchCatalog(allocator, std.testing.io, "test_fixtures/project", null, &.{}, "button");
+    var result = try searchCatalog(allocator, std.testing.io, "test_fixtures/project", &.{}, "button");
     defer result.deinit(allocator);
     try std.testing.expect(result.hits.len >= 1);
 }

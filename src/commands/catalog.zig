@@ -74,7 +74,6 @@ fn buildEntryJson(allocator: std.mem.Allocator, entry: *const catalog_scan.Manif
     }
     try obj.put(allocator, "catalog_format_version", .{ .integer = entry.catalog_format_version });
     try obj.put(allocator, "id", try jsonString(allocator, entry.id));
-    try obj.put(allocator, "uid", try jsonString(allocator, entry.uid));
     try obj.put(allocator, "scene", try jsonString(allocator, entry.scene));
     try obj.put(allocator, "scene_uid", try jsonString(allocator, entry.scene_uid));
     try obj.put(allocator, "tags", .{ .array = try buildStringArrayJson(allocator, entry.tags) });
@@ -96,19 +95,7 @@ fn scanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
     const project_root = projectRootFrom(inv) orelse return error.Usage;
 
-    var owned_cache: ?uid_cache.Cache = null;
-    defer if (owned_cache) |*cache| cache.deinit(cli.allocator);
-
-    if (loadUidCacheOptional(cli, project_root)) |maybe_cache| {
-        owned_cache = maybe_cache;
-    } else |_| {}
-
-    var result = try catalog_scan.scanProject(
-        cli.allocator,
-        cli.io,
-        project_root,
-        if (owned_cache) |*cache| cache else null,
-    );
+    var result = try catalog_scan.scanProject(cli.allocator, cli.io, project_root);
     defer result.deinit(cli.allocator);
 
     var entries_json = std.json.Array.init(cli.allocator);
@@ -120,8 +107,6 @@ fn scanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "project_root", try jsonString(cli.allocator, result.project_root));
-    try data.put(cli.allocator, "tres_files_scanned", .{ .integer = @intCast(result.tres_files_scanned) });
-    try data.put(cli.allocator, "json_files_scanned", .{ .integer = @intCast(result.json_files_scanned) });
     try data.put(cli.allocator, "manifest_files_found", .{ .integer = @intCast(result.manifest_files_found) });
     try data.put(cli.allocator, "entry_count", .{ .integer = @intCast(result.entries.len) });
     try data.put(cli.allocator, "valid_entry_count", .{ .integer = @intCast(valid_count) });
@@ -314,18 +299,16 @@ fn relinkHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "checked", .{ .integer = @intCast(result.checked) });
     try data.put(cli.allocator, "relinked", .{ .integer = @intCast(result.relinked) });
     try data.put(cli.allocator, "unresolved", .{ .integer = @intCast(result.unresolved) });
-    try data.put(cli.allocator, "manual", .{ .integer = @intCast(result.manual) });
     try data.put(cli.allocator, "dry_run", .{ .bool = dry_run });
     try data.put(cli.allocator, "entries", .{ .array = entries_json });
 
     const summary = try std.fmt.allocPrint(
         cli.allocator,
-        "catalog relink: {d} checked, {d} relinked, {d} unresolved, {d} manual{s}",
+        "catalog relink: {d} checked, {d} relinked, {d} unresolved{s}",
         .{
             result.checked,
             result.relinked,
             result.unresolved,
-            result.manual,
             if (dry_run) " (dry run)" else "",
         },
     );
@@ -385,12 +368,7 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         owned_cache = maybe_cache;
     } else |_| {}
 
-    var result = try catalog_scan.scanProject(
-        cli.allocator,
-        cli.io,
-        project_root,
-        if (owned_cache) |*cache| cache else null,
-    );
+    var result = try catalog_scan.scanProject(cli.allocator, cli.io, project_root);
     defer result.deinit(cli.allocator);
 
     var error_count: usize = 0;
@@ -506,19 +484,10 @@ fn searchHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         cli.allocator.free(owned_tags);
     }
 
-    var owned_cache: ?uid_cache.Cache = null;
-    defer if (owned_cache) |*cache| cache.deinit(cli.allocator);
-    if (project_root) |root| {
-        if (loadUidCacheOptional(cli, root)) |maybe_cache| {
-            owned_cache = maybe_cache;
-        } else |_| {}
-    }
-
     var result = try catalog_search.searchCatalog(
         cli.allocator,
         cli.io,
         project_root,
-        if (owned_cache) |*cache| cache else null,
         owned_tags,
         query,
     );

@@ -429,7 +429,7 @@ fn resolveScenePath(allocator: std.mem.Allocator, op_object: std.json.ObjectMap,
     const project_root = options.project_root orelse return error.ProjectRootRequired;
     const io = options.io orelse return error.ProjectRootRequired;
 
-    var scan = try catalog_scan.scanProject(allocator, io, project_root, null);
+    var scan = try catalog_scan.scanProject(allocator, io, project_root);
     defer scan.deinit(allocator);
     const entry = catalog_scan.findValidEntryById(scan.entries, catalog_id) orelse return error.CatalogEntryNotFound;
     return try allocator.dupe(u8, entry.scene);

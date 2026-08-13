@@ -1,16 +1,8 @@
 //! Discover and parse catalog manifests in a Godot project.
 //!
-//! Two on-disk formats are supported, both producing a `ManifestEntry`:
-//!
-//!   - **`*.manifest.json`** (`catalog_format_version` 2) — plain JSON, needs no
-//!     editor addon installed in the project. This is the format `catalog add`
-//!     writes and the one agents should author.
-//!   - **`.tres`** with `script_class="PowerAICatalogManifest"`
-//!     (`catalog_format_version` 1) — authored in the Godot Inspector, requires
-//!     the addon script to be present at the path each manifest pins.
-//!
-//! Validation, deduplication, and everything downstream of `ManifestEntry` are
-//! format-agnostic.
+//! Manifests are `*.manifest.json` — plain data, identified by filename, needing
+//! nothing installed in the project to read or write. `catalog add` writes them
+//! and an agent can author one directly.
 
 const std = @import("std");
 const document = @import("text_format/document.zig");
@@ -19,41 +11,14 @@ const parse = @import("variant/parse.zig");
 const Value = @import("variant/value.zig").Value;
 const project_config = @import("project_config.zig");
 const resource_uid = @import("resource_uid.zig");
-const uid_cache = @import("uid_cache.zig");
 const io_util = @import("../io_util.zig");
 
-pub const manifest_script_class = "PowerAICatalogManifest";
-
-/// Suffix identifying a JSON manifest. Matched on the filename so the scan can
-/// reject candidates without reading them.
+/// Suffix identifying a manifest. Matched on the filename, so the scan rejects
+/// candidates without reading them.
 pub const manifest_json_suffix = ".manifest.json";
 
-/// Format version required of a `.tres` manifest (addon-authored).
-pub const catalog_format_version_tres: i64 = 1;
-/// Format version required of a `*.manifest.json` manifest.
-pub const catalog_format_version_json: i64 = 2;
-
-/// Deprecated alias kept for callers written against the `.tres`-only scan.
-pub const catalog_format_version_supported: i64 = catalog_format_version_tres;
-
-pub const ManifestFormat = enum {
-    tres,
-    json,
-
-    pub fn jsonString(self: ManifestFormat) []const u8 {
-        return switch (self) {
-            .tres => "tres",
-            .json => "json",
-        };
-    }
-
-    pub fn requiredVersion(self: ManifestFormat) i64 {
-        return switch (self) {
-            .tres => catalog_format_version_tres,
-            .json => catalog_format_version_json,
-        };
-    }
-};
+/// Format version a manifest must declare.
+pub const catalog_format_version_supported: i64 = 2;
 
 pub const IssueSeverity = enum {
     @"error",
@@ -92,10 +57,8 @@ pub const DocRow = struct {
 pub const ManifestEntry = struct {
     manifest_path: []const u8,
     manifest_res_path: ?[]const u8 = null,
-    format: ManifestFormat = .tres,
-    catalog_format_version: i64 = 1,
+    catalog_format_version: i64 = catalog_format_version_supported,
     id: []const u8 = "",
-    uid: []const u8 = "",
     scene: []const u8 = "",
     scene_uid: []const u8 = "",
     tags: []const []const u8 = &.{},
@@ -115,7 +78,6 @@ pub const ManifestEntry = struct {
         allocator.free(self.manifest_path);
         if (self.manifest_res_path) |path| allocator.free(path);
         allocator.free(self.id);
-        allocator.free(self.uid);
         allocator.free(self.scene);
         allocator.free(self.scene_uid);
         for (self.tags) |tag| allocator.free(tag);
@@ -143,8 +105,6 @@ pub const ManifestEntry = struct {
 
 pub const ScanResult = struct {
     project_root: []const u8,
-    tres_files_scanned: usize = 0,
-    json_files_scanned: usize = 0,
     manifest_files_found: usize = 0,
     entries: []ManifestEntry,
 
@@ -173,7 +133,6 @@ pub fn scanProject(
     allocator: std.mem.Allocator,
     io: std.Io,
     project_root: []const u8,
-    cache: ?*const uid_cache.Cache,
 ) ScanError!ScanResult {
     const norm_root = std.fs.path.resolve(allocator, &.{project_root}) catch return error.Io;
     errdefer allocator.free(norm_root);
@@ -183,9 +142,9 @@ pub fn scanProject(
     defer allocator.free(project_file);
     std.Io.Dir.cwd().access(io, project_file, .{}) catch return error.InvalidProjectRoot;
 
-    var candidates: std.ArrayList(Candidate) = .empty;
+    var candidates: std.ArrayList([]const u8) = .empty;
     defer {
-        for (candidates.items) |candidate| allocator.free(candidate.path);
+        for (candidates.items) |path| allocator.free(path);
         candidates.deinit(allocator);
     }
     try collectCandidates(allocator, io, norm_root, &candidates);
@@ -196,33 +155,11 @@ pub fn scanProject(
         entries.deinit(allocator);
     }
 
-    var manifest_count: usize = 0;
-    var tres_scanned: usize = 0;
-    var json_scanned: usize = 0;
-    for (candidates.items) |candidate| {
-        switch (candidate.format) {
-            .tres => {
-                tres_scanned += 1;
-                var doc = document.parseFile(allocator, io, candidate.path) catch continue;
-                defer doc.deinit(allocator);
-
-                // Every .tres in the project is a candidate, so the script class
-                // is the only thing separating a manifest from any other resource.
-                if (!isPowerAiManifest(&doc)) continue;
-                manifest_count += 1;
-
-                const entry = try parseManifest(allocator, io, norm_root, cache, candidate.path, &doc);
-                try entries.append(allocator, entry);
-            },
-            .json => {
-                json_scanned += 1;
-                // The filename already identified this as a manifest, so a parse
-                // failure is a broken manifest rather than an unrelated file.
-                manifest_count += 1;
-                const entry = try parseJsonManifest(allocator, io, norm_root, candidate.path);
-                try entries.append(allocator, entry);
-            },
-        }
+    // The filename already identified each candidate as a manifest, so a parse
+    // failure is a broken manifest rather than an unrelated file.
+    for (candidates.items) |path| {
+        const entry = try parseJsonManifest(allocator, io, norm_root, path);
+        try entries.append(allocator, entry);
     }
 
     try validateCollected(allocator, entries.items);
@@ -233,9 +170,7 @@ pub fn scanProject(
 
     return .{
         .project_root = owned_root,
-        .tres_files_scanned = tres_scanned,
-        .json_files_scanned = json_scanned,
-        .manifest_files_found = manifest_count,
+        .manifest_files_found = candidates.items.len,
         .entries = slice,
     };
 }
@@ -247,24 +182,11 @@ fn openDirAt(io: std.Io, path: []const u8) ScanError!std.Io.Dir {
     return std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch return error.Io;
 }
 
-const Candidate = struct {
-    path: []const u8,
-    format: ManifestFormat,
-};
-
-/// Classify a filename as a manifest candidate. JSON manifests are identified by
-/// name; `.tres` files still need parsing to know whether they are manifests.
-fn candidateFormat(name: []const u8) ?ManifestFormat {
-    if (std.mem.endsWith(u8, name, manifest_json_suffix)) return .json;
-    if (std.mem.endsWith(u8, name, ".tres")) return .tres;
-    return null;
-}
-
 fn collectCandidates(
     allocator: std.mem.Allocator,
     io: std.Io,
     dir_path: []const u8,
-    out: *std.ArrayList(Candidate),
+    out: *std.ArrayList([]const u8),
 ) ScanError!void {
     var dir = try openDirAt(io, dir_path);
     defer dir.close(io);
@@ -287,59 +209,15 @@ fn collectCandidates(
                 allocator.free(child_path);
             },
             .file => {
-                const format = candidateFormat(entry.name) orelse {
+                if (!std.mem.endsWith(u8, entry.name, manifest_json_suffix)) {
                     allocator.free(child_path);
                     continue;
-                };
-                try out.append(allocator, .{ .path = child_path, .format = format });
+                }
+                try out.append(allocator, child_path);
             },
             else => allocator.free(child_path),
         }
     }
-}
-
-fn isPowerAiManifest(doc: *const document.Document) bool {
-    const header = doc.sections.items[0].header;
-    if (!std.mem.eql(u8, header.name, "gd_resource")) return false;
-    const script_class = header.getString("script_class") orelse return false;
-    return std.mem.eql(u8, script_class, manifest_script_class);
-}
-
-fn parseManifest(
-    allocator: std.mem.Allocator,
-    io: std.Io,
-    project_root: []const u8,
-    cache: ?*const uid_cache.Cache,
-    manifest_path: []const u8,
-    doc: *const document.Document,
-) ScanError!ManifestEntry {
-    const resource_index = document.findSectionIndexByTagName(doc, "resource") orelse return error.OutOfMemory;
-    const resource = &doc.sections.items[resource_index];
-
-    var entry: ManifestEntry = .{
-        .manifest_path = try allocator.dupe(u8, manifest_path),
-    };
-    errdefer entry.deinit(allocator);
-
-    entry.manifest_res_path = try project_config.filesystemToResPath(allocator, project_root, manifest_path);
-    entry.catalog_format_version = try readIntProperty(allocator, resource, "catalog_format_version") orelse 1;
-    entry.id = try readStringProperty(allocator, resource, "id");
-    entry.uid = try readStringProperty(allocator, resource, "uid");
-    entry.scene = try readSceneProperty(allocator, resource, cache);
-    entry.scene_uid = try readStringProperty(allocator, resource, "scene_uid");
-    entry.tags = try readStringListProperty(allocator, resource, "tags");
-    entry.summary = try readStringProperty(allocator, resource, "summary");
-    entry.when_to_use = try readStringProperty(allocator, resource, "when_to_use");
-    entry.when_not_to_use = try readStringProperty(allocator, resource, "when_not_to_use");
-    entry.related_ids = try readStringListProperty(allocator, resource, "related_ids");
-    entry.prefer_over_ids = try readStringListProperty(allocator, resource, "prefer_over_ids");
-    entry.notes = try readStringProperty(allocator, resource, "notes");
-    entry.export_root_script = try readStringProperty(allocator, resource, "export_root_script");
-    entry.signal_docs = try readDocRowsProperty(allocator, resource, "signal_docs", true);
-    entry.function_docs = try readDocRowsProperty(allocator, resource, "function_docs", false);
-
-    try validateEntry(allocator, io, project_root, &entry);
-    return entry;
 }
 
 /// Parse a `*.manifest.json` file.
@@ -355,8 +233,7 @@ fn parseJsonManifest(
 ) ScanError!ManifestEntry {
     var entry: ManifestEntry = .{
         .manifest_path = try allocator.dupe(u8, manifest_path),
-        .format = .json,
-        .catalog_format_version = catalog_format_version_json,
+        .catalog_format_version = catalog_format_version_supported,
     };
     errdefer entry.deinit(allocator);
 
@@ -377,9 +254,8 @@ fn parseJsonManifest(
         else => return try jsonManifestError(allocator, entry, "manifest must be a JSON object"),
     };
 
-    entry.catalog_format_version = jsonInt(root, "catalog_format_version") orelse catalog_format_version_json;
+    entry.catalog_format_version = jsonInt(root, "catalog_format_version") orelse catalog_format_version_supported;
     entry.id = try jsonString(allocator, root, "id");
-    entry.uid = try jsonString(allocator, root, "uid");
     entry.scene = try jsonString(allocator, root, "scene");
     entry.scene_uid = try jsonString(allocator, root, "scene_uid");
     entry.tags = try jsonStringList(allocator, root, "tags");
@@ -504,21 +380,16 @@ fn validateEntry(
     var issues: std.ArrayList(Issue) = .empty;
     errdefer freeIssues(allocator, &issues);
 
-    if (entry.catalog_format_version != entry.format.requiredVersion()) {
+    if (entry.catalog_format_version != catalog_format_version_supported) {
         const message = try std.fmt.allocPrint(
             allocator,
-            "catalog_format_version must be {d} for a {s} manifest",
-            .{ entry.format.requiredVersion(), entry.format.jsonString() },
+            "catalog_format_version must be {d}",
+            .{catalog_format_version_supported},
         );
         defer allocator.free(message);
         try appendIssue(allocator, &issues, .@"error", "unsupported_format_version", message);
     }
     if (entry.id.len == 0) try appendIssue(allocator, &issues, .@"error", "missing_id", "catalog id is required");
-    // `uid` only ever existed so the editor addon could stamp one; JSON
-    // manifests identify themselves by `id`.
-    if (entry.format == .tres and entry.uid.len == 0) {
-        try appendIssue(allocator, &issues, .@"error", "missing_uid", "manifest uid is required");
-    }
     if (entry.scene.len == 0) {
         try appendIssue(allocator, &issues, .@"error", "missing_scene", "scene path is required");
     } else if (!std.mem.startsWith(u8, entry.scene, "res://")) {
@@ -621,40 +492,6 @@ fn freeIssues(allocator: std.mem.Allocator, issues: *std.ArrayList(Issue)) void 
     issues.deinit(allocator);
 }
 
-fn readSceneProperty(
-    allocator: std.mem.Allocator,
-    section: *const document.Section,
-    cache: ?*const uid_cache.Cache,
-) ScanError![]const u8 {
-    const scene = try readStringProperty(allocator, section, "scene");
-    if (scene.len > 0) {
-        const resolved = try resolveSceneReference(allocator, scene, cache);
-        allocator.free(scene);
-        return resolved;
-    }
-    allocator.free(scene);
-    return resolveSceneReference(allocator, try readStringProperty(allocator, section, "_scene_storage"), cache);
-}
-
-fn resolveSceneReference(
-    allocator: std.mem.Allocator,
-    reference: []const u8,
-    cache: ?*const uid_cache.Cache,
-) ScanError![]const u8 {
-    if (reference.len == 0) return try allocator.dupe(u8, "");
-    if (std.mem.startsWith(u8, reference, "res://")) return try allocator.dupe(u8, reference);
-    if (std.mem.startsWith(u8, reference, "uid://")) {
-        if (cache) |c| {
-            const id = resource_uid.textToId(reference);
-            if (id != resource_uid.invalid_id) {
-                if (c.pathForId(id)) |path| return try allocator.dupe(u8, path);
-            }
-        }
-        return try allocator.dupe(u8, reference);
-    }
-    return try allocator.dupe(u8, reference);
-}
-
 fn readSceneHeaderUid(allocator: std.mem.Allocator, io: std.Io, scene_path: []const u8) ScanError!?[]const u8 {
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, scene_path, allocator, .unlimited) catch return null;
     defer allocator.free(bytes);
@@ -667,160 +504,10 @@ fn readSceneHeaderUid(allocator: std.mem.Allocator, io: std.Io, scene_path: []co
     return null;
 }
 
-fn readStringProperty(allocator: std.mem.Allocator, section: *const document.Section, name: []const u8) ScanError![]const u8 {
-    if (try readPropertyValue(allocator, section, name)) |value| {
-        defer value.deinit(allocator);
-        if (valueAsString(&value)) |text| return try allocator.dupe(u8, text);
-    }
-    return try allocator.dupe(u8, "");
-}
-
-fn readIntProperty(allocator: std.mem.Allocator, section: *const document.Section, name: []const u8) ScanError!?i64 {
-    if (try readPropertyValue(allocator, section, name)) |value| {
-        defer value.deinit(allocator);
-        return switch (value.kind) {
-            .integer => value.integer,
-            .float => @intFromFloat(value.float_val),
-            else => null,
-        };
-    }
-    return null;
-}
-
-fn readStringListProperty(allocator: std.mem.Allocator, section: *const document.Section, name: []const u8) ScanError![]const []const u8 {
-    if (try readPropertyValue(allocator, section, name)) |value| {
-        defer value.deinit(allocator);
-        return try valueToStringSlice(allocator, &value);
-    }
-    return &.{};
-}
-
-fn readDocRowsProperty(
-    allocator: std.mem.Allocator,
-    section: *const document.Section,
-    name: []const u8,
-    is_signal: bool,
-) ScanError![]DocRow {
-    if (try readPropertyValue(allocator, section, name)) |value| {
-        defer value.deinit(allocator);
-        return try valueToDocRows(allocator, &value, is_signal);
-    }
-    return &.{};
-}
-
-fn readPropertyValue(allocator: std.mem.Allocator, section: *const document.Section, name: []const u8) ScanError!?Value {
-    const raw = try readPropertyRaw(allocator, section, name) orelse return null;
-    defer allocator.free(raw);
-    return parse.parsePropertyValue(allocator, raw) catch return null;
-}
-
-fn readPropertyRaw(allocator: std.mem.Allocator, section: *const document.Section, name: []const u8) ScanError!?[]const u8 {
-    var start_index: ?usize = null;
-    for (section.properties.items, 0..) |prop, index| {
-        const split = property_line.splitPropertyLine(prop.raw) orelse continue;
-        if (std.mem.eql(u8, split.name, name)) {
-            start_index = index;
-            break;
-        }
-    }
-    const start = start_index orelse return null;
-
-    const first = section.properties.items[start];
-    const eq = std.mem.indexOf(u8, first.raw, " = ") orelse return null;
-    var buf: std.ArrayList(u8) = .empty;
-    errdefer buf.deinit(allocator);
-    try buf.appendSlice(allocator, std.mem.trim(u8, first.raw[eq + 3 ..], &std.ascii.whitespace));
-
-    for (section.properties.items[start + 1 ..]) |prop| {
-        if (property_line.splitPropertyLine(prop.raw) != null) break;
-        if (buf.items.len > 0) try buf.append(allocator, ' ');
-        try buf.appendSlice(allocator, std.mem.trim(u8, prop.raw, &std.ascii.whitespace));
-    }
-
-    return try buf.toOwnedSlice(allocator);
-}
-
-fn valueAsString(value: *const Value) ?[]const u8 {
-    return switch (value.kind) {
-        .string, .string_name, .node_path, .resource => value.string,
-        else => null,
-    };
-}
-
-fn valueToStringSlice(allocator: std.mem.Allocator, value: *const Value) ScanError![]const []const u8 {
-    var items: std.ArrayList([]const u8) = .empty;
-    errdefer {
-        for (items.items) |item| allocator.free(item);
-        items.deinit(allocator);
-    }
-
-    const elements = valueElements(value) orelse return &.{};
-    for (elements) |*element| {
-        if (valueAsString(element)) |text| {
-            try items.append(allocator, try allocator.dupe(u8, text));
-        }
-    }
-    return try items.toOwnedSlice(allocator);
-}
-
-fn valueElements(value: *const Value) ?[]const Value {
-    return switch (value.kind) {
-        .array => value.elements,
-        .packed_array => value.elements,
-        .typed_array => value.elements,
-        else => null,
-    };
-}
-
-fn valueToDocRows(allocator: std.mem.Allocator, value: *const Value, is_signal: bool) ScanError![]DocRow {
-    var rows: std.ArrayList(DocRow) = .empty;
-    errdefer {
-        for (rows.items) |*row| row.deinit(allocator);
-        rows.deinit(allocator);
-    }
-
-    const elements = valueElements(value) orelse return &.{};
-    for (elements) |*element| {
-        if (element.kind != .dictionary and element.kind != .typed_dictionary) continue;
-        const entries = element.entries orelse continue;
-        var row: DocRow = .{
-            .name = try allocator.dupe(u8, ""),
-            .doc = try allocator.dupe(u8, ""),
-            .connect_example = try allocator.dupe(u8, ""),
-            .when_to_call = try allocator.dupe(u8, ""),
-        };
-        for (entries) |*entry_item| {
-            const key = entry_item.key;
-            const text = valueAsString(&entry_item.value) orelse "";
-            if (std.mem.eql(u8, key, "name")) {
-                allocator.free(row.name);
-                row.name = try allocator.dupe(u8, text);
-            } else if (std.mem.eql(u8, key, "doc")) {
-                allocator.free(row.doc);
-                row.doc = try allocator.dupe(u8, text);
-            } else if (std.mem.eql(u8, key, "connect_example")) {
-                allocator.free(row.connect_example);
-                row.connect_example = try allocator.dupe(u8, text);
-            } else if (std.mem.eql(u8, key, "when_to_call")) {
-                allocator.free(row.when_to_call);
-                row.when_to_call = try allocator.dupe(u8, text);
-            }
-        }
-        if (row.name.len == 0 and row.doc.len == 0 and row.connect_example.len == 0 and row.when_to_call.len == 0) {
-            row.deinit(allocator);
-            continue;
-        }
-        _ = is_signal;
-        try rows.append(allocator, row);
-    }
-
-    return try rows.toOwnedSlice(allocator);
-}
-
 test "scan button manifest fixture" {
     const allocator = std.testing.allocator;
     const io = std.testing.io;
-    var result = try scanProject(allocator, io, "test_fixtures/project", null);
+    var result = try scanProject(allocator, io, "test_fixtures/project");
     defer result.deinit(allocator);
 
     try std.testing.expect(result.manifest_files_found >= 1);
@@ -839,16 +526,15 @@ test "scan button manifest fixture" {
     try std.testing.expect(entry.tags.len == 3);
     try std.testing.expect(entry.signal_docs.len == 1);
     try std.testing.expectEqualStrings("button_pressed", entry.signal_docs[0].name);
-    try std.testing.expectEqual(ManifestFormat.tres, entry.format);
 }
 
 test "scan json manifest fixture" {
     const allocator = std.testing.allocator;
     const io = std.testing.io;
-    var result = try scanProject(allocator, io, "test_fixtures/project", null);
+    var result = try scanProject(allocator, io, "test_fixtures/project");
     defer result.deinit(allocator);
 
-    try std.testing.expect(result.json_files_scanned >= 1);
+    try std.testing.expect(result.manifest_files_found >= 1);
 
     const entry = blk: {
         for (result.entries) |*item| {
@@ -857,15 +543,12 @@ test "scan json manifest fixture" {
         return error.TestExpectedEqual;
     };
 
-    try std.testing.expectEqual(ManifestFormat.json, entry.format);
-    try std.testing.expectEqual(catalog_format_version_json, entry.catalog_format_version);
+    try std.testing.expectEqual(catalog_format_version_supported, entry.catalog_format_version);
     try std.testing.expectEqualStrings("res://instanced_child.tscn", entry.scene);
     try std.testing.expectEqualStrings("Reusable child scene used by instancing tests", entry.summary);
     try std.testing.expect(entry.tags.len == 2);
     try std.testing.expect(entry.signal_docs.len == 1);
     try std.testing.expectEqualStrings("child_ready", entry.signal_docs[0].name);
-    // No `uid` field, and unlike a .tres manifest that is not an error.
-    try std.testing.expectEqualStrings("", entry.uid);
     try std.testing.expect(entry.valid);
 }
 
@@ -873,7 +556,6 @@ test "json manifest declaring the wrong format version is rejected" {
     const allocator = std.testing.allocator;
     var entry: ManifestEntry = .{
         .manifest_path = try allocator.dupe(u8, "x.manifest.json"),
-        .format = .json,
         .catalog_format_version = 1,
         .id = try allocator.dupe(u8, "x"),
         .scene = try allocator.dupe(u8, "res://x.tscn"),
@@ -894,8 +576,7 @@ test "pushIssue keeps earlier issue strings intact" {
     const allocator = std.testing.allocator;
     var entry: ManifestEntry = .{
         .manifest_path = try allocator.dupe(u8, "x.manifest.json"),
-        .format = .json,
-        .catalog_format_version = catalog_format_version_json,
+        .catalog_format_version = catalog_format_version_supported,
         .id = try allocator.dupe(u8, "x"),
         .scene = try allocator.dupe(u8, "res://x.tscn"),
     };

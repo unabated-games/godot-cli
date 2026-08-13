@@ -1,8 +1,8 @@
 # Component catalog design
 
-**Goal:** Give LLM agents and automation a **project-aware catalog** of instancable scenes — what exists, when to use it, how to wire signals, and which exports form the public interface — without asking developers to hand-write JSON or maintain a separate template tree.
+**Goal:** Give LLM agents and automation a **project-aware catalog** of instancable scenes — what exists, when to use it, how to wire signals, and which exports form the public interface.
 
-**Companion project:** [Godot Power AI](../godot_power_ai) (sibling repo: `godotengine/godot_power_ai`) — Godot 4 editor addon for authoring catalog manifests in the Inspector. This repo (`godot-cli`) scans manifests, merges script introspection, ships builtin Godot documentation, and exposes `catalog` CLI commands.
+Manifests are plain `*.manifest.json` files. `godot-cli catalog add` scaffolds them, `catalog scan` reads them, and nothing needs to be installed in the Godot project for either to work.
 
 **Related:** [Scene authoring roadmap](scene_authoring_roadmap.md) Phase D (instancing) consumes catalog ids via `scene instance add --catalog-id …`.
 
@@ -23,15 +23,12 @@ Parsing and editing `.tscn` files is necessary but not sufficient. Agents need a
 ## Architecture overview
 
 ```
-┌──────────────────────────────┐   ┌──────────────────────────────────┐
-│  godot-cli catalog add       │   │  Godot Power AI addon (separate) │
-│  *.manifest.json  (v2)       │   │  PowerAICatalogManifest .tres    │
-│  no addon required           │   │  authored in the Inspector  (v1) │
-└──────────────┬───────────────┘   └───────────────┬──────────────────┘
-               │                                   │
-               └───────────────┬───────────────────┘
-                               │  files on disk under res://
-                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  godot-cli catalog add / relink                                     │
+│  *.manifest.json beside each scene — plain data, no addon needed    │
+└───────────────────────────────┬─────────────────────────────────────┘
+                                │  files on disk under res://
+                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  godot-cli catalog                                                  │
 │  scan → validate → list / show / search / export                    │
@@ -48,30 +45,29 @@ Parsing and editing `.tscn` files is necessary but not sufficient. Agents need a
 | Source | Id namespace | Storage | Instancing |
 |--------|--------------|---------|------------|
 | **Builtins** | `godot/…` e.g. `godot/ui/Button` | JSON inside godot-cli repo | Document-only — agents add raw nodes, no PackedScene |
-| **Project** | Semantic path e.g. `ui/widgets/animated_button` | `*.manifest.json` (or a `.tres` manifest) in project | PackedScene from manifest `scene` path |
+| **Project** | Semantic path e.g. `ui/widgets/animated_button` | `*.manifest.json` in project | PackedScene from manifest `scene` path |
 
 ---
 
-## Manifest formats
+## Manifest format
 
-Both formats produce the same internal entry, and both are discovered by a single
-scan. Validation, deduplication, and every downstream command are format-agnostic.
+A manifest is a `*.manifest.json` file sitting beside the scene it describes:
 
-| | `*.manifest.json` | `.tres` |
-|---|---|---|
-| `catalog_format_version` | `2` | `1` |
-| Discovery | filename suffix | `script_class="PowerAICatalogManifest"` in the header |
-| Authored by | `godot-cli catalog add`, or by hand / by an agent | Godot Inspector, via the addon |
-| Requires an addon installed in the project | no | yes — each manifest pins the script path |
-| `uid` field | not used | required |
+```
+res://ui/button/button.tscn
+res://ui/button/button.manifest.json
+```
 
-**JSON is the default.** A `.tres` manifest carries `script_class` and an
-`ext_resource` pointing at `res://addons/godot_power_ai/power_ai_catalog_manifest.gd`,
-so the project cannot open it without that addon installed at that exact path. JSON
-manifests are plain data with no such coupling, which is why `catalog add` writes
-them and why an agent can produce one directly.
+Manifests are identified by filename, so the scan rejects candidates without reading
+them. `catalog_format_version` is `2`.
 
-### JSON schema
+Keeping manifests as plain data rather than Godot `Resource` files is deliberate: a
+`.tres` carrying a `script_class` pins the defining script by path as an
+`ext_resource`, so the project cannot open its own manifests unless that script is
+installed at exactly that path. JSON has no such coupling — an agent can write one
+directly, and nothing has to be installed to read it.
+
+### Schema
 
 ```json
 {
@@ -108,12 +104,6 @@ should be **omitted rather than written empty**, so diffs show only what was
 actually said. `scene_uid` is derived from the scene's `[gd_scene]` header when
 absent, and a mismatch is reported as a `scene_uid_mismatch` warning.
 
-Two differences from the `.tres` schema, both because the fields only existed to
-give the Inspector something to fill in:
-
-- **`uid` is not used.** `id` is the identity, and it is already uniqueness-checked.
-- **`signals` / `functions`** rather than `signal_docs` / `function_docs`.
-
 ### Authoring with `catalog add`
 
 ```bash
@@ -137,8 +127,7 @@ blank rows. Without `--update`, an existing manifest is never overwritten.
 
 `scene` is a plain path string, and Godot does not rewrite it when a `.tscn` moves —
 its dependency tracking follows `ext_resource` and `uid://` references, not arbitrary
-string properties. This is true of both manifest formats. So a move leaves the
-manifest pointing at nothing:
+string properties. So a move leaves the manifest pointing at nothing:
 
 ```
 $ godot-cli catalog validate --project-root .
@@ -178,80 +167,6 @@ Builtins and project entries are **peers** in search results. There is **no shad
 
 ---
 
-## Authoring: Godot Power AI addon
-
-### Repository
-
-- **Name:** `godot_power_ai`
-- **Install path:** `addons/godot_power_ai/`
-- **Asset Library:** separate repo for clean packaging and discoverability
-
-### Resource type
-
-`PowerAICatalogManifest` (`class_name`, `extends Resource`)
-
-Discovered by godot-cli via `script_class="PowerAICatalogManifest"` in serialized `.tres` files.
-
-### Scene binding
-
-- `@export_file("*.tscn") var scene` — user assigns the instancable PackedScene in the Inspector.
-- **One manifest per scene** (enforced by `catalog validate`).
-- Colocated naming is recommended but not required:
-
-```
-res://ui/widgets/animated_button.tscn
-res://ui/widgets/animated_button.manifest.tres
-```
-
-### Plugin behaviour
-
-| Action | When | Rule |
-|--------|------|------|
-| Generate `uid` | Create manifest | UUID v4 once; never overwrite if already set |
-| Fill `scene_uid` | User assigns `scene` | Read `uid="uid://…"` from target `.tscn` `[gd_scene]` header |
-| Suggest `id` | Create, or explicit “Suggest id from scene” | See [Id suggestion](#id-suggestion) — not auto-updated on every scene change |
-| Custom inspector | Edit manifest | Editable rows for `signal_docs` / `function_docs` dictionary arrays |
-
-### Manifest fields (format version 1)
-
-```gdscript
-class_name PowerAICatalogManifest
-extends Resource
-
-@export var catalog_format_version: int = 1
-@export var id: String = ""
-@export var uid: String = ""
-@export_file("*.tscn") var scene: String = ""
-@export var scene_uid: String = ""
-
-@export var tags: PackedStringArray = []
-@export_multiline var summary: String = ""
-@export_multiline var when_to_use: String = ""
-@export_multiline var when_not_to_use: String = ""
-@export var related_ids: PackedStringArray = []
-@export var prefer_over_ids: PackedStringArray = []
-@export_multiline var notes: String = ""
-
-@export_file("*.gd") var export_root_script: String = ""
-
-@export var signal_docs: Array[Dictionary] = []
-@export var function_docs: Array[Dictionary] = []
-```
-
-**Dictionary key conventions:**
-
-| `signal_docs[]` | `function_docs[]` |
-|-----------------|-------------------|
-| `name` (required) | `name` (required) |
-| `doc` | `doc` |
-| `connect_example` | `when_to_call` |
-
-Signals and functions are folded into manifest arrays (no separate Resource types). The plugin provides a custom Inspector for editing rows.
-
-Use `notes` for variant / edge-case guidance when one scene covers multiple visual or behavioural modes.
-
----
-
 ## Id suggestion
 
 When the plugin suggests `id` from the assigned scene path:
@@ -275,11 +190,11 @@ res://UI/Widgets/Animated_Button.tscn  →  ui/widgets/animated_button
 
 ### Reading manifests
 
-No Godot runtime required. CLI uses existing `.tres` / variant parsing:
+No Godot runtime required:
 
 1. Walk `res://` under `--project-root`
-2. Select `.tres` with `script_class="PowerAICatalogManifest"`
-3. Read exported properties from serialized resource
+2. Select files ending `.manifest.json`
+3. Parse and validate
 
 Optional project index (e.g. `.godot/godot_cli_catalog_index.json`) may cache scan results; regenerated on `catalog scan`.
 
@@ -415,7 +330,9 @@ Implemented in Zig from day one as a **line-oriented heuristic** (not a full GDS
 
 ### Scan behaviour
 
-Skip `.tres` files that are not `PowerAICatalogManifest` without error.
+A `*.manifest.json` that fails to parse yields an entry carrying an `invalid_json`
+error rather than failing the scan, so one broken manifest does not hide the rest of
+the catalog. `catalog validate` still fails on it.
 
 ---
 
@@ -444,25 +361,19 @@ On scan:
 
 ## Implementation order
 
-1. **godot_power_ai** — `PowerAICatalogManifest`, plugin, inspector for arrays, uid/scene_uid auto-fill
-2. **godot-cli** — `catalog scan`, `list`, `show`, `validate`, builtin JSON load
-3. **godot-cli** — GDScript heuristic parser + merge in `show`
-4. **godot-cli** — `catalog search` (tags + full text)
-5. **godot-cli** — `catalog export`
-6. **godot-cli** — `scene instance add --catalog-id` (Phase D)
+1. `catalog scan`, `list`, `show`, `validate`, builtin JSON load — done
+2. GDScript heuristic parser + merge in `show` — done
+3. `catalog search` (tags + full text) — done
+4. `catalog export` — done
+5. `catalog add` / `relink` — done
+6. `scene instance add --catalog-id` (Phase D) — done
 
----
+### Deferred: editor authoring
 
-## Cross-repo compatibility
-
-| Artifact | Owner |
-|----------|-------|
-| `catalog_format_version` | Both; must match |
-| `PowerAICatalogManifest` schema | godot_power_ai |
-| Scan / validate / export | godot-cli |
-| Builtin JSON | godot-cli |
-
-Publish a compatibility table in both READMEs (e.g. plugin 0.1.x ↔ godot-cli 0.x.x, format v1).
+An editor addon offering an Inspector for manifest prose is a reasonable future
+addition, but it would **produce `*.manifest.json`** rather than reintroduce a
+Resource-backed format — the coupling that motivated JSON in the first place. Until
+then, `catalog add` scaffolds the fields and a text editor fills in the prose.
 
 ---
 
@@ -481,10 +392,8 @@ Publish a compatibility table in both READMEs (e.g. plugin 0.1.x ↔ godot-cli 0
 The committed fixture project at `test_fixtures/project/` covers catalog authoring
 and `catalog scan` development. Its catalog entry lives at
 `test_fixtures/project/ui/button/`, with the manifest at
-`test_fixtures/project/ui/button.manifest.tres`.
-
-To exercise manifest authoring in the editor, point a scratch Godot project at the
-addon and add `addons/godot_power_ai` to it.
+`test_fixtures/project/ui/button.manifest.json`, and a second manifest at
+`test_fixtures/project/instanced_child.manifest.json`.
 
 **Sample catalog entry (project):**
 

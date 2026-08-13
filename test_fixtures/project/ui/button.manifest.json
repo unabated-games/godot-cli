@@ -1,0 +1,18 @@
+{
+  "catalog_format_version": 2,
+  "id": "ui/button",
+  "scene": "res://ui/button/button.tscn",
+  "scene_uid": "uid://byhqeak2spha2",
+  "tags": ["ui", "button", "input"],
+  "summary": "Project standard animated UI button",
+  "when_to_use": "Use when adding a button to a UI scene",
+  "when_not_to_use": "Debug panels — use godot/ui/Button instead",
+  "related_ids": ["godot/ui/Button"],
+  "signals": [
+    {
+      "name": "button_pressed",
+      "doc": "Emitted when the user left-clicks the control.",
+      "connect_example": "MyButton.button_pressed.connect(_on_my_button)"
+    }
+  ]
+}

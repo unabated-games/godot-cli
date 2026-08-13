@@ -141,7 +141,7 @@ godot-cli scene instance add main.tscn --parent /root/Main \
 
 **Problem:** LLMs need project semantics (which button, which player ship, when to use builtins) — not just TSCN syntax. Cold-start skeletons are a subset of this.
 
-**Authoring:** [Godot Power AI](https://github.com/godotengine/godot_power_ai) addon — `PowerAICatalogManifest` `.tres` edited in the Inspector.
+**Authoring:** `godot-cli catalog add` writes a `*.manifest.json` beside the scene — see [catalog design](catalog_design.md).
 
 **Consumption:** `godot-cli catalog scan|list|show|validate|search|export` + builtin JSON (`godot/ui/Button`, document-only).
 
