@@ -328,13 +328,20 @@ fn pushIssue(
     message: []const u8,
 ) ScanError!void {
     var issues: std.ArrayList(Issue) = .empty;
-    try issues.appendSlice(allocator, entry.issues);
+    errdefer freeIssues(allocator, &issues);
+
+    // Copying the Issue structs moves their `code`/`message` allocations to the
+    // new list — only the old backing array is this function's to free. Freeing
+    // the strings here would leave every pre-existing issue dangling, which is
+    // precisely the case this runs in: an entry that already has warnings and
+    // then turns out to be a duplicate.
+    try issues.ensureTotalCapacity(allocator, entry.issues.len + 1);
+    issues.appendSliceAssumeCapacity(entry.issues);
+    const old_array = entry.issues;
+    entry.issues = &.{};
+    allocator.free(old_array);
+
     try appendIssue(allocator, &issues, severity, code, message);
-    for (entry.issues) |issue| {
-        allocator.free(issue.code);
-        allocator.free(issue.message);
-    }
-    allocator.free(entry.issues);
     entry.issues = try issues.toOwnedSlice(allocator);
     entry.valid = !hasErrorIssues(entry.issues);
 }
