@@ -1,3 +1,10 @@
+//! Result emission for stdout and stderr.
+//!
+//! Always construct std stream writers with `initStreaming`. The default
+//! `File.Writer.init` uses positional mode, which pwrites at the writer's own
+//! offset (starting at 0) instead of the file offset owned by the shell. On a
+//! redirect (`>` or `>>`) that overwrites the start of the target file.
+
 const std = @import("std");
 const spec = @import("../cli/spec.zig");
 const version = @import("../version.zig");
@@ -16,7 +23,7 @@ pub fn emitSuccess(
     path: []const []const u8,
     result: spec.Result,
 ) std.Io.Writer.Error!void {
-    var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), io, stdout_buffer);
+    var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), io, stdout_buffer);
     const writer = &stdout_file_writer.interface;
 
     if (json_output) {
@@ -60,7 +67,7 @@ pub fn emitFailure(
     path: []const []const u8,
     failure: Failure,
 ) std.Io.Writer.Error!void {
-    var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), io, stdout_buffer);
+    var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), io, stdout_buffer);
     const stdout = &stdout_file_writer.interface;
 
     if (json_output) {
@@ -78,7 +85,7 @@ pub fn emitFailure(
         return;
     }
 
-    var stderr_file_writer = std.Io.File.Writer.init(std.Io.File.stderr(), io, stderr_buffer);
+    var stderr_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stderr(), io, stderr_buffer);
     const stderr = &stderr_file_writer.interface;
 
     try stderr.print("error[{s}]: {s}\n", .{ failure.kind, failure.message });
@@ -91,7 +98,7 @@ pub fn emitFailure(
 }
 
 pub fn emitVersion(io: std.Io, stdout_buffer: []u8, json_output: bool) std.Io.Writer.Error!void {
-    var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), io, stdout_buffer);
+    var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), io, stdout_buffer);
     const writer = &stdout_file_writer.interface;
 
     if (json_output) {

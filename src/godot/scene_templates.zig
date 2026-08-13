@@ -8,6 +8,7 @@ const writer = @import("text_format/writer.zig");
 const node_tree = @import("node_tree.zig");
 const scene_edit = @import("scene_edit.zig");
 const variant = @import("variant/property_line.zig");
+const io_util = @import("../io_util.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -81,9 +82,20 @@ pub fn defaultTemplatesRoot() []const u8 {
 }
 
 /// Resolve templates directory: CLI flag, then `GODOT_CLI_TEMPLATES_ROOT`, then compile-time default.
-pub fn resolveTemplatesRoot(flag_override: ?[]const u8) []const u8 {
+///
+/// Reads the environment through `std.process.Environ` rather than `std.c.getenv`
+/// so the tool builds without libc on every target. Any value returned from the
+/// environment is owned by `allocator`.
+pub fn resolveTemplatesRoot(
+    allocator: std.mem.Allocator,
+    environ: std.process.Environ,
+    flag_override: ?[]const u8,
+) []const u8 {
     if (flag_override) |opt| return opt;
-    if (std.c.getenv("GODOT_CLI_TEMPLATES_ROOT")) |env_root| return std.mem.span(env_root);
+    if (environ.getAlloc(allocator, "GODOT_CLI_TEMPLATES_ROOT") catch null) |env_root| {
+        if (env_root.len > 0) return env_root;
+        allocator.free(env_root);
+    }
     return defaultTemplatesRoot();
 }
 
@@ -225,7 +237,8 @@ pub fn applyCopyMutations(allocator: std.mem.Allocator, doc: *document.Document,
         var list = try node_tree.collectNodes(allocator, doc);
         defer list.deinit(allocator);
         const node = try node_tree.findByName(&list, pair.old_name, null) orelse return error.NodeNotFound;
-        _ = try scene_edit.renameNode(allocator, doc, node.path, pair.new_name);
+        const renamed = try scene_edit.renameNode(allocator, doc, node.path, pair.new_name);
+        allocator.free(renamed);
     }
 
     for (mutations.property_sets) |set| {
@@ -233,6 +246,11 @@ pub fn applyCopyMutations(allocator: std.mem.Allocator, doc: *document.Document,
     }
 }
 
+/// Build the `scene template show` payload.
+///
+/// The returned `std.json.Array` trees own duplicated strings and nested maps
+/// with no single owner to free them. Pass an arena — the CLI passes the
+/// process arena, and tests should do the same.
 pub fn buildShowData(allocator: std.mem.Allocator, doc: *const document.Document, parse_properties: bool) Error!TemplateShowData {
     var list = try node_tree.collectNodes(allocator, doc);
     defer list.deinit(allocator);
@@ -296,7 +314,7 @@ pub fn copyTemplateToFile(
 
     const written = writer.writeDocument(allocator, &doc) catch return error.OutOfMemory;
     defer allocator.free(written);
-    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = output_path, .data = written }) catch return error.Io;
+    io_util.writeFileAtomic(io, output_path, written) catch return error.Io;
 }
 
 test "list built-in templates" {
@@ -365,7 +383,11 @@ test "build show data includes nodes and sections" {
     var doc = try document.parseBytes(allocator, source);
     defer doc.deinit(allocator);
 
-    const show = try buildShowData(allocator, &doc, false);
+    // buildShowData returns an arena-owned json tree, matching the CLI.
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    const show = try buildShowData(arena.allocator(), &doc, false);
     try std.testing.expectEqual(@as(usize, 2), show.node_count);
     try std.testing.expectEqual(@as(usize, 3), show.section_count);
     try std.testing.expectEqual(@as(usize, 2), show.nodes.items.len);

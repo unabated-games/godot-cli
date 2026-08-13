@@ -639,7 +639,8 @@ test "duplicate sub resource id records conflict details" {
 
     const result = applyPatchJson(allocator, &doc, patch, .{ .seed_path = "res://main.tscn" });
     try std.testing.expectError(error.DuplicateResourceId, result);
-    const details = (scene_resources.conflictDetailsJson(allocator) catch null) orelse return error.TestExpectedEqual;
+    var details = (scene_resources.conflictDetailsJson(allocator) catch null) orelse return error.TestExpectedEqual;
+    defer details.deinit(allocator);
     try std.testing.expectEqualStrings("duplicate_resource_id", details.get("conflict_kind").?.string);
     try std.testing.expectEqualStrings("sub_resource", details.get("section_name").?.string);
     try std.testing.expectEqualStrings("CapsuleShape2D_shape", details.get("id").?.string);

@@ -20,16 +20,7 @@ pub fn seedSceneUniqueId(seed: u32) void {
 
 /// Seed from a Godot resource path using `String::hash()` (djb2, 32-bit).
 pub fn seedSceneUniqueIdFromPath(path: []const u8) void {
-    var code_units: [512]u21 = undefined;
-    if (path.len > code_units.len) {
-        const owned = std.heap.page_allocator.alloc(u21, path.len) catch @panic("oom");
-        defer std.heap.page_allocator.free(owned);
-        for (path, 0..) |c, i| owned[i] = c;
-        seedSceneUniqueId(@truncate(hash.hashUtf32(owned)));
-        return;
-    }
-    for (path, 0..) |c, i| code_units[i] = c;
-    seedSceneUniqueId(@truncate(hash.hashUtf32(code_units[0..path.len])));
+    seedSceneUniqueId(@truncate(hash.hashUtf32Bytes(path)));
 }
 
 /// Reset generator state (for tests).
@@ -38,11 +29,16 @@ pub fn resetSceneUniqueIdGenerator() void {
     seeded = false;
 }
 
+pub const Error = error{
+    /// The generator was used before `seedSceneUniqueId` /
+    /// `seedSceneUniqueIdFromPath`. Godot falls back to time-based seeding
+    /// here; we refuse, because CLI output has to be reproducible.
+    GeneratorNotSeeded,
+};
+
 /// Match `Resource::generate_scene_unique_id` when seeded.
-pub fn generateSceneUniqueId() [characters]u8 {
-    if (!seeded) {
-        @panic("generateSceneUniqueId requires seedSceneUniqueId; Godot falls back to time-based seeding");
-    }
+pub fn generateSceneUniqueId() Error![characters]u8 {
+    if (!seeded) return error.GeneratorNotSeeded;
 
     var random_num = unique_id_gen.nextU32();
     var out: [characters]u8 = undefined;
@@ -60,13 +56,13 @@ pub fn generateSceneUniqueId() [characters]u8 {
 
 /// Build a sub-resource id like `StandardMaterial3D_ab12c`.
 pub fn formatSubResourceId(allocator: std.mem.Allocator, class_name: []const u8) ![]u8 {
-    const suffix = generateSceneUniqueId();
+    const suffix = try generateSceneUniqueId();
     return std.fmt.allocPrint(allocator, "{s}_{s}", .{ class_name, &suffix });
 }
 
 /// Build an external resource id like `1_ab12c`.
 pub fn formatExtResourceId(allocator: std.mem.Allocator, index: u32) ![]u8 {
-    const suffix = generateSceneUniqueId();
+    const suffix = try generateSceneUniqueId();
     return std.fmt.allocPrint(allocator, "{d}_{s}", .{ index, &suffix });
 }
 
@@ -81,7 +77,7 @@ test "scene unique ids with path hash seed are deterministic" {
 
     const expected = [_][]const u8{ "mf4mk", "37kl0", "8uh7m", "6uqi0", "ppyta" };
     for (expected) |exp| {
-        const got = generateSceneUniqueId();
+        const got = try generateSceneUniqueId();
         try std.testing.expectEqualStrings(exp, &got);
     }
 }

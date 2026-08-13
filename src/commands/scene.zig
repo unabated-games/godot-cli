@@ -21,6 +21,7 @@ const scene_undo = @import("../godot/scene_undo.zig");
 const scene_templates = @import("../godot/scene_templates.zig");
 const catalog_scan = @import("../godot/catalog_scan.zig");
 const catalog_builtins = @import("../godot/catalog_builtins.zig");
+const io_util = @import("../io_util.zig");
 
 const ValidateSetup = struct {
     ctx: id_validate.ValidateContext,
@@ -1215,7 +1216,7 @@ fn scenePlanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     defer planned.deinit(cli.allocator);
 
     if (inv.getOption("write-patch")) |patch_out| {
-        try std.Io.Dir.cwd().writeFile(cli.io, .{ .sub_path = patch_out, .data = planned.patch_json });
+        try io_util.writeFileAtomic(cli.io, patch_out, planned.patch_json);
     }
 
     var steps_json = std.json.Array.init(cli.allocator);
@@ -1387,7 +1388,7 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
         const undo_json = try recorder.toPatchJson(cli.allocator);
         defer cli.allocator.free(undo_json);
         if (inv.getOption("write-undo-patch")) |undo_path| {
-            try std.Io.Dir.cwd().writeFile(cli.io, .{ .sub_path = undo_path, .data = undo_json });
+            try io_util.writeFileAtomic(cli.io, undo_path, undo_json);
             try data.put(cli.allocator, "undo_patch_path", .{ .string = try cli.allocator.dupe(u8, undo_path) });
         }
         try data.put(cli.allocator, "undo_patch", .{ .string = try cli.allocator.dupe(u8, undo_json) });
@@ -1436,8 +1437,12 @@ fn sceneDiffHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
-fn templatesRootFrom(inv: *const spec.Invocation) []const u8 {
-    return scene_templates.resolveTemplatesRoot(inv.getOption("templates-root"));
+fn templatesRootFrom(cli: *const app_mod.App, inv: *const spec.Invocation) []const u8 {
+    return scene_templates.resolveTemplatesRoot(
+        cli.allocator,
+        cli.environ,
+        inv.getOption("templates-root"),
+    );
 }
 
 fn sceneTemplateListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -1452,7 +1457,7 @@ fn sceneTemplateListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     }
 
     var data: std.json.ObjectMap = .{};
-    try data.put(cli.allocator, "templates_root", .{ .string = try cli.allocator.dupe(u8, templatesRootFrom(inv)) });
+    try data.put(cli.allocator, "templates_root", .{ .string = try cli.allocator.dupe(u8, templatesRootFrom(cli, inv)) });
     try data.put(cli.allocator, "count", .{ .integer = @intCast(items.items.len) });
     try data.put(cli.allocator, "templates", .{ .array = items });
     try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "{d} built-in template(s)", .{items.items.len}) });
@@ -1465,7 +1470,7 @@ fn sceneTemplateShowHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     const template_id = inv.positionals[0];
     const info = scene_templates.findTemplate(template_id) orelse return error.Usage;
 
-    const bytes = try scene_templates.readTemplateBytes(cli.allocator, cli.io, templatesRootFrom(inv), template_id);
+    const bytes = try scene_templates.readTemplateBytes(cli.allocator, cli.io, templatesRootFrom(cli, inv), template_id);
     defer cli.allocator.free(bytes);
 
     var doc = try text_format.document.parseBytes(cli.allocator, bytes);
@@ -1514,7 +1519,7 @@ fn sceneTemplateCopyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
         try scene_templates.copyTemplateToFile(
             cli.allocator,
             cli.io,
-            templatesRootFrom(inv),
+            templatesRootFrom(cli, inv),
             template_id,
             output_path,
             prepare.options,

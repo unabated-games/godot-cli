@@ -81,11 +81,12 @@ fn printGlobalOptions(writer: *std.Io.Writer) std.Io.Writer.Error!void {
 
 fn printOption(writer: *std.Io.Writer, opt: spec.OptionSpec) std.Io.Writer.Error!void {
     var label: [64]u8 = undefined;
-    const label_text = if (opt.short) |short_char| blk: {
-        break :blk std.fmt.bufPrint(&label, "-{c}, --{s}", .{ short_char, opt.long }) catch unreachable;
-    } else blk: {
-        break :blk std.fmt.bufPrint(&label, "    --{s}", .{opt.long}) catch unreachable;
-    };
+    // An option name too long for the buffer degrades to the bare long form
+    // rather than tripping an unreachable — help text is never worth a crash.
+    const label_text = if (opt.short) |short_char|
+        std.fmt.bufPrint(&label, "-{c}, --{s}", .{ short_char, opt.long }) catch opt.long
+    else
+        std.fmt.bufPrint(&label, "    --{s}", .{opt.long}) catch opt.long;
 
     const placeholder = switch (opt.kind) {
         .flag => "",

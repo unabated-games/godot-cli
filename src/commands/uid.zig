@@ -69,7 +69,7 @@ fn uidSceneIdGenerateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
     var arr = std.json.Array.init(cli.allocator);
     var i: u32 = 0;
     while (i < count) : (i += 1) {
-        const generated = scene_id.generateSceneUniqueId();
+        const generated = try scene_id.generateSceneUniqueId();
         const copy = try cli.allocator.dupe(u8, &generated);
         try arr.append(.{ .string = copy });
     }

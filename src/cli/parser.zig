@@ -137,7 +137,7 @@ fn takeRootOption(
     for (root.options) |opt| {
         if (matchesOption(opt, arg)) {
             const value = try readOptionValue(allocator, opt, arg, argv, index);
-            try inv.options.put(allocator, opt.long, value);
+            if (try inv.options.fetchPut(allocator, opt.long, value)) |old| allocator.free(old.value);
             return true;
         }
     }
@@ -155,7 +155,7 @@ fn parseCommandOption(
     for (command.options) |opt| {
         if (matchesOption(opt, arg)) {
             const value = try readOptionValue(allocator, opt, arg, argv, index);
-            try inv.options.put(allocator, opt.long, value);
+            if (try inv.options.fetchPut(allocator, opt.long, value)) |old| allocator.free(old.value);
             return;
         }
     }
@@ -263,7 +263,7 @@ test "parse ping command" {
     const commands = @import("../commands.zig");
     const allocator = std.testing.allocator;
 
-    const inv = try parseArgv(allocator, &commands.root, &.{"ping", "--json"});
+    const inv = try parseArgv(allocator, &commands.root, &.{ "ping", "--json" });
     defer {
         var mutable = inv;
         mutable.deinit(allocator);

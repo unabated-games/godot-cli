@@ -5,6 +5,7 @@ const document = @import("text_format/document.zig");
 const node_tree = @import("node_tree.zig");
 const scene_edit = @import("scene_edit.zig");
 const scene_resources = @import("scene_resources.zig");
+const io_util = @import("../io_util.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -66,7 +67,7 @@ pub const UndoRecorder = struct {
 pub fn writeSnapshot(io: std.Io, source_path: []const u8, dest_path: []const u8) Error!void {
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, source_path, std.heap.page_allocator, .unlimited) catch return error.Io;
     defer std.heap.page_allocator.free(bytes);
-    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = dest_path, .data = bytes }) catch return error.Io;
+    io_util.writeFileAtomic(io, dest_path, bytes) catch return error.Io;
 }
 
 pub fn defaultSnapshotPath(allocator: std.mem.Allocator, scene_path: []const u8) Error![]const u8 {

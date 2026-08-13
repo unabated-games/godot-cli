@@ -75,12 +75,11 @@ pub const Value = struct {
             } else try formatTypedCollection(allocator, "Dictionary", self.string, self.raw),
             .resource => if (self.string.len == 0)
                 try allocator.dupe(u8, self.raw)
-            else
-                blk: {
-                    const quoted = try lex.quoteString(allocator, self.string);
-                    defer allocator.free(quoted);
-                    break :blk try std.fmt.allocPrint(allocator, "Resource({s})", .{quoted});
-                },
+            else blk: {
+                const quoted = try lex.quoteString(allocator, self.string);
+                defer allocator.free(quoted);
+                break :blk try std.fmt.allocPrint(allocator, "Resource({s})", .{quoted});
+            },
             .null => try allocator.dupe(u8, "null"),
             .bool => if (self.bool_val) try allocator.dupe(u8, "true") else try allocator.dupe(u8, "false"),
             .integer => try std.fmt.allocPrint(allocator, "{d}", .{self.integer}),

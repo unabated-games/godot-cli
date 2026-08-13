@@ -21,6 +21,43 @@ pub fn hash64Utf32(code_units: []const u21) u64 {
     return hashv;
 }
 
+/// `hashUtf32` over raw bytes, each widened to one code unit.
+///
+/// Equivalent to copying a byte slice into a `[]u21` and calling `hashUtf32`,
+/// which is what the ID seeders do, but without a temporary buffer sized to the
+/// input — so it cannot fail on long paths.
+pub fn hashUtf32Bytes(bytes: []const u8) u32 {
+    var hashv: u32 = 5381;
+    for (bytes) |c| {
+        hashv = (hashv << 5) +% hashv +% @as(u32, c);
+    }
+    return hashv;
+}
+
+/// `hash64Utf32` over raw bytes, each widened to one code unit.
+pub fn hash64Utf32Bytes(bytes: []const u8) u64 {
+    var hashv: u64 = 5381;
+    for (bytes) |c| {
+        hashv = (hashv << 5) +% hashv +% @as(u64, c);
+    }
+    return hashv;
+}
+
+test "byte hashes match the widened code-unit path" {
+    const cases = [_][]const u8{
+        "",
+        "res://main.tscn",
+        "res://" ++ "a" ** 600 ++ ".tscn", // longer than the old 512-unit buffer
+        "res://ünïcødé/scene.tscn",
+    };
+    for (cases) |bytes| {
+        var widened: [1024]u21 = undefined;
+        for (bytes, 0..) |c, i| widened[i] = c;
+        try std.testing.expectEqual(hashUtf32(widened[0..bytes.len]), hashUtf32Bytes(bytes));
+        try std.testing.expectEqual(hash64Utf32(widened[0..bytes.len]), hash64Utf32Bytes(bytes));
+    }
+}
+
 /// Godot `hash_djb2` for ASCII/UTF-8 bytes (`hash * 33 ^ c`).
 pub fn hashDjb2Ascii(bytes: []const u8) u32 {
     var hash: u32 = 5381;

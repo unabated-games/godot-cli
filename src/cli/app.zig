@@ -11,6 +11,9 @@ pub const App = struct {
     root: *const spec.CommandSpec,
     io: std.Io,
     allocator: std.mem.Allocator,
+    /// Process environment. Defaults to empty so tests and embedders that do
+    /// not care about env-based configuration can construct an `App` directly.
+    environ: std.process.Environ = .empty,
 
     pub fn run(self: *const App, args: []const []const u8) spec.ExitCode {
         var stdout_buffer: [16 * 1024]u8 = undefined;
@@ -31,7 +34,7 @@ pub const App = struct {
         }
 
         if (inv.global.help and inv.path.len == 0) {
-            var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), self.io, &stdout_buffer);
+            var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), self.io, &stdout_buffer);
             help.printRootHelp(&stdout_file_writer.interface, self.root) catch {};
             stdout_file_writer.interface.flush() catch {};
             return .success;
@@ -48,13 +51,13 @@ pub const App = struct {
 
         if (std.mem.eql(u8, inv.path[0], "help")) {
             if (inv.positionals.len == 0) {
-                var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), self.io, &stdout_buffer);
+                var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), self.io, &stdout_buffer);
                 help.printRootHelp(&stdout_file_writer.interface, self.root) catch {};
                 stdout_file_writer.interface.flush() catch {};
                 return .success;
             }
 
-            var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), self.io, &stdout_buffer);
+            var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), self.io, &stdout_buffer);
             help.printCommandHelp(self.allocator, &stdout_file_writer.interface, self.root, inv.positionals) catch |err| {
                 const failure: emit.Failure = switch (err) {
                     error.UnknownCommand => .{
@@ -86,7 +89,7 @@ pub const App = struct {
         };
 
         if (inv.global.help) {
-            var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), self.io, &stdout_buffer);
+            var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), self.io, &stdout_buffer);
             help.printCommandHelp(self.allocator, &stdout_file_writer.interface, self.root, inv.path) catch |err| {
                 const failure: emit.Failure = switch (err) {
                     error.UnknownCommand => .{
@@ -109,7 +112,7 @@ pub const App = struct {
         }
 
         const handler = command.handler orelse {
-            var stdout_file_writer = std.Io.File.Writer.init(std.Io.File.stdout(), self.io, &stdout_buffer);
+            var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), self.io, &stdout_buffer);
             help.printCommandHelp(self.allocator, &stdout_file_writer.interface, self.root, inv.path) catch {};
             stdout_file_writer.interface.flush() catch {};
             return .success;
@@ -169,7 +172,7 @@ pub const App = struct {
                     self.root,
                     try json_input.parseJsonSlice(self.allocator, cli_args[index]),
                 );
-                mergeLeadingGlobalFlags(cli_args[0..index - 1], &inv.global);
+                mergeLeadingGlobalFlags(cli_args[0 .. index - 1], &inv.global);
                 return inv;
             }
             if (std.mem.eql(u8, arg, "--request-file")) {
@@ -181,7 +184,7 @@ pub const App = struct {
                     self.root,
                     try json_input.parseJsonSlice(self.allocator, text),
                 );
-                mergeLeadingGlobalFlags(cli_args[0..index - 1], &inv.global);
+                mergeLeadingGlobalFlags(cli_args[0 .. index - 1], &inv.global);
                 return inv;
             }
             if (std.mem.eql(u8, arg, "--request-stdin")) {

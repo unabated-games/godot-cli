@@ -1,6 +1,7 @@
 //! Parse and write Godot `project.godot` (INI-style sections with brace multiline values).
 
 const std = @import("std");
+const io_util = @import("../io_util.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -109,7 +110,7 @@ pub fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) Erro
 pub fn writeFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8, doc: *const Document) Error!void {
     const rendered = try render(allocator, doc);
     defer allocator.free(rendered);
-    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = rendered }) catch return error.Io;
+    io_util.writeFileAtomic(io, path, rendered) catch return error.Io;
 }
 
 pub fn parseBytes(allocator: std.mem.Allocator, bytes: []const u8) Error!Document {
@@ -162,15 +163,13 @@ pub fn parseBytes(allocator: std.mem.Allocator, bytes: []const u8) Error!Documen
 
         const value_region = std.mem.trim(u8, trimmed[eq + 1 ..], &std.ascii.whitespace);
         const is_brace_value = value_region.len > 0 and value_region[0] == '{';
-        const value_owned: []const u8 = if (is_brace_value)
-            blk: {
-                const value_start = line_start + (std.mem.indexOf(u8, line, value_region) orelse eq + 1);
-                const block = try readBraceBlock(allocator, bytes, value_start);
-                line_start = block.end_index;
-                if (line_start < bytes.len and bytes[line_start] == '\n') line_start += 1;
-                break :blk block.value;
-            }
-        else blk: {
+        const value_owned: []const u8 = if (is_brace_value) blk: {
+            const value_start = line_start + (std.mem.indexOf(u8, line, value_region) orelse eq + 1);
+            const block = try readBraceBlock(allocator, bytes, value_start);
+            line_start = block.end_index;
+            if (line_start < bytes.len and bytes[line_start] == '\n') line_start += 1;
+            break :blk block.value;
+        } else blk: {
             line_start = if (has_newline) line_end + 1 else bytes.len;
             break :blk value_region;
         };

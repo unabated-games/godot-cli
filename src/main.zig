@@ -11,6 +11,7 @@ pub fn main(init: std.process.Init) !void {
         .root = &commands.root,
         .io = io,
         .allocator = init.arena.allocator(),
+        .environ = init.minimal.environ,
     };
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());

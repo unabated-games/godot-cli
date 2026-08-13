@@ -11,6 +11,20 @@ pub fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return std.Io.Dir.cwd().readFileAlloc(syncIo(), path, allocator, .unlimited);
 }
 
+/// Write `data` to `path`, replacing any existing file atomically.
+///
+/// This tool edits files in a user's Godot project, so a partial write is worse
+/// than a failed one: truncating a `.tscn` loses work the editor cannot recover.
+/// Writing to a sibling temporary and renaming means an interrupted run leaves
+/// the original untouched.
+pub fn writeFileAtomic(io: std.Io, path: []const u8, data: []const u8) !void {
+    var atomic = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .replace = true });
+    defer atomic.deinit(io);
+
+    try atomic.file.writeStreamingAll(io, data);
+    try atomic.replace(io);
+}
+
 pub fn writeFile(path: []const u8, data: []const u8) !void {
-    try std.Io.Dir.cwd().writeFile(syncIo(), .{ .sub_path = path, .data = data });
+    return writeFileAtomic(syncIo(), path, data);
 }

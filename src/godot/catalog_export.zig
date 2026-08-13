@@ -5,6 +5,7 @@ const catalog_scan = @import("catalog_scan.zig");
 const catalog_builtins = @import("catalog_builtins.zig");
 const catalog_show = @import("catalog_show.zig");
 const uid_cache = @import("uid_cache.zig");
+const io_util = @import("../io_util.zig");
 
 pub const ExportResult = struct {
     project_root: []const u8,
@@ -92,7 +93,7 @@ pub fn exportCatalog(
 
     var wrote_file = false;
     if (!dry_run) {
-        std.Io.Dir.cwd().writeFile(io, .{ .sub_path = output_path, .data = markdown }) catch return error.Io;
+        io_util.writeFileAtomic(io, output_path, markdown) catch return error.Io;
         wrote_file = true;
     }
 

@@ -13,7 +13,7 @@ pub const Error = error{
     DuplicateResourceId,
     ResourceInUse,
     InvalidResourceKind,
-} || document.EditError;
+} || document.EditError || scene_id.Error;
 
 pub const ConflictDetails = struct {
     kind: []const u8,

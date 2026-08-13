@@ -13,7 +13,8 @@ const base: u32 = char_count + ('9' - '0');
 
 const uuid_characters = [_]u8{
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-    'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', '0', '1', '2', '3', '4', '5', '6', '7', '8',
+    'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', '0', '1', '2', '3', '4', '5', '6',
+    '7', '8',
 };
 const uuid_characters_element_count = uuid_characters.len;
 const max_uuid_number_length = 13;
@@ -92,15 +93,7 @@ pub fn createIdForPath(
 }
 
 fn hashString64(text: []const u8) u64 {
-    var code_units: [512]u21 = undefined;
-    if (text.len > code_units.len) {
-        const owned = std.heap.page_allocator.alloc(u21, text.len) catch @panic("oom");
-        defer std.heap.page_allocator.free(owned);
-        for (text, 0..) |c, i| owned[i] = c;
-        return hash.hash64Utf32(owned);
-    }
-    for (text, 0..) |c, i| code_units[i] = c;
-    return hash.hash64Utf32(code_units[0..text.len]);
+    return hash.hash64Utf32Bytes(text);
 }
 
 fn md5HexLower(out: *[32]u8, bytes: []const u8) !void {

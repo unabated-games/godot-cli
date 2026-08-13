@@ -545,6 +545,25 @@ pub fn build(b: *std.Build) void {
     material_inspect_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&material_inspect_smoke.step);
 
+    // Regression: stdout must respect the shell-owned file offset. With a
+    // positional-mode writer every invocation pwrites at offset 0 and clobbers
+    // whatever the redirect target already holds.
+    const stdout_redirect_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp /tmp/godot_cli_redirect.XXXXXX) &&
+        \\echo "leading line that must survive" >"$tmp" &&
+        \\./zig-out/bin/godot-cli ping >>"$tmp" &&
+        \\./zig-out/bin/godot-cli uid encode 1350303725746704497 >>"$tmp" &&
+        \\out=$(cat "$tmp") &&
+        \\rm -f "$tmp" &&
+        \\[ "$(echo "$out" | sed -n 1p)" = "leading line that must survive" ] &&
+        \\[ "$(echo "$out" | sed -n 2p)" = "pong" ] &&
+        \\echo "$out" | grep -q 'uid://tidkmw585t0t'
+    });
+    stdout_redirect_smoke.setCwd(b.path("."));
+    stdout_redirect_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&stdout_redirect_smoke.step);
+
     const godot_bin = b.option([]const u8, "godot", "Path to Godot binary for reference generation") orelse "/Applications/Godot.app/Contents/MacOS/Godot";
     const godot_step = b.step("test-godot", "Import fixtures, generate Godot reference save, run round-trip CLI check");
     const import_cmd = b.addSystemCommand(&.{ "bash", "tools/import_fixtures.sh" });
@@ -567,7 +586,7 @@ pub fn build(b: *std.Build) void {
     godot_step.dependOn(&roundtrip_cmd.step);
     const compare_cmd = b.addRunArtifact(exe);
     compare_cmd.addArgs(&.{
-        "scene", "compare-godot", "test_fixtures/project/sample.tscn",
+        "scene",                                         "compare-godot", "test_fixtures/project/sample.tscn",
         "test_fixtures/project/sample_godot_saved.tscn", "--json",
     });
     compare_cmd.step.dependOn(&godot_cmd.step);
@@ -575,12 +594,11 @@ pub fn build(b: *std.Build) void {
     godot_step.dependOn(&compare_cmd.step);
     const normalize_cmd = b.addRunArtifact(exe);
     normalize_cmd.addArgs(&.{
-        "scene",           "normalize",
-        "test_fixtures/project/sample.tscn",
-        "--output",        "zig-out/sample_normalized.tscn",
-        "--project-root",  "test_fixtures/project",
-        "--resource-path", "res://sample.tscn",
-        "--godot-save-format",
+        "scene",                             "normalize",
+        "test_fixtures/project/sample.tscn", "--output",
+        "zig-out/sample_normalized.tscn",    "--project-root",
+        "test_fixtures/project",             "--resource-path",
+        "res://sample.tscn",                 "--godot-save-format",
     });
     normalize_cmd.step.dependOn(&godot_cmd.step);
     normalize_cmd.step.dependOn(b.getInstallStep());

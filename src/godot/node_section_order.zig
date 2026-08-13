@@ -122,22 +122,31 @@ pub fn moveSubtreeAfterReparent(
     }
     std.mem.sort(usize, block.items, {}, std.sort.asc(usize));
 
+    // `sections` only ever holds sections detached from `doc`. Each one is
+    // removed from the list as it is handed back, so the errdefer never frees a
+    // section the document already owns.
     var sections: std.ArrayList(document.Section) = .empty;
-    errdefer {
-        for (sections.items) |*section| section.deinit(allocator);
-        sections.deinit(allocator);
-    }
+    defer sections.deinit(allocator);
+    errdefer for (sections.items) |*section| section.deinit(allocator);
+
     var shift: usize = 0;
     for (block.items) |index| {
-        const removed = try document.removeSection(doc, index - shift);
-        try sections.append(allocator, removed);
+        var removed = try document.removeSection(doc, index - shift);
+        sections.append(allocator, removed) catch |err| {
+            removed.deinit(allocator);
+            return err;
+        };
         shift += 1;
     }
 
     const insert_at = try insertIndexForNewChild(allocator, doc, new_parent_viewport_path);
     var offset: usize = 0;
-    for (sections.items) |section| {
-        try document.insertSection(doc, allocator, insert_at + offset, section);
+    while (sections.items.len > 0) {
+        var section = sections.orderedRemove(0);
+        document.insertSection(doc, allocator, insert_at + offset, section) catch |err| {
+            section.deinit(allocator);
+            return err;
+        };
         offset += 1;
     }
 }

@@ -48,6 +48,11 @@ pub const Invocation = struct {
         if (self.path.len != 0) {
             allocator.free(self.path);
         }
+        if (self.positionals.len != 0) {
+            allocator.free(self.positionals);
+        }
+        // Keys are static option names; values are duped when parsed.
+        for (self.options.values()) |value| allocator.free(value);
         self.options.deinit(allocator);
         self.* = undefined;
     }

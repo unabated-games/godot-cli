@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const resource_uid = @import("resource_uid.zig");
+const io_util = @import("../io_util.zig");
 
 pub const Entry = struct {
     id: i64,
@@ -102,7 +103,7 @@ pub fn encode(allocator: std.mem.Allocator, entries: []const Entry) ![]u8 {
 pub fn saveToFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8, entries: []const Entry) !void {
     const data = try encode(allocator, entries);
     defer allocator.free(data);
-    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data });
+    try io_util.writeFileAtomic(io, path, data);
 }
 
 fn readU32(bytes: []const u8, offset: *usize) LoadError!u32 {

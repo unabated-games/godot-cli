@@ -25,7 +25,7 @@ pub const SaveOptions = struct {
 
 pub const PrepareError = error{
     OutOfMemory,
-} || node_section_order.Error;
+} || node_section_order.Error || scene_id.Error || node_id.Error;
 
 pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, options: SaveOptions) PrepareError!void {
     scene_id.resetSceneUniqueIdGenerator();
@@ -188,7 +188,7 @@ fn idPrefix(id: []const u8) ?[]const u8 {
 
 fn generateUniqueId(allocator: std.mem.Allocator, prefix: []const u8, used: *std.StringHashMap(void)) ![]u8 {
     while (true) {
-        const suffix = scene_id.generateSceneUniqueId();
+        const suffix = try scene_id.generateSceneUniqueId();
         const id = try std.fmt.allocPrint(allocator, "{s}{s}", .{ prefix, &suffix });
         if (!used.contains(id)) return id;
         allocator.free(id);
@@ -445,7 +445,7 @@ fn assignNodeUniqueIds(allocator: std.mem.Allocator, doc: *document.Document, se
     }
 
     for (needs_assign.items) |index| {
-        const new_id = node_id.generateNodeUniqueId(&used);
+        const new_id = try node_id.generateNodeUniqueId(&used);
         try used.put(new_id, {});
         try doc.sections.items[index].header.setIntegerField(allocator, "unique_id", new_id);
     }
