@@ -351,11 +351,13 @@ Publish a compatibility table in both READMEs (e.g. plugin 0.1.x ↔ godot-cli 0
 
 ## Development fixtures
 
-Manual test project for catalog authoring and `catalog scan` development:
+The committed fixture project at `test_fixtures/project/` covers catalog authoring
+and `catalog scan` development. Its catalog entry lives at
+`test_fixtures/project/ui/button/`, with the manifest at
+`test_fixtures/project/ui/button.manifest.tres`.
 
-**Path:** `/Users/edmorley/dev_internal/ai_experiments/godot-pai-test/`
-
-**Addon:** symlinked `addons/godot_power_ai` → `godotengine/godot_power_ai/addons/godot_power_ai`
+To exercise manifest authoring in the editor, point a scratch Godot project at the
+addon and add `addons/godot_power_ai` to it.
 
 **Sample catalog entry (project):**
 

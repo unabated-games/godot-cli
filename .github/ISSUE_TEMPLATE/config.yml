@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/unabated-games/godot-cli/security/advisories/new
+    about: Report security issues privately, not as a public issue.
+  - name: Godot Engine itself
+    url: https://github.com/godotengine/godot/issues
+    about: This project is not affiliated with the Godot Foundation. Bugs in the engine or editor belong upstream.

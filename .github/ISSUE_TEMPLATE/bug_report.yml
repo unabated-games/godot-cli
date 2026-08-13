@@ -1,0 +1,69 @@
+name: Bug report
+description: Something godot-cli does wrong — wrong output, a crash, or a file it damaged
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If this is a security issue, please use the
+        Security tab to report it privately instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, and what did it do?
+      placeholder: |
+        I ran `godot-cli scene node add …` and the resulting .tscn had …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        The exact command, and the smallest scene/resource/project file that shows
+        the problem. A file matters more than a description — most bugs here are
+        format details.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: godot-cli version
+      description: Output of `godot-cli --version`
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS and architecture
+      placeholder: macOS 15 arm64 / Ubuntu 24.04 x86_64
+    validations:
+      required: true
+
+  - type: input
+    id: godot-version
+    attributes:
+      label: Godot version
+      description: If the issue involves a file Godot wrote or refused to open.
+      placeholder: "4.7"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I ran `godot-cli scene validate` on the file and included the output if it reported anything
+        - label: I am on the latest version, or have said which version I am on above

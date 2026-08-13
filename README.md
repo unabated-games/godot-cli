@@ -12,9 +12,14 @@ Early development. Godot-compatible **ID generation**, **UID cache**, **scene/re
 
 **North star:** agents author **editor-like scenes** in `.tscn` — not runtime `instantiate()` workarounds. See [ABOUT.md](docs/ABOUT.md#north-star-editor-like-scene-authoring).
 
+Compatibility is verified against **Godot 4.7**, both in unit tests and in a round-trip suite that compares godot-cli's output byte-for-byte against files the editor itself saved.
+
 ## Requirements
 
 - Zig 0.16.0 or later
+- Godot 4.7, only for `zig build test-godot`
+
+Supported targets: Linux (glibc and musl), macOS, and Windows, on x86_64 and aarch64. Every release builds all of them, and CI cross-compiles each on every change.
 
 ## Building
 
@@ -25,12 +30,12 @@ zig build
 The binary is installed to `zig-out/bin/godot-cli`.
 
 ```bash
-zig build test
-zig build test-godot   # requires Godot 4.x at default macOS path (or -Dgodot=...)
+zig build test         # unit tests + CLI smoke tests
+zig build test-godot   # requires Godot 4.7 at the default macOS path (or -Dgodot=...)
 zig build run -- --help
 ```
 
-CI workflow is available but **manual only** (GitHub Actions → CI → Run workflow). For day-to-day iteration use `zig build test` locally; `zig build test-godot` when you have Godot installed.
+CI runs `zig fmt --check` and `zig build test` on Linux and macOS for every push and pull request, plus a cross-compile of every supported target. The Godot round-trip suite runs on pushes to `main`.
 
 Optional build flag:
 
@@ -115,6 +120,42 @@ godot-cli scene normalize in.tscn --output out.tscn --project-root . --godot-sav
 godot-cli uid session import --referrer res://main.tscn --from godot_saved.tscn --project-root .
 godot-cli scene set-property --node-name Player --property visible --value true path/to/main.tscn
 
+# Author a scene the way the editor would — nodes persisted in the .tscn
+godot-cli scene new --output main.tscn --root-name Main --root-type Node2D
+godot-cli scene node add main.tscn --parent /root/Main --name Player --type CharacterBody2D
+godot-cli scene node list main.tscn --json
+godot-cli scene node rename main.tscn /root/Main/Player --name Hero
+godot-cli scene node reparent main.tscn /root/Main/Hero --parent /root/Main/Playfield
+godot-cli scene ext add main.tscn --type Texture2D --path res://icon.svg
+godot-cli scene sub add main.tscn --type RectangleShape2D --property size --value "Vector2(16, 32)"
+godot-cli scene instance add main.tscn --parent /root/Main --name MyButton \
+  --scene res://ui/button/button.tscn --project-root .
+godot-cli scene template list --json
+godot-cli scene template copy ui/control_root --output hud.tscn
+
+# Declarative editing: intent -> patch -> apply, with a diff and an undo patch
+godot-cli scene plan main.tscn --intent intent.json --project-root . --json
+godot-cli scene apply main.tscn --patch patch.json --project-root . --write-undo-patch undo.json
+godot-cli scene diff before.tscn after.tscn --json
+godot-cli scene restore main.tscn --snapshot main.tscn.godot-cli-snapshot
+
+# Component catalog (project manifests + Godot builtins)
+godot-cli catalog list --project-root . --json
+godot-cli catalog show ui/button --project-root . --json
+godot-cli catalog search button --project-root . --json
+godot-cli catalog export --project-root . --output AGENTS.md
+
+# project.godot settings
+godot-cli project show --project-root . --json
+godot-cli project settings set --project-root . --section application --key run/main_scene --value res://main.tscn
+godot-cli project input apply --project-root . --intent share/examples/intents/wasd_movement.json
+godot-cli project autoload list --project-root . --json
+godot-cli project plugins enable --project-root . --plugin my_plugin
+godot-cli project apply --project-root . --intent share/examples/intents/project_bootstrap.json
+
+# Several commands in one invocation
+godot-cli batch --file share/examples/batch/apply_validate.json --json
+
 # Resource files (.tres)
 godot-cli resource inspect path/to/material.tres --json
 godot-cli resource set-property --section resource --property albedo_color --value "Color(1, 0, 0, 1)" path/to/material.tres
@@ -157,19 +198,40 @@ src/
   godot/             Godot-compatible primitives (UID, scene IDs, …)
   cli/               Argument parsing, help, JSON input
   output/            Result emission (text and JSON)
-docs/
-  development_principles.md
-  id_generation_plan.md
-  mcp_tools.json
+  catalog/           Bundled Godot builtin catalog data
+docs/                Agent guides, design docs, mcp_tools.json
+templates/           Built-in scene templates (scene template copy)
+share/examples/      Example intent, patch, and batch JSON
+skills/              Agent skill package (godot-scene-authoring)
 tools/
   import_fixtures.sh   # Godot --import for test_fixtures/project
   sync_id_session.sh   # Import ext_resource ids from Godot save into session cache
 test_fixtures/
   project/           # Minimal Godot project (IDs, rich variant fixtures)
+third_party/
+  licenses/          # Full license texts for ported third-party code
 .github/
-  workflows/ci.yml   # manual workflow_dispatch only (zig build test + test-godot)
+  workflows/ci.yml       # fmt, tests, cross-compile, Godot round-trip
+  workflows/release.yml  # tagged release binaries
 ```
+
+## Contributing
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+for the development setup, what CI checks, and the conventions new commands follow.
+Participation is covered by our [Code of Conduct](CODE_OF_CONDUCT.md). To report a
+security issue, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-TBD
+godot-cli is released under the [MIT License](LICENSE), copyright © 2026
+[Unabated Games](https://github.com/unabated-games).
+
+It contains code ported from the Godot Engine (MIT) and from PCG
+(Apache-2.0). Those notices, and what was changed, are recorded in
+[THIRDPARTY.md](THIRDPARTY.md); the Apache-2.0 text is included at
+[`third_party/licenses/`](third_party/licenses/).
+
+"Godot" and the Godot Engine logo are trademarks of the Godot Foundation. This
+project is not affiliated with, endorsed by, or sponsored by the Godot Foundation
+or the Godot Engine project.

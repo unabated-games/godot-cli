@@ -1,0 +1,42 @@
+name: Feature request
+description: A command, flag, or capability godot-cli should have
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, it's worth skimming [docs/ABOUT.md](../blob/main/docs/ABOUT.md)
+        for what this project is and isn't trying to be.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        Describe the task, not the solution. What are you trying to accomplish in
+        your Godot project or agent workflow that godot-cli makes hard today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like godot-cli to do?
+      description: A command shape or flag, if you have one in mind.
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How are you working around it now?
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Who is this for?
+      multiple: true
+      options:
+        - Interactive use at a terminal
+        - Scripts and CI
+        - LLM agents
+    validations:
+      required: true
