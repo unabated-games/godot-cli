@@ -15,6 +15,21 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **JSON catalog manifests (`*.manifest.json`, `catalog_format_version` 2).** Plain data, discovered by filename, requiring no editor addon installed in the project. A `.tres` manifest pins `res://addons/godot_power_ai/power_ai_catalog_manifest.gd` as an `ext_resource`, so the project cannot open it without that addon at that exact path; JSON manifests have no such coupling and an agent can write one directly.
+- **`catalog add`** — create or update a JSON manifest for a scene. Derives `id` from the scene path, fills `scene_uid` from the scene's `[gd_scene]` header, and scaffolds one row per signal declared by the root script using the same GDScript parser `catalog show` uses. `--update` preserves prose already written, drops rows for signals that no longer exist, and adds blank rows for new ones; without it an existing manifest is never overwritten.
+- `catalog scan` reports `json_files_scanned` alongside `tres_files_scanned`, and every entry carries its `format`.
+
+### Changed
+
+- `catalog scan` walks for both `*.manifest.json` and `.tres` manifests in a single pass. Validation, deduplication, and all downstream commands are format-agnostic, so `list`, `show`, `search`, `export`, and `validate` treat the two identically — including duplicate `id` / `scene` detection across formats.
+- JSON manifests use `signals` / `functions` rather than `signal_docs` / `function_docs`, and do not carry a `uid`: `id` is the identity and is already uniqueness-checked. The `.tres` schema is unchanged.
+
+### Fixed
+
+- `catalog validate` reported garbage `code` and `message` strings for an entry's existing issues whenever a duplicate `id` or `scene` was also found. `pushIssue` shallow-copied the issue list and then freed the strings the copies pointed at, so the worst output landed in exactly the case you most need it readable.
+
 ## [0.1.0] — 2026-08-13
 
 First public release, under the MIT License.

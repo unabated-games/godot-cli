@@ -545,6 +545,48 @@ pub fn build(b: *std.Build) void {
     material_inspect_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&material_inspect_smoke.step);
 
+    // `catalog add` scaffolds a JSON manifest, filling scene_uid from the scene
+    // header and one signal row per signal the root script declares.
+    const catalog_add_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d /tmp/godot_cli_catalog.XXXXXX) &&
+        \\cp -R test_fixtures/project/. "$tmp/" &&
+        \\rm -f "$tmp/ui/button.manifest.tres" "$tmp/instanced_child.manifest.json" &&
+        \\out=$(./zig-out/bin/godot-cli catalog add res://ui/button/button.tscn \
+        \\  --project-root "$tmp" --summary "A button" --when-to-use "UI" --tags ui,button --json) &&
+        \\echo "$out" | grep -q '"signals_scaffolded":1' &&
+        \\grep -q '"catalog_format_version": 2' "$tmp/ui/button/button.manifest.json" &&
+        \\grep -q '"id": "ui/button/button"' "$tmp/ui/button/button.manifest.json" &&
+        \\grep -q '"name": "button_pressed"' "$tmp/ui/button/button.manifest.json" &&
+        \\grep -q 'uid://byhqeak2spha2' "$tmp/ui/button/button.manifest.json" &&
+        \\scan=$(./zig-out/bin/godot-cli catalog scan --project-root "$tmp" --json) &&
+        \\echo "$scan" | grep -q '"id":"ui/button/button"' &&
+        \\echo "$scan" | grep -q '"catalog_format_version":2' &&
+        \\rm -rf "$tmp"
+    });
+    catalog_add_smoke.setCwd(b.path("."));
+    catalog_add_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_add_smoke.step);
+
+    // --update keeps prose a human wrote and refuses to clobber without it.
+    const catalog_update_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d /tmp/godot_cli_catalog_up.XXXXXX) &&
+        \\cp -R test_fixtures/project/. "$tmp/" &&
+        \\rm -f "$tmp/ui/button.manifest.tres" &&
+        \\./zig-out/bin/godot-cli catalog add res://instanced_child.tscn \
+        \\  --project-root "$tmp" --update --summary "Edited summary" --json >/dev/null &&
+        \\grep -q '"summary": "Edited summary"' "$tmp/instanced_child.manifest.json" &&
+        \\grep -q 'child_ready' "$tmp/instanced_child.manifest.json" &&
+        \\grep -q 'intro animation' "$tmp/instanced_child.manifest.json" &&
+        \\if ./zig-out/bin/godot-cli catalog add res://instanced_child.tscn \
+        \\     --project-root "$tmp" --json >/dev/null 2>&1; then exit 1; fi &&
+        \\rm -rf "$tmp"
+    });
+    catalog_update_smoke.setCwd(b.path("."));
+    catalog_update_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&catalog_update_smoke.step);
+
     // Regression: stdout must respect the shell-owned file offset. With a
     // positional-mode writer every invocation pwrites at offset 0 and clobbers
     // whatever the redirect target already holds.

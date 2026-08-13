@@ -1,0 +1,15 @@
+{
+  "catalog_format_version": 2,
+  "id": "fx/instanced_child",
+  "scene": "res://instanced_child.tscn",
+  "tags": ["fx", "child"],
+  "summary": "Reusable child scene used by instancing tests",
+  "when_to_use": "Composing a sub-scene that already instances a catalog button",
+  "signals": [
+    {
+      "name": "child_ready",
+      "doc": "Emitted once the child finishes its intro animation.",
+      "connect_example": "Child.child_ready.connect(_on_child_ready)"
+    }
+  ]
+}

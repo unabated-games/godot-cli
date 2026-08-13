@@ -140,8 +140,12 @@ godot-cli scene diff before.tscn after.tscn --json
 godot-cli scene restore main.tscn --snapshot main.tscn.godot-cli-snapshot
 
 # Component catalog (project manifests + Godot builtins)
+godot-cli catalog add res://ui/button/button.tscn --project-root . \
+  --summary "Project standard animated UI button" --tags ui,button
+godot-cli catalog add res://ui/button/button.tscn --project-root . --update
 godot-cli catalog list --project-root . --json
 godot-cli catalog show ui/button --project-root . --json
+godot-cli catalog validate --project-root . --json
 godot-cli catalog search button --project-root . --json
 godot-cli catalog export --project-root . --output AGENTS.md
 

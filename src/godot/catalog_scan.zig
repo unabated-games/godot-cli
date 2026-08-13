@@ -1,4 +1,16 @@
-//! Discover and parse `PowerAICatalogManifest` `.tres` files in a Godot project.
+//! Discover and parse catalog manifests in a Godot project.
+//!
+//! Two on-disk formats are supported, both producing a `ManifestEntry`:
+//!
+//!   - **`*.manifest.json`** (`catalog_format_version` 2) — plain JSON, needs no
+//!     editor addon installed in the project. This is the format `catalog add`
+//!     writes and the one agents should author.
+//!   - **`.tres`** with `script_class="PowerAICatalogManifest"`
+//!     (`catalog_format_version` 1) — authored in the Godot Inspector, requires
+//!     the addon script to be present at the path each manifest pins.
+//!
+//! Validation, deduplication, and everything downstream of `ManifestEntry` are
+//! format-agnostic.
 
 const std = @import("std");
 const document = @import("text_format/document.zig");
@@ -8,9 +20,40 @@ const Value = @import("variant/value.zig").Value;
 const project_config = @import("project_config.zig");
 const resource_uid = @import("resource_uid.zig");
 const uid_cache = @import("uid_cache.zig");
+const io_util = @import("../io_util.zig");
 
 pub const manifest_script_class = "PowerAICatalogManifest";
-pub const catalog_format_version_supported: i64 = 1;
+
+/// Suffix identifying a JSON manifest. Matched on the filename so the scan can
+/// reject candidates without reading them.
+pub const manifest_json_suffix = ".manifest.json";
+
+/// Format version required of a `.tres` manifest (addon-authored).
+pub const catalog_format_version_tres: i64 = 1;
+/// Format version required of a `*.manifest.json` manifest.
+pub const catalog_format_version_json: i64 = 2;
+
+/// Deprecated alias kept for callers written against the `.tres`-only scan.
+pub const catalog_format_version_supported: i64 = catalog_format_version_tres;
+
+pub const ManifestFormat = enum {
+    tres,
+    json,
+
+    pub fn jsonString(self: ManifestFormat) []const u8 {
+        return switch (self) {
+            .tres => "tres",
+            .json => "json",
+        };
+    }
+
+    pub fn requiredVersion(self: ManifestFormat) i64 {
+        return switch (self) {
+            .tres => catalog_format_version_tres,
+            .json => catalog_format_version_json,
+        };
+    }
+};
 
 pub const IssueSeverity = enum {
     @"error",
@@ -49,6 +92,7 @@ pub const DocRow = struct {
 pub const ManifestEntry = struct {
     manifest_path: []const u8,
     manifest_res_path: ?[]const u8 = null,
+    format: ManifestFormat = .tres,
     catalog_format_version: i64 = 1,
     id: []const u8 = "",
     uid: []const u8 = "",
@@ -100,6 +144,7 @@ pub const ManifestEntry = struct {
 pub const ScanResult = struct {
     project_root: []const u8,
     tres_files_scanned: usize = 0,
+    json_files_scanned: usize = 0,
     manifest_files_found: usize = 0,
     entries: []ManifestEntry,
 
@@ -138,12 +183,12 @@ pub fn scanProject(
     defer allocator.free(project_file);
     std.Io.Dir.cwd().access(io, project_file, .{}) catch return error.InvalidProjectRoot;
 
-    var tres_paths: std.ArrayList([]const u8) = .empty;
+    var candidates: std.ArrayList(Candidate) = .empty;
     defer {
-        for (tres_paths.items) |path| allocator.free(path);
-        tres_paths.deinit(allocator);
+        for (candidates.items) |candidate| allocator.free(candidate.path);
+        candidates.deinit(allocator);
     }
-    try collectTresFiles(allocator, io, norm_root, norm_root, &tres_paths);
+    try collectCandidates(allocator, io, norm_root, &candidates);
 
     var entries: std.ArrayList(ManifestEntry) = .empty;
     errdefer {
@@ -152,15 +197,32 @@ pub fn scanProject(
     }
 
     var manifest_count: usize = 0;
-    for (tres_paths.items) |path| {
-        var doc = document.parseFile(allocator, io, path) catch continue;
-        defer doc.deinit(allocator);
+    var tres_scanned: usize = 0;
+    var json_scanned: usize = 0;
+    for (candidates.items) |candidate| {
+        switch (candidate.format) {
+            .tres => {
+                tres_scanned += 1;
+                var doc = document.parseFile(allocator, io, candidate.path) catch continue;
+                defer doc.deinit(allocator);
 
-        if (!isPowerAiManifest(&doc)) continue;
-        manifest_count += 1;
+                // Every .tres in the project is a candidate, so the script class
+                // is the only thing separating a manifest from any other resource.
+                if (!isPowerAiManifest(&doc)) continue;
+                manifest_count += 1;
 
-        const entry = try parseManifest(allocator, io, norm_root, cache, path, &doc);
-        try entries.append(allocator, entry);
+                const entry = try parseManifest(allocator, io, norm_root, cache, candidate.path, &doc);
+                try entries.append(allocator, entry);
+            },
+            .json => {
+                json_scanned += 1;
+                // The filename already identified this as a manifest, so a parse
+                // failure is a broken manifest rather than an unrelated file.
+                manifest_count += 1;
+                const entry = try parseJsonManifest(allocator, io, norm_root, candidate.path);
+                try entries.append(allocator, entry);
+            },
+        }
     }
 
     try validateCollected(allocator, entries.items);
@@ -171,7 +233,8 @@ pub fn scanProject(
 
     return .{
         .project_root = owned_root,
-        .tres_files_scanned = tres_paths.items.len,
+        .tres_files_scanned = tres_scanned,
+        .json_files_scanned = json_scanned,
         .manifest_files_found = manifest_count,
         .entries = slice,
     };
@@ -184,12 +247,24 @@ fn openDirAt(io: std.Io, path: []const u8) ScanError!std.Io.Dir {
     return std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true }) catch return error.Io;
 }
 
-fn collectTresFiles(
+const Candidate = struct {
+    path: []const u8,
+    format: ManifestFormat,
+};
+
+/// Classify a filename as a manifest candidate. JSON manifests are identified by
+/// name; `.tres` files still need parsing to know whether they are manifests.
+fn candidateFormat(name: []const u8) ?ManifestFormat {
+    if (std.mem.endsWith(u8, name, manifest_json_suffix)) return .json;
+    if (std.mem.endsWith(u8, name, ".tres")) return .tres;
+    return null;
+}
+
+fn collectCandidates(
     allocator: std.mem.Allocator,
     io: std.Io,
-    project_root: []const u8,
     dir_path: []const u8,
-    out: *std.ArrayList([]const u8),
+    out: *std.ArrayList(Candidate),
 ) ScanError!void {
     var dir = try openDirAt(io, dir_path);
     defer dir.close(io);
@@ -208,16 +283,15 @@ fn collectTresFiles(
                     allocator.free(child_path);
                     continue;
                 }
-                try collectTresFiles(allocator, io, project_root, child_path, out);
+                try collectCandidates(allocator, io, child_path, out);
                 allocator.free(child_path);
             },
             .file => {
-                if (!std.mem.endsWith(u8, entry.name, ".tres")) {
+                const format = candidateFormat(entry.name) orelse {
                     allocator.free(child_path);
                     continue;
-                }
-                const owned = child_path;
-                try out.append(allocator, owned);
+                };
+                try out.append(allocator, .{ .path = child_path, .format = format });
             },
             else => allocator.free(child_path),
         }
@@ -264,14 +338,187 @@ fn parseManifest(
     entry.signal_docs = try readDocRowsProperty(allocator, resource, "signal_docs", true);
     entry.function_docs = try readDocRowsProperty(allocator, resource, "function_docs", false);
 
+    try validateEntry(allocator, io, project_root, &entry);
+    return entry;
+}
+
+/// Parse a `*.manifest.json` file.
+///
+/// Unparseable JSON yields an entry carrying an `invalid_json` error rather than
+/// failing the whole scan: one broken manifest should not hide the rest of the
+/// catalog, and `catalog validate` still fails on it.
+fn parseJsonManifest(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    manifest_path: []const u8,
+) ScanError!ManifestEntry {
+    var entry: ManifestEntry = .{
+        .manifest_path = try allocator.dupe(u8, manifest_path),
+        .format = .json,
+        .catalog_format_version = catalog_format_version_json,
+    };
+    errdefer entry.deinit(allocator);
+
+    entry.manifest_res_path = try project_config.filesystemToResPath(allocator, project_root, manifest_path);
+
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, manifest_path, allocator, .unlimited) catch {
+        return try jsonManifestError(allocator, entry, "manifest file could not be read");
+    };
+    defer allocator.free(bytes);
+
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, bytes, .{}) catch {
+        return try jsonManifestError(allocator, entry, "manifest is not valid JSON");
+    };
+    defer parsed.deinit();
+
+    const root = switch (parsed.value) {
+        .object => |obj| obj,
+        else => return try jsonManifestError(allocator, entry, "manifest must be a JSON object"),
+    };
+
+    entry.catalog_format_version = jsonInt(root, "catalog_format_version") orelse catalog_format_version_json;
+    entry.id = try jsonString(allocator, root, "id");
+    entry.uid = try jsonString(allocator, root, "uid");
+    entry.scene = try jsonString(allocator, root, "scene");
+    entry.scene_uid = try jsonString(allocator, root, "scene_uid");
+    entry.tags = try jsonStringList(allocator, root, "tags");
+    entry.summary = try jsonString(allocator, root, "summary");
+    entry.when_to_use = try jsonString(allocator, root, "when_to_use");
+    entry.when_not_to_use = try jsonString(allocator, root, "when_not_to_use");
+    entry.related_ids = try jsonStringList(allocator, root, "related_ids");
+    entry.prefer_over_ids = try jsonStringList(allocator, root, "prefer_over_ids");
+    entry.notes = try jsonString(allocator, root, "notes");
+    entry.export_root_script = try jsonString(allocator, root, "export_root_script");
+    entry.signal_docs = try jsonDocRows(allocator, root, "signals");
+    entry.function_docs = try jsonDocRows(allocator, root, "functions");
+
+    try validateEntry(allocator, io, project_root, &entry);
+    return entry;
+}
+
+fn jsonManifestError(
+    allocator: std.mem.Allocator,
+    entry_in: ManifestEntry,
+    message: []const u8,
+) ScanError!ManifestEntry {
+    var entry = entry_in;
+    var issues: std.ArrayList(Issue) = .empty;
+    errdefer freeIssues(allocator, &issues);
+    try appendIssue(allocator, &issues, .@"error", "invalid_json", message);
+    entry.issues = try issues.toOwnedSlice(allocator);
+    entry.valid = false;
+    return entry;
+}
+
+fn jsonString(
+    allocator: std.mem.Allocator,
+    obj: std.json.ObjectMap,
+    key: []const u8,
+) ScanError![]const u8 {
+    const value = obj.get(key) orelse return try allocator.dupe(u8, "");
+    return switch (value) {
+        .string => |s| try allocator.dupe(u8, s),
+        else => try allocator.dupe(u8, ""),
+    };
+}
+
+fn jsonInt(obj: std.json.ObjectMap, key: []const u8) ?i64 {
+    const value = obj.get(key) orelse return null;
+    return switch (value) {
+        .integer => |n| n,
+        else => null,
+    };
+}
+
+fn jsonStringList(
+    allocator: std.mem.Allocator,
+    obj: std.json.ObjectMap,
+    key: []const u8,
+) ScanError![]const []const u8 {
+    const value = obj.get(key) orelse return &.{};
+    const array = switch (value) {
+        .array => |a| a,
+        else => return &.{},
+    };
+
+    var items: std.ArrayList([]const u8) = .empty;
+    errdefer {
+        for (items.items) |item| allocator.free(item);
+        items.deinit(allocator);
+    }
+    for (array.items) |item| {
+        switch (item) {
+            .string => |s| try items.append(allocator, try allocator.dupe(u8, s)),
+            else => {},
+        }
+    }
+    return try items.toOwnedSlice(allocator);
+}
+
+fn jsonDocRows(
+    allocator: std.mem.Allocator,
+    obj: std.json.ObjectMap,
+    key: []const u8,
+) ScanError![]DocRow {
+    const value = obj.get(key) orelse return &.{};
+    const array = switch (value) {
+        .array => |a| a,
+        else => return &.{},
+    };
+
+    var rows: std.ArrayList(DocRow) = .empty;
+    errdefer {
+        for (rows.items) |*row| row.deinit(allocator);
+        rows.deinit(allocator);
+    }
+    for (array.items) |item| {
+        const row_obj = switch (item) {
+            .object => |o| o,
+            else => continue,
+        };
+        var row: DocRow = .{
+            .name = try jsonString(allocator, row_obj, "name"),
+            .doc = "",
+            .connect_example = "",
+            .when_to_call = "",
+        };
+        errdefer row.deinit(allocator);
+        row.doc = try jsonString(allocator, row_obj, "doc");
+        row.connect_example = try jsonString(allocator, row_obj, "connect_example");
+        row.when_to_call = try jsonString(allocator, row_obj, "when_to_call");
+        try rows.append(allocator, row);
+    }
+    return try rows.toOwnedSlice(allocator);
+}
+
+/// Field validation shared by both manifest formats. Populates `entry.issues`
+/// and `entry.valid`, and back-fills `scene_uid` from the scene header when the
+/// manifest omitted it.
+fn validateEntry(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    entry: *ManifestEntry,
+) ScanError!void {
     var issues: std.ArrayList(Issue) = .empty;
     errdefer freeIssues(allocator, &issues);
 
-    if (entry.catalog_format_version != catalog_format_version_supported) {
-        try appendIssue(allocator, &issues, .@"error", "unsupported_format_version", "catalog_format_version must be 1");
+    if (entry.catalog_format_version != entry.format.requiredVersion()) {
+        const message = try std.fmt.allocPrint(
+            allocator,
+            "catalog_format_version must be {d} for a {s} manifest",
+            .{ entry.format.requiredVersion(), entry.format.jsonString() },
+        );
+        defer allocator.free(message);
+        try appendIssue(allocator, &issues, .@"error", "unsupported_format_version", message);
     }
     if (entry.id.len == 0) try appendIssue(allocator, &issues, .@"error", "missing_id", "catalog id is required");
-    if (entry.uid.len == 0) try appendIssue(allocator, &issues, .@"error", "missing_uid", "manifest uid is required");
+    // `uid` only ever existed so the editor addon could stamp one; JSON
+    // manifests identify themselves by `id`.
+    if (entry.format == .tres and entry.uid.len == 0) {
+        try appendIssue(allocator, &issues, .@"error", "missing_uid", "manifest uid is required");
+    }
     if (entry.scene.len == 0) {
         try appendIssue(allocator, &issues, .@"error", "missing_scene", "scene path is required");
     } else if (!std.mem.startsWith(u8, entry.scene, "res://")) {
@@ -302,7 +549,6 @@ fn parseManifest(
 
     entry.issues = try issues.toOwnedSlice(allocator);
     entry.valid = !hasErrorIssues(entry.issues);
-    return entry;
 }
 
 fn validateCollected(allocator: std.mem.Allocator, entries: []ManifestEntry) ScanError!void {
@@ -593,4 +839,82 @@ test "scan button manifest fixture" {
     try std.testing.expect(entry.tags.len == 3);
     try std.testing.expect(entry.signal_docs.len == 1);
     try std.testing.expectEqualStrings("button_pressed", entry.signal_docs[0].name);
+    try std.testing.expectEqual(ManifestFormat.tres, entry.format);
+}
+
+test "scan json manifest fixture" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    var result = try scanProject(allocator, io, "test_fixtures/project", null);
+    defer result.deinit(allocator);
+
+    try std.testing.expect(result.json_files_scanned >= 1);
+
+    const entry = blk: {
+        for (result.entries) |*item| {
+            if (std.mem.eql(u8, item.id, "fx/instanced_child")) break :blk item;
+        }
+        return error.TestExpectedEqual;
+    };
+
+    try std.testing.expectEqual(ManifestFormat.json, entry.format);
+    try std.testing.expectEqual(catalog_format_version_json, entry.catalog_format_version);
+    try std.testing.expectEqualStrings("res://instanced_child.tscn", entry.scene);
+    try std.testing.expectEqualStrings("Reusable child scene used by instancing tests", entry.summary);
+    try std.testing.expect(entry.tags.len == 2);
+    try std.testing.expect(entry.signal_docs.len == 1);
+    try std.testing.expectEqualStrings("child_ready", entry.signal_docs[0].name);
+    // No `uid` field, and unlike a .tres manifest that is not an error.
+    try std.testing.expectEqualStrings("", entry.uid);
+    try std.testing.expect(entry.valid);
+}
+
+test "json manifest declaring the wrong format version is rejected" {
+    const allocator = std.testing.allocator;
+    var entry: ManifestEntry = .{
+        .manifest_path = try allocator.dupe(u8, "x.manifest.json"),
+        .format = .json,
+        .catalog_format_version = 1,
+        .id = try allocator.dupe(u8, "x"),
+        .scene = try allocator.dupe(u8, "res://x.tscn"),
+    };
+    defer entry.deinit(allocator);
+
+    try validateEntry(allocator, std.testing.io, "test_fixtures/project", &entry);
+    try std.testing.expect(!entry.valid);
+
+    var found = false;
+    for (entry.issues) |issue| {
+        if (std.mem.eql(u8, issue.code, "unsupported_format_version")) found = true;
+    }
+    try std.testing.expect(found);
+}
+
+test "pushIssue keeps earlier issue strings intact" {
+    const allocator = std.testing.allocator;
+    var entry: ManifestEntry = .{
+        .manifest_path = try allocator.dupe(u8, "x.manifest.json"),
+        .format = .json,
+        .catalog_format_version = catalog_format_version_json,
+        .id = try allocator.dupe(u8, "x"),
+        .scene = try allocator.dupe(u8, "res://x.tscn"),
+    };
+    defer entry.deinit(allocator);
+
+    // Two warnings, then a duplicate error on top — the shape that used to leave
+    // the first two pointing at freed memory.
+    try validateEntry(allocator, std.testing.io, "test_fixtures/project", &entry);
+    const warning_count = entry.issues.len;
+    try std.testing.expect(warning_count > 0);
+
+    try pushIssue(allocator, &entry, .@"error", "duplicate_scene", "multiple manifests reference the same scene");
+
+    try std.testing.expectEqual(warning_count + 1, entry.issues.len);
+    for (entry.issues) |issue| {
+        try std.testing.expect(issue.code.len > 0);
+        // 0xAA is the debug-allocator fill for freed memory.
+        for (issue.code) |c| try std.testing.expect(c != 0xAA);
+        for (issue.message) |c| try std.testing.expect(c != 0xAA);
+    }
+    try std.testing.expectEqualStrings("duplicate_scene", entry.issues[entry.issues.len - 1].code);
 }

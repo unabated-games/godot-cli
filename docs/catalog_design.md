@@ -23,12 +23,15 @@ Parsing and editing `.tscn` files is necessary but not sufficient. Agents need a
 ## Architecture overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Godot Power AI addon (separate repo)                               │
-│  PowerAICatalogManifest .tres — authored in Inspector               │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │  res://**/*.tres on disk
-                                ▼
+┌──────────────────────────────┐   ┌──────────────────────────────────┐
+│  godot-cli catalog add       │   │  Godot Power AI addon (separate) │
+│  *.manifest.json  (v2)       │   │  PowerAICatalogManifest .tres    │
+│  no addon required           │   │  authored in the Inspector  (v1) │
+└──────────────┬───────────────┘   └───────────────┬──────────────────┘
+               │                                   │
+               └───────────────┬───────────────────┘
+                               │  files on disk under res://
+                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  godot-cli catalog                                                  │
 │  scan → validate → list / show / search / export                    │
@@ -45,7 +48,90 @@ Parsing and editing `.tscn` files is necessary but not sufficient. Agents need a
 | Source | Id namespace | Storage | Instancing |
 |--------|--------------|---------|------------|
 | **Builtins** | `godot/…` e.g. `godot/ui/Button` | JSON inside godot-cli repo | Document-only — agents add raw nodes, no PackedScene |
-| **Project** | Semantic path e.g. `ui/widgets/animated_button` | `PowerAICatalogManifest` `.tres` in project | PackedScene from manifest `scene` path |
+| **Project** | Semantic path e.g. `ui/widgets/animated_button` | `*.manifest.json` (or a `.tres` manifest) in project | PackedScene from manifest `scene` path |
+
+---
+
+## Manifest formats
+
+Both formats produce the same internal entry, and both are discovered by a single
+scan. Validation, deduplication, and every downstream command are format-agnostic.
+
+| | `*.manifest.json` | `.tres` |
+|---|---|---|
+| `catalog_format_version` | `2` | `1` |
+| Discovery | filename suffix | `script_class="PowerAICatalogManifest"` in the header |
+| Authored by | `godot-cli catalog add`, or by hand / by an agent | Godot Inspector, via the addon |
+| Requires an addon installed in the project | no | yes — each manifest pins the script path |
+| `uid` field | not used | required |
+
+**JSON is the default.** A `.tres` manifest carries `script_class` and an
+`ext_resource` pointing at `res://addons/godot_power_ai/power_ai_catalog_manifest.gd`,
+so the project cannot open it without that addon installed at that exact path. JSON
+manifests are plain data with no such coupling, which is why `catalog add` writes
+them and why an agent can produce one directly.
+
+### JSON schema
+
+```json
+{
+  "catalog_format_version": 2,
+  "id": "ui/button",
+  "scene": "res://ui/button/button.tscn",
+  "scene_uid": "uid://byhqeak2spha2",
+  "tags": ["ui", "button", "input"],
+
+  "summary": "Project standard animated UI button",
+  "when_to_use": "Adding a button to a player-facing UI scene",
+  "when_not_to_use": "Debug panels — use godot/ui/Button instead",
+  "notes": "",
+
+  "related_ids": ["godot/ui/Button"],
+  "prefer_over_ids": [],
+  "export_root_script": "",
+
+  "signals": [
+    {
+      "name": "button_pressed",
+      "doc": "Emitted when the user left-clicks the control.",
+      "connect_example": "MyButton.button_pressed.connect(_on_my_button)"
+    }
+  ],
+  "functions": [
+    { "name": "pulse", "doc": "Play the attention animation.", "when_to_call": "After a failed submit." }
+  ]
+}
+```
+
+Required: `catalog_format_version`, `id`, `scene`. Everything else is optional and
+should be **omitted rather than written empty**, so diffs show only what was
+actually said. `scene_uid` is derived from the scene's `[gd_scene]` header when
+absent, and a mismatch is reported as a `scene_uid_mismatch` warning.
+
+Two differences from the `.tres` schema, both because the fields only existed to
+give the Inspector something to fill in:
+
+- **`uid` is not used.** `id` is the identity, and it is already uniqueness-checked.
+- **`signals` / `functions`** rather than `signal_docs` / `function_docs`.
+
+### Authoring with `catalog add`
+
+```bash
+godot-cli catalog add res://ui/button/button.tscn --project-root . \
+  --summary "Project standard animated UI button" \
+  --when-to-use "Adding a button to a player-facing UI scene" \
+  --tags ui,button,input
+```
+
+Writes `button.manifest.json` beside the scene. `id` defaults to the scene path
+without `res://` and without the extension, lowercased. `scene_uid` comes from the
+scene header. One row per signal declared by the scene's root script is scaffolded
+with empty prose, using the same GDScript parser `catalog show` uses — so the rows
+you have to fill in are already named and typed for you.
+
+`--update` re-runs the derivation against an existing manifest: prose is preserved,
+rows for signals that no longer exist are dropped, and newly declared signals gain
+blank rows. Without `--update`, an existing manifest is never overwritten.
 
 Builtins and project entries are **peers** in search results. There is **no shadowing** — builtins are explicit alternatives, not silent fallbacks. Manifests may reference builtins via `related_ids` / `prefer_over_ids`.
 

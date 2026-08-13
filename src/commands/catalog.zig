@@ -1,6 +1,7 @@
 const std = @import("std");
 const spec = @import("../cli/spec.zig");
 const app_mod = @import("../cli/app.zig");
+const catalog_add = @import("../godot/catalog_add.zig");
 const catalog_scan = @import("../godot/catalog_scan.zig");
 const catalog_show = @import("../godot/catalog_show.zig");
 const catalog_search = @import("../godot/catalog_search.zig");
@@ -119,6 +120,7 @@ fn scanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "project_root", try jsonString(cli.allocator, result.project_root));
     try data.put(cli.allocator, "tres_files_scanned", .{ .integer = @intCast(result.tres_files_scanned) });
+    try data.put(cli.allocator, "json_files_scanned", .{ .integer = @intCast(result.json_files_scanned) });
     try data.put(cli.allocator, "manifest_files_found", .{ .integer = @intCast(result.manifest_files_found) });
     try data.put(cli.allocator, "entry_count", .{ .integer = @intCast(result.entries.len) });
     try data.put(cli.allocator, "valid_entry_count", .{ .integer = @intCast(valid_count) });
@@ -214,6 +216,60 @@ fn parseTagsOption(allocator: std.mem.Allocator, text: ?[]const u8) ![]const []c
         try items.append(allocator, try allocator.dupe(u8, trimmed));
     }
     return try items.toOwnedSlice(allocator);
+}
+
+fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const project_root = projectRootFrom(inv) orelse return error.Usage;
+
+    const tags = try parseTagsOption(cli.allocator, inv.getOption("tags"));
+    defer freeStringList(cli.allocator, tags);
+    const related = try parseTagsOption(cli.allocator, inv.getOption("related-ids"));
+    defer freeStringList(cli.allocator, related);
+
+    var result = try catalog_add.addManifest(cli.allocator, cli.io, project_root, .{
+        .scene = inv.positionals[0],
+        .id = inv.getOption("id"),
+        .summary = inv.getOption("summary"),
+        .when_to_use = inv.getOption("when-to-use"),
+        .when_not_to_use = inv.getOption("when-not-to-use"),
+        .notes = inv.getOption("notes"),
+        .tags = tags,
+        .related_ids = related,
+        .update = inv.flag("update"),
+        .output = inv.getOption("output"),
+        .dry_run = inv.flag("dry-run"),
+    });
+    defer result.deinit(cli.allocator);
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "manifest_path", try jsonString(cli.allocator, result.manifest_path));
+    try data.put(cli.allocator, "manifest_res_path", try jsonString(cli.allocator, result.manifest_res_path));
+    try data.put(cli.allocator, "id", try jsonString(cli.allocator, result.id));
+    try data.put(cli.allocator, "scene", try jsonString(cli.allocator, result.scene));
+    try data.put(cli.allocator, "scene_uid", try jsonString(cli.allocator, result.scene_uid));
+    try data.put(cli.allocator, "signals_scaffolded", .{ .integer = @intCast(result.signals_scaffolded) });
+    try data.put(cli.allocator, "updated", .{ .bool = result.updated });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    if (inv.flag("dry-run")) {
+        try data.put(cli.allocator, "manifest", try jsonString(cli.allocator, result.json));
+    }
+
+    const verb = if (result.updated) "updated" else "created";
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "{s} {s} for {s}",
+        .{ verb, result.manifest_path, result.id },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn freeStringList(allocator: std.mem.Allocator, items: []const []const u8) void {
+    for (items) |item| allocator.free(item);
+    if (items.len > 0) allocator.free(items);
 }
 
 fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -492,15 +548,36 @@ pub fn commands() spec.CommandSpec {
         .description = "Generate markdown without writing the output file",
     };
 
+    const add_options = [_]spec.OptionSpec{
+        project_root_opt,
+        .{ .long = "id", .kind = .string, .description = "Catalog id (default: scene path without res:// and extension)" },
+        .{ .long = "summary", .kind = .string, .description = "One-line description of the component" },
+        .{ .long = "when-to-use", .kind = .string, .description = "When an agent should reach for this component" },
+        .{ .long = "when-not-to-use", .kind = .string, .description = "When an agent should use something else" },
+        .{ .long = "notes", .kind = .string, .description = "Edge cases and variant notes" },
+        .{ .long = "tags", .kind = .string, .description = "Comma-separated tags" },
+        .{ .long = "related-ids", .kind = .string, .description = "Comma-separated related catalog ids" },
+        .{ .long = "update", .kind = .flag, .description = "Update an existing manifest, keeping prose already written" },
+        .{ .long = "output", .kind = .path, .description = "Manifest path (default: <scene>.manifest.json beside the scene)" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Render the manifest without writing it" },
+    };
+
     return .{
         .name = "catalog",
-        .summary = "Project component catalog (PowerAICatalogManifest)",
-        .description = "Scan, list, show, validate, search, and export catalog manifests authored with the Godot Power AI addon.",
+        .summary = "Project component catalog",
+        .description = "Create, scan, list, show, validate, search, and export catalog manifests describing project components for LLM agents.",
         .children = &.{
             .{
+                .name = "add",
+                .summary = "Create or update a JSON catalog manifest for a scene",
+                .description = "Writes <scene>.manifest.json beside the scene, filling scene_uid from the scene header and scaffolding a row for each signal declared by the root script. With --update, prose already written is preserved.",
+                .options = &add_options,
+                .handler = addHandler,
+            },
+            .{
                 .name = "scan",
-                .summary = "Scan project for PowerAICatalogManifest resources",
-                .description = "Walks the project for .tres manifests, parses fields, and validates catalog entries.",
+                .summary = "Scan project for catalog manifests",
+                .description = "Walks the project for *.manifest.json and .tres manifests, parses fields, and validates catalog entries.",
                 .options = &.{project_root_opt},
                 .handler = scanHandler,
             },
