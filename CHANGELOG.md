@@ -15,45 +15,20 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-08-14
+
+First public release, under the MIT License.
+
 ### Added
 
 - **Catalog manifests are `*.manifest.json`** (`catalog_format_version` 2) — plain data, identified by filename, needing nothing installed in the Godot project to read or write. An agent can author one directly.
 - **`catalog add`** — create or update a manifest for a scene. Derives `id` from the scene path, fills `scene_uid` from the scene's `[gd_scene]` header, and scaffolds one row per signal declared by the root script, reusing the GDScript parser behind `catalog show`. `--update` preserves prose already written, drops rows for signals that no longer exist, and adds blank rows for new ones; without it an existing manifest is never overwritten.
 - **`catalog relink`** — repoint manifests whose scene has moved. `scene` is a plain path string and Godot does not rewrite it on a move, since its dependency tracking follows `ext_resource` and `uid://` references rather than arbitrary string properties. `scene_uid` survives, so relink resolves it through `.godot/uid_cache.bin` and rewrites the path, preserving `id` and prose. It works from the manifest outward, so it also repairs a manifest that did not travel with its scene. A stale uid cache — a `git mv` with the editor closed — is reported as `unresolved` rather than guessed at. Exits 1 if any manifest is still unrepaired.
-
-### Removed
-
-- **Resource-backed (`.tres`) catalog manifests.** They carried a `script_class` and pinned the defining GDScript by path as an `ext_resource`, so a project could not open its own manifests unless that script was installed at exactly that path — a dependency godot-cli itself never had, since it parses the file as text. Manifests are JSON only.
-- The manifest `uid` field, which existed so an editor could stamp one and which nothing consumed. `id` is the identity and is already uniqueness-checked.
-- `catalog scan` no longer reports `tres_files_scanned`; `manifest_files_found` covers it. `scanProject` and `searchCatalog` no longer take a uid cache, since only the `.tres` path used one.
-
-### Fixed
-
-- `catalog validate` reported garbage `code` and `message` strings for an entry's existing issues whenever a duplicate `id` or `scene` was also found. `pushIssue` shallow-copied the issue list and then freed the strings the copies pointed at, so the worst output landed in exactly the case you most need it readable.
-
-## [0.1.0] — 2026-08-13
-
-First public release, under the MIT License.
-
-### Fixed
-
-- **Output written to a redirected file could overwrite the target from byte 0.** stdout and stderr writers were constructed in positional mode, so `godot-cli … > out` and `>> out` wrote at the writer's own offset instead of the file offset owned by the shell — clobbering earlier content and previous invocations. Piped and terminal output were unaffected.
-- **The project did not compile for Linux or Windows.** Template root resolution called `std.c.getenv` without libc linked, which is a hard compile error on every non-macOS target. Environment access now goes through `std.process.Environ`, and CI cross-compiles all supported targets to keep it that way.
-- `Invocation.deinit` did not free parsed positionals or option values, and a repeated option stranded the value it displaced. Harmless under the CLI's arena, a leak for anything embedding the `godot_cli_tools` module.
-- `moveSubtreeAfterReparent` leaked its section list, and could double-free sections on a mid-transfer failure.
-- `applyCopyMutations` discarded the owned path returned by `renameNode`.
-- `zig build test` now passes; it previously failed the whole step on 25 leaked allocations despite every test passing.
-- `scene set-property` and `scene node add --property` wrote garbage for bool values (e.g. `unique_name_in_owner = true`) due to use-after-free when formatting Variant text.
-- `node_add` / `node_reparent` could leave `[node]` sections in child-before-parent file order (Godot instantiate: “parent path has vanished”). Save preparation and `scene normalize` now topologically sort node sections; reparent moves the subtree block under the new parent.
-
-### Added
-
 - MIT `LICENSE`, `THIRDPARTY.md` recording the Godot Engine (MIT) and PCG (Apache-2.0) code this project ports, and the Apache-2.0 text at `third_party/licenses/`.
 - `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue and pull request templates.
 - CI runs on push and pull request across Linux and macOS, checks formatting, and cross-compiles every supported target. Release workflow builds tagged binaries for Linux (musl), macOS, and Windows on x86_64 and aarch64.
 - `scene validate` error `node_parent_order` when a node's `parent=` refers to a node declared later in the file.
 - Fixture `test_fixtures/project/bad_node_order.tscn` and smoke tests for validate + normalize.
-
 - Agent docs: **UI authoring (editor parity)** — scene-first Control styling, `@tool` export pattern, unique names, HUD layout, quoted patch strings (`agent_quickstart.md`, `agent_scene_authoring.md`, skill).
 - Example intent `hud_top_bar.json` (top bar with ColorRect, MarginContainer, theme overrides, unique name).
 - `--unique-name` flag on `scene node add` and `scene instance add` (sets `unique_name_in_owner`).
@@ -92,7 +67,22 @@ First public release, under the MIT License.
 
 ### Fixed
 
+- `catalog validate` reported garbage `code` and `message` strings for an entry's existing issues whenever a duplicate `id` or `scene` was also found. `pushIssue` shallow-copied the issue list and then freed the strings the copies pointed at, so the worst output landed in exactly the case you most need it readable.
+- **Output written to a redirected file could overwrite the target from byte 0.** stdout and stderr writers were constructed in positional mode, so `godot-cli … > out` and `>> out` wrote at the writer's own offset instead of the file offset owned by the shell — clobbering earlier content and previous invocations. Piped and terminal output were unaffected.
+- **The project did not compile for Linux or Windows.** Template root resolution called `std.c.getenv` without libc linked, which is a hard compile error on every non-macOS target. Environment access now goes through `std.process.Environ`, and CI cross-compiles all supported targets to keep it that way.
+- `Invocation.deinit` did not free parsed positionals or option values, and a repeated option stranded the value it displaced. Harmless under the CLI's arena, a leak for anything embedding the `godot_cli_tools` module.
+- `moveSubtreeAfterReparent` leaked its section list, and could double-free sections on a mid-transfer failure.
+- `applyCopyMutations` discarded the owned path returned by `renameNode`.
+- `zig build test` now passes; it previously failed the whole step on 25 leaked allocations despite every test passing.
+- `scene set-property` and `scene node add --property` wrote garbage for bool values (e.g. `unique_name_in_owner = true`) due to use-after-free when formatting Variant text.
+- `node_add` / `node_reparent` could leave `[node]` sections in child-before-parent file order (Godot instantiate: “parent path has vanished”). Save preparation and `scene normalize` now topologically sort node sections; reparent moves the subtree block under the new parent.
 - Godot parse failure when applying texture after `player_2d` (`Unknown tag 'ext_resource'`) caused by `ext_resource` sections appended after `sub_resource`.
 - `player_2d` could not be used twice in one scene (`DuplicateResourceId` on `CapsuleShape2D_shape`).
 - Second `player_2d` with `texture` failed when `res://icon.svg` was already an `ext_resource` (now deduped via `assign_ext`).
 - `scene validate` did not catch invalid ext/sub section order.
+
+### Removed
+
+- **Resource-backed (`.tres`) catalog manifests.** They carried a `script_class` and pinned the defining GDScript by path as an `ext_resource`, so a project could not open its own manifests unless that script was installed at exactly that path — a dependency godot-cli itself never had, since it parses the file as text. Manifests are JSON only.
+- The manifest `uid` field, which existed so an editor could stamp one and which nothing consumed. `id` is the identity and is already uniqueness-checked.
+- `catalog scan` no longer reports `tres_files_scanned`; `manifest_files_found` covers it. `scanProject` and `searchCatalog` no longer take a uid cache, since only the `.tres` path used one.
