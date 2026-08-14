@@ -667,6 +667,11 @@ pub fn build(b: *std.Build) void {
     });
     normalize_cmd.step.dependOn(&godot_cmd.step);
     normalize_cmd.step.dependOn(b.getInstallStep());
+    // Byte-identical output depends on the ext_resource ids Godot just wrote, so
+    // the session cache has to be synced from that save before normalizing.
+    // Without this edge the two steps race, and on a clean checkout — with no
+    // stale cache to fall back on — the cmp below fails.
+    normalize_cmd.step.dependOn(&sync_session_cmd.step);
     godot_step.dependOn(&normalize_cmd.step);
     const cmp_cmd = b.addSystemCommand(&.{ "cmp", "zig-out/sample_normalized.tscn", "test_fixtures/project/sample_godot_saved.tscn" });
     cmp_cmd.step.dependOn(&normalize_cmd.step);

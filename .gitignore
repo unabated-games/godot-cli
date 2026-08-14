@@ -7,8 +7,8 @@ build/
 build-*/
 docgen_tmp/
 
-# Godot editor cache (keep uid_cache.bin and scene_id_cache.json fixtures)
-test_fixtures/project/.godot/editor/
+# Godot editor cache. Nothing here is committed: `zig build test-godot`
+# regenerates the uid and scene-id caches from the fixture project on every run.
 .godot/
 
 ### os ###
