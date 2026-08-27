@@ -15,6 +15,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-28
+
 ### Added
 
 - **`godot-cli completions bash|zsh|fish`**, **`godot-cli man`**, and **`godot-cli reference`** — the shell completions, the `godot-cli(1)` man page, and the Markdown command reference are all generated from the same `CommandSpec` tree the parser walks and `--help` prints, so a new command cannot be missing from them.

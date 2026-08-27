@@ -24,8 +24,15 @@ the unit tests.
 ```bash
 zig build              # build to zig-out/bin/godot-cli
 zig build test         # unit tests + CLI smoke tests
+zig build docs         # regenerate command reference, man page, completions
+zig build docs-check   # fail if any of those have drifted
 zig fmt src build.zig  # format
 ```
+
+The command reference (`docs/commands.md`), the man page, and the shell
+completions are generated from the `CommandSpec` tree in `src/commands.zig`. Add
+a command or an option and they change — run `zig build docs` and commit the
+result, or CI will tell you about it.
 
 The Godot round-trip suite needs a Godot 4.7 install:
 
@@ -42,6 +49,11 @@ Every push and pull request runs:
 - `zig build test` on Linux and macOS
 - a cross-compile of every supported target (Linux gnu/musl, macOS, Windows, on
   both x86_64 and aarch64)
+- `zig build docs-check`, plus `mandoc -Tlint` on the man page and a parse check
+  of the completions in bash, zsh, and fish
+- `shellcheck` over `install.sh` and `tools/*.sh`
+- `tools/check_mcp_tools.sh`, which fails when a runnable command is missing
+  from `docs/mcp_tools.json`
 
 The cross-compile job exists because host-only APIs are easy to introduce by
 accident and break every non-macOS user. If you reach for something in `std.c`,
@@ -62,7 +74,10 @@ downloads the editor.
   [docs/development_principles.md](docs/development_principles.md): argv and JSON
   parity, a stable result envelope, and `--json` output for every command.
 - Add tests. Parsers and format logic get unit tests; commands get a smoke test in
-  `build.zig` alongside the existing ones.
+  `build.zig` alongside the existing ones. For anything that writes a file, assert
+  on the file's contents — a smoke test that only checks the command's own JSON
+  once let `sub add --property` write freed memory into a scene for a whole
+  release.
 
 ## Changelog
 
@@ -70,6 +85,11 @@ User-facing changes go under `[Unreleased]` in
 [CHANGELOG.md](CHANGELOG.md), in the appropriate section. That includes changes to
 agent docs, skills, install behaviour, and error shapes — anything an LLM workflow
 or a script could notice.
+
+## Releasing
+
+Maintainers: [RELEASING.md](RELEASING.md). A release is a version bump, a
+changelog rename, and a tag push; the workflow does the rest.
 
 ## Third-party code
 
