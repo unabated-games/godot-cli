@@ -58,14 +58,50 @@ jobs:
             x86_64-linux-gnu \
             x86_64-linux-musl \
             aarch64-linux-gnu \
+            aarch64-linux-musl \
             x86_64-macos \
             aarch64-macos \
-            x86_64-windows
+            x86_64-windows \
+            aarch64-windows
           do
             echo "::group::$target"
             zig build -Dtarget="$target" -Doptimize=ReleaseSafe
             echo "::endgroup::"
           done
+
+  generated:
+    name: generated docs and completions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Install shells and man tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zsh fish mandoc shellcheck
+
+      # The command reference, man page, and completions are generated from the
+      # CommandSpec tree; this fails if a command was added without running
+      # `zig build docs`.
+      - name: Check generated files are current
+        run: zig build docs-check
+
+      - name: Lint the man page
+        run: mandoc -Tlint -Wwarning share/man/man1/godot-cli.1
+
+      - name: Check completions parse in every shell
+        run: |
+          bash -n share/completions/godot-cli.bash
+          zsh -n share/completions/_godot-cli
+          fish --no-execute share/completions/godot-cli.fish
+
+      - name: Shellcheck the installer
+        run: shellcheck install.sh tools/*.sh
 
   test-godot:
     name: godot round-trip

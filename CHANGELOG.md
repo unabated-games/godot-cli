@@ -22,6 +22,17 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 - `share/completions/` (bash, zsh, fish) and `share/man/man1/godot-cli.1`, both committed and packaged in release archives.
 - `zig build docs` regenerates all of the above; `zig build docs-check` fails when the committed copies have drifted, and runs in CI.
 - `-Dversion-date` build option — release date of the embedded version, shown in the man page header. Set from a constant rather than the clock so generated output stays byte-stable.
+- **`install.sh --from-release`** — installs a published binary instead of building, so godot-cli no longer requires a Zig toolchain. Resolves the latest version (or `--version X.Y.Z`), picks the archive for the running platform, **verifies it against the release `SHA256SUMS` and refuses to install on a mismatch**, and unpacks it into the same prefix layout as a source install. Outside a checkout — piped from `curl` — this is the default mode.
+- `install.sh` installs the shell completions and man page, and `env.sh` now sets `MANPATH` and loads completions for the running shell.
+- Release archives ship `share/completions/`, `share/man/`, `docs/commands.md`, and `install.sh`, and mirror the repository layout so the installer stages from a release and a checkout identically.
+- Releases build for **aarch64 Windows** as well; CI cross-compiles every target a release ships, including `aarch64-linux-musl`.
+- Release notes are composed from the CHANGELOG section for the tag (`tools/changelog_section.sh`) plus install and verification instructions, and releases publish directly instead of waiting as a draft.
+- Release archives carry a **build provenance attestation** (`gh attestation verify`).
+- CI job `generated docs and completions`: `zig build docs-check`, `mandoc -Tlint` on the man page, a parse check of the completions in bash, zsh, and fish, and `shellcheck` over `install.sh` and `tools/*.sh`.
+
+### Fixed
+
+- `LICENSE` is the unmodified MIT text again, so GitHub detects the licence. The third-party notice it used to carry lives in `THIRDPARTY.md`, which the README and every release archive already point at.
 
 ### Changed
 
