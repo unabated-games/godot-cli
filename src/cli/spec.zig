@@ -14,6 +14,29 @@ pub const OptionSpec = struct {
     default_value: ?[]const u8 = null,
 };
 
+/// A global option, accepted before or after the command path.
+///
+/// Kept as data next to `OptionSpec` so `--help`, the man page, the Markdown
+/// command reference, and the shell completions all render the same list.
+/// `parser.zig` still recognises these names explicitly; this table is the
+/// documented surface, and `cli/gen.zig` tests assert the two agree.
+pub const GlobalOptionSpec = struct {
+    long: []const u8,
+    short: ?u8 = null,
+    kind: ValueKind = .flag,
+    description: []const u8,
+};
+
+pub const global_options = [_]GlobalOptionSpec{
+    .{ .long = "help", .short = 'h', .description = "Show help and exit" },
+    .{ .long = "version", .description = "Show version and exit" },
+    .{ .long = "json", .description = "Emit machine-readable JSON output" },
+    .{ .long = "verbose", .short = 'v', .description = "Enable verbose logging on stderr" },
+    .{ .long = "request", .kind = .string, .description = "Run using a JSON command descriptor" },
+    .{ .long = "request-file", .kind = .path, .description = "Read JSON command descriptor from a file" },
+    .{ .long = "request-stdin", .description = "Read JSON command descriptor from stdin" },
+};
+
 pub const CommandHandler = *const fn (ctx: *anyopaque, inv: *const Invocation) anyerror!Result;
 
 pub const CommandSpec = struct {

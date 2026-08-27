@@ -15,6 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **`godot-cli completions bash|zsh|fish`**, **`godot-cli man`**, and **`godot-cli reference`** — the shell completions, the `godot-cli(1)` man page, and the Markdown command reference are all generated from the same `CommandSpec` tree the parser walks and `--help` prints, so a new command cannot be missing from them.
+- `docs/commands.md` — generated reference for every command, option, and exit code.
+- `share/completions/` (bash, zsh, fish) and `share/man/man1/godot-cli.1`, both committed and packaged in release archives.
+- `zig build docs` regenerates all of the above; `zig build docs-check` fails when the committed copies have drifted, and runs in CI.
+- `-Dversion-date` build option — release date of the embedded version, shown in the man page header. Set from a constant rather than the clock so generated output stays byte-stable.
+
+### Changed
+
+- Global options (`--json`, `--request`, …) are declared once in `cli/spec.zig` and rendered from there by `--help`, the man page, the reference, and every completion script.
+
 ## [0.1.0] — 2026-08-14
 
 First public release, under the MIT License.

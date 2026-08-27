@@ -1,0 +1,1551 @@
+.TH GODOT\-CLI 1 "2026-08-14" "godot-cli 0.1.0" "godot-cli Manual"
+.SH NAME
+godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
+.SH SYNOPSIS
+.B godot\-cli
+[\fIglobal options\fR] \fIcommand\fR [\fIcommand options\fR] [\fIargs\fR...]
+.br
+.B godot\-cli
+\fB\-\-request\fR \fIjson\fR
+.br
+.B godot\-cli
+\fB\-\-request\-file\fR \fIpath\fR
+.br
+.B godot\-cli
+\fB\-\-request\-stdin\fR
+.SH DESCRIPTION
+Reads and writes Godot 4 scene
+.RB ( .tscn ),
+resource
+.RB ( .tres ),
+and
+.B project.godot
+files with the same identifiers, ordering, and Variant formatting the Godot
+editor writes, so files it produces are byte-comparable with editor saves.
+.PP
+Commands form a tree. Anything expressible on the command line is also
+expressible as a JSON request document, and with
+.B \-\-json
+every command returns one JSON envelope on standard output.
+.SH GLOBAL OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Show help and exit
+.TP
+\fB\-\-version\fR
+Show version and exit
+.TP
+\fB\-\-json\fR
+Emit machine\-readable JSON output
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Enable verbose logging on stderr
+.TP
+\fB\-\-request\fR \fIvalue\fR
+Run using a JSON command descriptor
+.TP
+\fB\-\-request\-file\fR \fIpath\fR
+Read JSON command descriptor from a file
+.TP
+\fB\-\-request\-stdin\fR
+Read JSON command descriptor from stdin
+.SH COMMANDS
+.SS godot\-cli help
+Show help for a command
+.SS godot\-cli ping
+Framework health check
+.PP
+Returns a trivial response so callers can verify JSON and CLI
+wiring.
+.SS godot\-cli uid
+Godot\-compatible resource and scene ID helpers
+.SS godot\-cli uid encode
+Encode a numeric Resource UID to uid:// text
+.PP
+Converts a 63\-bit integer to Godot's uid:// representation.
+.SS godot\-cli uid decode
+Decode uid:// text to a numeric Resource UID
+.SS godot\-cli uid create\-for\-path
+Deterministic Resource UID for a project path and file
+.PP
+Matches ResourceUID.create_id_for_path using project name,
+Godot resource path, and file bytes.
+.TP
+\fB\-\-project\-name\fR \fIvalue\fR
+Project application/config/name
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot path e.g. res://main.tscn
+.SS godot\-cli uid scene\-id
+Scene\-local 5\-character unique id helpers
+.SS godot\-cli uid scene\-id generate
+Generate scene unique ids with a deterministic seed
+.TP
+\fB\-\-seed\fR \fIvalue\fR
+32\-bit seed (e.g. path.hash() from Godot)
+.TP
+\fB\-\-count\fR \fIvalue\fR
+Number of ids to generate (default 1)
+.SS godot\-cli uid cache
+Inspect project uid_cache.bin
+.SS godot\-cli uid cache list
+List all UID cache entries
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli uid cache lookup
+Resolve uid:// text to path or path to uid:// text
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli uid session
+Persistent ext_resource id session cache
+.SS godot\-cli uid session import
+Import ext_resource ids from a Godot\-saved scene
+.PP
+Updates scene_id_cache.json so future saves reuse Godot\-assigned
+ext_resource ids.
+.TP
+\fB\-\-referrer\fR \fIvalue\fR
+Referrer res:// path (scene being saved)
+.TP
+\fB\-\-from\fR \fIpath\fR
+Godot\-saved scene to import ids from
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Session cache JSON path
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default session path under .godot/)
+.SS godot\-cli scene
+Inspect and edit Godot scene files
+.SS godot\-cli scene new
+Create a new empty scene file
+.PP
+Writes a minimal gd_scene with a single root node. Use scene
+node add to build the tree.
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output .tscn path (required)
+.TP
+\fB\-\-root\-name\fR \fIvalue\fR
+Scene root node name (default: Root)
+.TP
+\fB\-\-root\-type\fR \fIvalue\fR
+Scene root node type (default: Node)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene refs
+List ext_resource references in a scene
+.PP
+With \-\-project\-root, resolves res:// paths to filesystem
+paths and reports whether each file exists.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.SS godot\-cli scene ext
+Add or remove external resources
+.SS godot\-cli scene ext add
+Add an ext_resource section
+.PP
+Inserts before node sections and assigns a Godot\-style id
+(e.g. 1_ab12c).
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Godot resource type (e.g. Script, PackedScene)
+.TP
+\fB\-\-path\fR \fIvalue\fR
+Godot res:// path for the external resource
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene ext remove
+Remove an ext_resource by id
+.PP
+Fails with referrer list if the id is still referenced in property
+text.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene sub
+Add or remove sub\-resources
+.SS godot\-cli scene sub add
+Add a sub_resource section
+.PP
+Inserts before node sections and assigns a Godot\-style id
+(e.g. CapsuleShape3D_ab12c).
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Godot resource class (e.g. RectangleShape2D)
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Optional sub_resource property to set
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (Variant text)
+.TP
+\fB\-\-raw\-value\fR
+Write property value verbatim
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene sub remove
+Remove a sub_resource by id
+.PP
+Fails with referrer list if the id is still referenced in property
+text.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene inspect
+Parse a .tscn file and report structure and ID issues
+.PP
+Reads section headers, parsed properties (with \-\-json), and
+runs ID validation. Pass \-\-project\-root to check uids against
+uid_cache.bin.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.TP
+\fB\-\-no\-validate\fR
+Skip ID validation
+.TP
+\fB\-\-parse\-properties\fR
+Include parsed property values in JSON output
+.TP
+\fB\-\-no\-parse\-properties\fR
+Omit parsed properties (faster for large files)
+.SS godot\-cli scene node
+List and query scene node tree
+.SS godot\-cli scene node list
+List all nodes in a scene with paths and section lines
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (optional; ignored for file\-only reads)
+.SS godot\-cli scene node get
+Get one node by viewport path or by name
+.PP
+Pass file and node path (e.g. /root/Root/Player), or use \-\-node\-name
+with optional \-\-parent.
+.TP
+\fB\-\-node\-name\fR \fIvalue\fR
+Node name to look up (alternative to node path positional)
+.TP
+\fB\-\-parent\fR \fIvalue\fR
+Parent attribute filter when using \-\-node\-name (e.g. "."
+or "Root")
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (optional; ignored for file\-only reads)
+.SS godot\-cli scene node add
+Add a child node under a parent path
+.PP
+Requires \-\-parent, \-\-name, and \-\-type. Assigns unique_id
+on save via save preparation.
+.TP
+\fB\-\-parent\fR \fIvalue\fR
+Viewport parent path (e.g. /root/Main)
+.TP
+\fB\-\-name\fR \fIvalue\fR
+Node name
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Godot node class name (e.g. CharacterBody2D)
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Optional property to set on the new node
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (Variant text)
+.TP
+\fB\-\-raw\-value\fR
+Write property value verbatim
+.TP
+\fB\-\-unique\-name\fR
+Set unique_name_in_owner on the new node (Access as Unique
+Name / %Name)
+.TP
+\fB\-\-recursive\fR
+Remove descendant nodes as well
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene node remove
+Remove a node by viewport path
+.PP
+Fails if the node has children unless \-\-recursive is set.
+.TP
+\fB\-\-parent\fR \fIvalue\fR
+Viewport parent path (e.g. /root/Main)
+.TP
+\fB\-\-name\fR \fIvalue\fR
+Node name
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Godot node class name (e.g. CharacterBody2D)
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Optional property to set on the new node
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (Variant text)
+.TP
+\fB\-\-raw\-value\fR
+Write property value verbatim
+.TP
+\fB\-\-unique\-name\fR
+Set unique_name_in_owner on the new node (Access as Unique
+Name / %Name)
+.TP
+\fB\-\-recursive\fR
+Remove descendant nodes as well
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene node rename
+Rename a node and rewrite descendant parent attributes
+.TP
+\fB\-\-parent\fR \fIvalue\fR
+Viewport parent path (e.g. /root/Main)
+.TP
+\fB\-\-name\fR \fIvalue\fR
+Node name
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Godot node class name (e.g. CharacterBody2D)
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Optional property to set on the new node
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (Variant text)
+.TP
+\fB\-\-raw\-value\fR
+Write property value verbatim
+.TP
+\fB\-\-unique\-name\fR
+Set unique_name_in_owner on the new node (Access as Unique
+Name / %Name)
+.TP
+\fB\-\-recursive\fR
+Remove descendant nodes as well
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene node reparent
+Move a node under a new parent path
+.TP
+\fB\-\-parent\fR \fIvalue\fR
+Viewport parent path (e.g. /root/Main)
+.TP
+\fB\-\-name\fR \fIvalue\fR
+Node name
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Godot node class name (e.g. CharacterBody2D)
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Optional property to set on the new node
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (Variant text)
+.TP
+\fB\-\-raw\-value\fR
+Write property value verbatim
+.TP
+\fB\-\-unique\-name\fR
+Set unique_name_in_owner on the new node (Access as Unique
+Name / %Name)
+.TP
+\fB\-\-recursive\fR
+Remove descendant nodes as well
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene instance
+Add instanced PackedScene nodes
+.SS godot\-cli scene instance add
+Instance a PackedScene under a parent node
+.PP
+Adds ext_resource type=PackedScene and a node with instance=ExtResource(...).
+Use \-\-scene or \-\-catalog\-id (project entries only).
+.TP
+\fB\-\-parent\fR \fIvalue\fR
+Viewport parent path (e.g. /root/Main)
+.TP
+\fB\-\-name\fR \fIvalue\fR
+Node name for the new instance
+.TP
+\fB\-\-scene\fR \fIvalue\fR
+PackedScene res:// path to instance
+.TP
+\fB\-\-catalog\-id\fR \fIvalue\fR
+Project catalog id (resolves scene path; requires \-\-project\-root)
+.TP
+\fB\-\-editable\fR
+Mark the instance editable in the parent scene ([editable path=...])
+.TP
+\fB\-\-unique\-name\fR
+Set unique_name_in_owner on the instance root (%Name from owner
+scripts)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene template
+Built\-in scene templates for scaffolding
+.SS godot\-cli scene template list
+List built\-in scene templates
+.TP
+\fB\-\-templates\-root\fR \fIpath\fR
+Directory containing built\-in templates (default: compile\-time
+templates/)
+.TP
+\fB\-\-content\fR
+Include raw .tscn source in template show output
+.TP
+\fB\-\-no\-parse\-properties\fR
+Omit parsed properties from template show sections
+.SS godot\-cli scene template show
+Show template metadata, node tree, and sections
+.PP
+Like scene inspect + node list for a built\-in template. Use
+\-\-content for raw .tscn text.
+.TP
+\fB\-\-templates\-root\fR \fIpath\fR
+Directory containing built\-in templates (default: compile\-time
+templates/)
+.TP
+\fB\-\-content\fR
+Include raw .tscn source in template show output
+.TP
+\fB\-\-no\-parse\-properties\fR
+Omit parsed properties from template show sections
+.SS godot\-cli scene template copy
+Copy a template to a new scene file
+.PP
+Requires \-\-output. Optional \-\-rename\-node and \-\-set\-property
+apply edits before save preparation.
+.TP
+\fB\-\-templates\-root\fR \fIpath\fR
+Directory containing built\-in templates (default: compile\-time
+templates/)
+.TP
+\fB\-\-rename\-node\fR \fIvalue\fR
+Rename node(s) after copy: Old:New pairs, comma\-separated
+.TP
+\fB\-\-set\-property\fR \fIvalue\fR
+Set properties after copy: path/prop=value or path|prop|value,
+comma\-separated
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (required)
+.TP
+\fB\-\-dry\-run\fR
+Report copy without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene plan
+Expand intent JSON to a patch and preview (no write)
+.PP
+Accepts \-\-intent or \-\-patch. Optional scene path positional
+dry\-runs the patch. See docs/agent_scene_authoring.md.
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON with steps/recipes (expands to patch ops)
+.TP
+\fB\-\-patch\fR \fIpath\fR
+Existing patch JSON to validate and preview
+.TP
+\fB\-\-write\-patch\fR \fIpath\fR
+Write expanded patch JSON to this path
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.SS godot\-cli scene apply
+Apply a declarative JSON patch to a scene
+.PP
+Batch node/resource/instance edits. Use \-\-patch or \-\-intent.
+See docs/agent_scene_authoring.md.
+.TP
+\fB\-\-patch\fR \fIpath\fR
+JSON patch file with { "ops": [ … ] }
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON (expands to patch ops via scene plan)
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Copy scene to this path before applying
+.TP
+\fB\-\-auto\-snapshot\fR
+Save snapshot to <scene>.godot\-cli\-snapshot before apply
+.TP
+\fB\-\-record\-undo\fR
+Record undo patch ops in JSON output
+.TP
+\fB\-\-write\-undo\-patch\fR \fIpath\fR
+Write undo patch JSON to this path (implies \-\-record\-undo)
+.TP
+\fB\-\-no\-strict\fR
+Continue applying ops after a failure (default: stop on first
+error)
+.TP
+\fB\-\-preview\-properties\fR
+With \-\-dry\-run, include property\-level changes in preview_diff
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene diff
+Compare node trees between two scenes
+.PP
+Reports added, removed, and type\-changed nodes. Use \-\-properties
+for property\-level diff.
+.TP
+\fB\-\-properties\fR
+Include node property diffs (added/removed/changed)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (optional; ignored for file\-only reads)
+.SS godot\-cli scene restore
+Restore a scene from a snapshot file
+.PP
+Copies \-\-from snapshot over the target scene (full file restore).
+.TP
+\fB\-\-from\fR \fIpath\fR
+Snapshot file to restore from
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Alias for \-\-from
+.TP
+\fB\-\-dry\-run\fR
+Report restore without writing
+.SS godot\-cli scene validate
+Validate scene IDs and references (fails on errors)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.SS godot\-cli scene validate\-batch
+Validate multiple scene files (aggregated JSON, exit 1 on any
+error)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.SS godot\-cli scene set\-property
+Set a property on a node section and save the scene
+.PP
+Target a section with \-\-node\-name or \-\-section\-line.
+Value is written verbatim after =.
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Property name to set
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (normalized unless \-\-raw\-value)
+.TP
+\fB\-\-raw\-value\fR
+Write value verbatim without Variant normalization
+.TP
+\fB\-\-node\-name\fR \fIvalue\fR
+Target node section by name attribute
+.TP
+\fB\-\-section\-line\fR \fIvalue\fR
+Target section by header line number
+.TP
+\fB\-\-section\fR \fIvalue\fR
+Target section by tag name (e.g. resource)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene normalize
+Repair scene\-local IDs and sort ext_resource sections for
+save
+.PP
+Runs Godot\-compatible save preparation without editing properties.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene retarget\-ext
+Replace ext_resource paths across one or more files
+.TP
+\fB\-\-from\fR \fIvalue\fR
+Current ext_resource path (res://…)
+.TP
+\fB\-\-to\fR \fIvalue\fR
+New ext_resource path (res://…)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation on write
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path when processing a single file
+.TP
+\fB\-\-dry\-run\fR
+Report changes without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene round\-trip
+Parse and rewrite a scene; fail if structure is not preserved
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Check structure preservation without writing
+.SS godot\-cli scene compare\-godot
+Compare a scene to a Godot headless save (semantic match)
+.PP
+Ignores ext_resource id suffixes and default sub_resource fields
+stripped by Godot.
+.TP
+\fB\-\-reference\fR \fIpath\fR
+Godot\-saved reference file (default: second positional)
+.SS godot\-cli resource
+Inspect and edit Godot resource files
+.SS godot\-cli resource inspect
+Parse a .tres file and report structure and ID issues
+.PP
+Reads section headers, parsed properties (with \-\-json), and
+runs ID validation.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.TP
+\fB\-\-no\-validate\fR
+Skip ID validation
+.TP
+\fB\-\-parse\-properties\fR
+Include parsed property values in JSON output
+.TP
+\fB\-\-no\-parse\-properties\fR
+Omit parsed properties (faster for large files)
+.SS godot\-cli resource validate
+Validate resource IDs and references (fails on errors)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.SS godot\-cli resource validate\-batch
+Validate multiple resource files (aggregated JSON, exit 1 on
+any error)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for uid_cache lookup and res:// seed path
+.SS godot\-cli resource set\-property
+Set a property on a resource section and save
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Property name to set
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (normalized unless \-\-raw\-value)
+.TP
+\fB\-\-raw\-value\fR
+Write value verbatim without Variant normalization
+.TP
+\fB\-\-section\-line\fR \fIvalue\fR
+Target section by header line number
+.TP
+\fB\-\-section\fR \fIvalue\fR
+Target section by tag name (default: resource)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli resource normalize
+Repair scene\-local IDs and sort ext_resource sections for
+save
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli resource retarget\-ext
+Replace ext_resource paths across one or more files
+.TP
+\fB\-\-from\fR \fIvalue\fR
+Current ext_resource path (res://…)
+.TP
+\fB\-\-to\fR \fIvalue\fR
+New ext_resource path (res://…)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation on write
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path when processing a single file
+.TP
+\fB\-\-dry\-run\fR
+Report changes without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli resource round\-trip
+Parse and rewrite a resource file; fail if structure is not
+preserved
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Check structure preservation without writing
+.SS godot\-cli resource compare\-godot
+Compare a resource to a Godot headless save (semantic match)
+.TP
+\fB\-\-reference\fR \fIpath\fR
+Godot\-saved reference file (default: second positional)
+.SS godot\-cli catalog
+Project component catalog
+.PP
+Create, scan, list, show, validate, search, and export catalog
+manifests describing project components for LLM agents.
+.SS godot\-cli catalog add
+Create or update a JSON catalog manifest for a scene
+.PP
+Writes <scene>.manifest.json beside the scene, filling scene_uid
+from the scene header and scaffolding a row for each signal
+declared by the root script. With \-\-update, prose already
+written is preserved.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-id\fR \fIvalue\fR
+Catalog id (default: scene path without res:// and extension)
+.TP
+\fB\-\-summary\fR \fIvalue\fR
+One\-line description of the component
+.TP
+\fB\-\-when\-to\-use\fR \fIvalue\fR
+When an agent should reach for this component
+.TP
+\fB\-\-when\-not\-to\-use\fR \fIvalue\fR
+When an agent should use something else
+.TP
+\fB\-\-notes\fR \fIvalue\fR
+Edge cases and variant notes
+.TP
+\fB\-\-tags\fR \fIvalue\fR
+Comma\-separated tags
+.TP
+\fB\-\-related\-ids\fR \fIvalue\fR
+Comma\-separated related catalog ids
+.TP
+\fB\-\-update\fR
+Update an existing manifest, keeping prose already written
+.TP
+\fB\-\-output\fR \fIpath\fR
+Manifest path (default: <scene>.manifest.json beside the scene)
+.TP
+\fB\-\-dry\-run\fR
+Render the manifest without writing it
+.SS godot\-cli catalog relink
+Repoint manifests whose scene has moved
+.PP
+For every manifest whose scene file is missing, resolves its
+scene_uid through .godot/uid_cache.bin and rewrites the scene
+path. Requires the project to have been opened in Godot since
+the move, since the editor is what refreshes that cache. Exits
+1 if any manifest is still unrepaired.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-dry\-run\fR
+Generate markdown without writing the output file
+.SS godot\-cli catalog scan
+Scan project for catalog manifests
+.PP
+Walks the project for *.manifest.json and .tres manifests,
+parses fields, and validates catalog entries.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli catalog list
+List valid catalog entries
+.PP
+Runs catalog scan and returns valid entries only (id, scene,
+summary, tags).
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli catalog show
+Show merged catalog entry by id
+.PP
+Returns manifest fields merged with scene nodes and GDScript
+exports/signals. Builtin ids use the godot/ namespace.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli catalog validate
+Validate catalog manifests in a project
+.PP
+Runs catalog scan and fails when any manifest has validation
+errors.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli catalog search
+Search project catalog entries and builtins
+.PP
+Filter by tags and/or free\-text query across summaries and
+documentation fields.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-tags\fR \fIvalue\fR
+Comma\-separated tag filter (all tags must match)
+.TP
+\fB\-\-query\fR \fIvalue\fR
+Free\-text search across summaries and docs
+.SS godot\-cli catalog export
+Export agent digest markdown
+.PP
+Writes a markdown catalog digest for LLM agents (default: AGENTS.md
+in the project root).
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output markdown path relative to project root (default: AGENTS.md)
+.TP
+\fB\-\-dry\-run\fR
+Generate markdown without writing the output file
+.SS godot\-cli batch
+Run multiple CLI commands in one invocation
+.PP
+Each step is a full argv array. Modes: stop (default), continue,
+atomic. See docs/agent_batch_commands.md.
+.TP
+\fB\-\-file\fR \fIpath\fR
+Batch JSON file with mode, rollback, and steps
+.TP
+\fB\-\-json\-body\fR \fIvalue\fR
+Batch JSON inline (use \-\-file if your shell conflicts with
+global \-\-request)
+.SS godot\-cli project
+Read and write Godot project.godot settings
+.PP
+Project\-level configuration: input, autoloads, plugins, rendering,
+physics, display, layer names.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project show
+Summarize key project.godot configuration
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project apply
+Apply unified project intent JSON (input, settings, autoload,
+plugins, rendering, physics)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project input
+Input Map actions in project.godot
+.SS godot\-cli project input list
+List input actions
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project input apply
+Apply input map intent JSON (merge/replace per action)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project input validate
+Validate [input] section event objects
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project settings
+Scalar project settings (application, display, layer_names,
+…)
+.SS godot\-cli project settings list
+List settings (optional \-\-section filter)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-section\fR \fIvalue\fR
+Filter to one section (application, display, layer_names, …)
+.SS godot\-cli project settings get
+Get one setting value
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-section\fR \fIvalue\fR
+Section name (e.g. application)
+.TP
+\fB\-\-key\fR \fIvalue\fR
+Setting key (e.g. run/main_scene)
+.SS godot\-cli project settings set
+Set one setting value
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-section\fR \fIvalue\fR
+Section name (e.g. application)
+.TP
+\fB\-\-key\fR \fIvalue\fR
+Setting key (e.g. run/main_scene)
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Plain value (quoted automatically for strings)
+.TP
+\fB\-\-raw\fR
+Store \-\-value verbatim (already Godot\-formatted)
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project settings apply
+Apply settings intent JSON (per\-key merge)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project settings validate
+Validate res:// paths in settings
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-section\fR \fIvalue\fR
+Filter to one section (application, display, layer_names, …)
+.SS godot\-cli project autoload
+Autoload singletons in project.godot
+.SS godot\-cli project autoload list
+List autoload entries
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project autoload apply
+Apply autoload intent JSON (merge by name; optional replace_all)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project autoload validate
+Validate autoload paths and names
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project plugins
+Editor plugins enable/disable in project.godot
+.SS godot\-cli project plugins list
+List addons and enabled state
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project plugins enable
+Enable one plugin
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-plugin\fR \fIvalue\fR
+Plugin path or addon folder name (res://addons/.../plugin.cfg)
+.TP
+\fB\-\-path\fR \fIvalue\fR
+Alias for \-\-plugin
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project plugins disable
+Disable one plugin
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-plugin\fR \fIvalue\fR
+Plugin path or addon folder name (res://addons/.../plugin.cfg)
+.TP
+\fB\-\-path\fR \fIvalue\fR
+Alias for \-\-plugin
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project plugins apply
+Apply plugin intent JSON (enable/disable lists)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project plugins validate
+Validate enabled plugin paths exist
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project rendering
+Rendering method and graphics driver settings
+.SS godot\-cli project rendering list
+List [rendering] section settings
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project rendering apply
+Apply rendering intent JSON (friendly aliases)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project rendering validate
+Validate known rendering method/driver values
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project physics
+Physics engine and gravity settings
+.SS godot\-cli project physics list
+List [physics] section settings
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project physics apply
+Apply physics intent JSON (friendly aliases)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Apply in memory without writing project.godot
+.SS godot\-cli project physics validate
+Validate known physics engine and scalar values
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli completions
+Print shell completions (bash, zsh, fish)
+.PP
+Generated from the command tree, so completions stay in step
+with the
+binary that printed them.
+
+  bash:  godot\-cli completions bash > ~/.godot\-cli/share/completions/godot\-cli.bash
+  zsh:   godot\-cli completions zsh  > "${fpath[1]}/_godot\-cli"
+  fish:  godot\-cli completions fish > ~/.config/fish/completions/godot\-cli.fish
+.TP
+\fB\-\-output\fR \fIpath\fR
+Write to this file instead of stdout
+.SS godot\-cli man
+Print the godot\-cli(1) man page in roff format
+.PP
+Render with: godot\-cli man | man \-l \-
+.TP
+\fB\-\-output\fR \fIpath\fR
+Write to this file instead of stdout
+.SS godot\-cli reference
+Print the Markdown command reference
+.PP
+The same document committed as docs/commands.md, regenerated
+from the
+command tree.
+.TP
+\fB\-\-output\fR \fIpath\fR
+Write to this file instead of stdout
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Runtime or command failure.
+.TP
+.B 2
+Usage or invocation error.
+.SH ENVIRONMENT
+.TP
+.B GODOT_CLI_TEMPLATES_ROOT
+Directory searched for built\-in scene templates when
+.B \-\-templates\-root
+is not given.
+.SH SEE ALSO
+Project documentation, including the agent guides and the full command
+reference, ships in the release archive and lives at
+.UR https://github.com/unabated\\-games/godot\\-cli
+github.com/unabated\\-games/godot\\-cli
+.UE

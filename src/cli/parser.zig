@@ -291,3 +291,20 @@ test "parse options after positionals" {
     try std.testing.expectEqualStrings("main.tscn", inv.positionals[0]);
     try std.testing.expectEqualStrings(".", inv.getOption("project-root").?);
 }
+
+test "every documented global option is recognised" {
+    const commands = @import("../commands.zig");
+    const allocator = std.testing.allocator;
+
+    for (spec.global_options) |opt| {
+        const arg = try std.fmt.allocPrint(allocator, "--{s}", .{opt.long});
+        defer allocator.free(arg);
+
+        var inv: spec.Invocation = .{};
+        defer inv.deinit(allocator);
+
+        var index: usize = 0;
+        const outcome = try parseGlobalOrRootOption(allocator, &commands.root, arg, &.{arg}, &index, &inv);
+        try std.testing.expect(outcome != .unknown);
+    }
+}

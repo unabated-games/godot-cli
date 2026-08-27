@@ -70,13 +70,16 @@ pub fn printCommandHelp(
 }
 
 fn printGlobalOptions(writer: *std.Io.Writer) std.Io.Writer.Error!void {
-    try writer.print("  -h, --help              Show help and exit\n", .{});
-    try writer.print("      --version           Show version and exit\n", .{});
-    try writer.print("      --json              Emit machine-readable JSON output\n", .{});
-    try writer.print("  -v, --verbose           Enable verbose logging on stderr\n", .{});
-    try writer.print("      --request <json>    Run using a JSON command descriptor\n", .{});
-    try writer.print("      --request-file <p>  Read JSON command descriptor from a file\n", .{});
-    try writer.print("      --request-stdin     Read JSON command descriptor from stdin\n", .{});
+    // Same table the man page and completions render, so the three cannot
+    // disagree about which global options exist.
+    for (spec.global_options) |opt| {
+        try printOption(writer, .{
+            .long = opt.long,
+            .short = opt.short,
+            .kind = opt.kind,
+            .description = opt.description,
+        });
+    }
 }
 
 fn printOption(writer: *std.Io.Writer, opt: spec.OptionSpec) std.Io.Writer.Error!void {

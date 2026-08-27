@@ -18,9 +18,14 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.1.0";
+    // Release date of `version_string`, shown in the man page header. Bumped
+    // with the version at release time (see RELEASING.md) rather than read
+    // from the clock, so the generated docs stay byte-stable.
+    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-08-14";
 
     const version_options = b.addOptions();
     version_options.addOption([]const u8, "version", version_string);
+    version_options.addOption([]const u8, "version_date", version_date);
     version_options.addOption([]const u8, "templates_root", "templates");
 
     // This creates a module, which represents a collection of source files alongside
@@ -676,6 +681,53 @@ pub fn build(b: *std.Build) void {
     const cmp_cmd = b.addSystemCommand(&.{ "cmp", "zig-out/sample_normalized.tscn", "test_fixtures/project/sample_godot_saved.tscn" });
     cmp_cmd.step.dependOn(&normalize_cmd.step);
     godot_step.dependOn(&cmp_cmd.step);
+
+    // Generated CLI surface: the Markdown command reference, the man page, and
+    // the shell completions all come from the CommandSpec tree, so they are
+    // rebuilt by `zig build docs` and diffed by `zig build docs-check`.
+    const docs_step = b.step("docs", "Regenerate command reference, man page, and shell completions");
+    const docs_cmd = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\mkdir -p docs share/man/man1 share/completions &&
+        \\./zig-out/bin/godot-cli reference --output docs/commands.md &&
+        \\./zig-out/bin/godot-cli man --output share/man/man1/godot-cli.1 &&
+        \\./zig-out/bin/godot-cli completions bash --output share/completions/godot-cli.bash &&
+        \\./zig-out/bin/godot-cli completions zsh --output share/completions/_godot-cli &&
+        \\./zig-out/bin/godot-cli completions fish --output share/completions/godot-cli.fish
+    });
+    docs_cmd.setCwd(b.path("."));
+    docs_cmd.step.dependOn(b.getInstallStep());
+    docs_step.dependOn(&docs_cmd.step);
+
+    const docs_check_step = b.step("docs-check", "Fail if generated docs, man page, or completions are stale");
+    const docs_check_cmd = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d)
+        \\trap 'rm -rf "$tmp"' EXIT
+        \\./zig-out/bin/godot-cli reference --output "$tmp/commands.md" >/dev/null
+        \\./zig-out/bin/godot-cli man --output "$tmp/godot-cli.1" >/dev/null
+        \\./zig-out/bin/godot-cli completions bash --output "$tmp/godot-cli.bash" >/dev/null
+        \\./zig-out/bin/godot-cli completions zsh --output "$tmp/_godot-cli" >/dev/null
+        \\./zig-out/bin/godot-cli completions fish --output "$tmp/godot-cli.fish" >/dev/null
+        \\status=0
+        \\for pair in \
+        \\  "docs/commands.md $tmp/commands.md" \
+        \\  "share/man/man1/godot-cli.1 $tmp/godot-cli.1" \
+        \\  "share/completions/godot-cli.bash $tmp/godot-cli.bash" \
+        \\  "share/completions/_godot-cli $tmp/_godot-cli" \
+        \\  "share/completions/godot-cli.fish $tmp/godot-cli.fish"
+        \\do
+        \\  set -- $pair
+        \\  if ! diff -u "$1" "$2"; then status=1; fi
+        \\done
+        \\if [ "$status" -ne 0 ]; then
+        \\  echo "generated CLI docs are stale — run: zig build docs" >&2
+        \\  exit 1
+        \\fi
+    });
+    docs_check_cmd.setCwd(b.path("."));
+    docs_check_cmd.step.dependOn(b.getInstallStep());
+    docs_check_step.dependOn(&docs_check_cmd.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
