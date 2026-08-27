@@ -231,6 +231,77 @@ fn writeAnchor(w: *std.Io.Writer, text: []const u8) !void {
 }
 
 // ---------------------------------------------------------------------------
+// Machine-readable command tree
+// ---------------------------------------------------------------------------
+
+/// The whole command surface as JSON: one object per command, in the order the
+/// tree declares them. Consumers that wrap the CLI — an MCP server, a tool
+/// catalog, a docs site — can read this instead of scraping `--help`.
+pub fn commandTree(
+    allocator: std.mem.Allocator,
+    root: *const spec.CommandSpec,
+    tool_name: []const u8,
+    version_string: []const u8,
+) !std.json.Value {
+    var commands_json: std.json.Array = .init(allocator);
+
+    const all = try entries(allocator, root);
+    for (all) |entry| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(allocator, "path", .{ .string = entry.path });
+        try row.put(allocator, "name", .{ .string = entry.command.name });
+        try row.put(allocator, "summary", .{ .string = entry.command.summary });
+        if (entry.command.description) |description| {
+            try row.put(allocator, "description", .{ .string = description });
+        }
+        try row.put(allocator, "runnable", .{ .bool = entry.command.handler != null });
+
+        var options_json: std.json.Array = .init(allocator);
+        for (entry.command.options) |opt| {
+            var option_row: std.json.ObjectMap = .{};
+            try option_row.put(allocator, "long", .{ .string = opt.long });
+            if (opt.short) |short_char| {
+                try option_row.put(allocator, "short", .{ .string = try allocator.dupe(u8, &.{short_char}) });
+            }
+            try option_row.put(allocator, "kind", .{ .string = @tagName(opt.kind) });
+            try option_row.put(allocator, "description", .{ .string = opt.description });
+            if (opt.default_value) |default_value| {
+                try option_row.put(allocator, "default", .{ .string = default_value });
+            }
+            try options_json.append(.{ .object = option_row });
+        }
+        try row.put(allocator, "options", .{ .array = options_json });
+
+        var children_json: std.json.Array = .init(allocator);
+        for (entry.command.children) |child| {
+            try children_json.append(.{ .string = child.name });
+        }
+        try row.put(allocator, "subcommands", .{ .array = children_json });
+
+        try commands_json.append(.{ .object = row });
+    }
+
+    var globals_json: std.json.Array = .init(allocator);
+    for (spec.global_options) |opt| {
+        var option_row: std.json.ObjectMap = .{};
+        try option_row.put(allocator, "long", .{ .string = opt.long });
+        if (opt.short) |short_char| {
+            try option_row.put(allocator, "short", .{ .string = try allocator.dupe(u8, &.{short_char}) });
+        }
+        try option_row.put(allocator, "kind", .{ .string = @tagName(opt.kind) });
+        try option_row.put(allocator, "description", .{ .string = opt.description });
+        try globals_json.append(.{ .object = option_row });
+    }
+
+    var tree: std.json.ObjectMap = .{};
+    try tree.put(allocator, "name", .{ .string = tool_name });
+    try tree.put(allocator, "version", .{ .string = version_string });
+    try tree.put(allocator, "global_options", .{ .array = globals_json });
+    try tree.put(allocator, "commands", .{ .array = commands_json });
+    return .{ .object = tree };
+}
+
+// ---------------------------------------------------------------------------
 // Man page
 // ---------------------------------------------------------------------------
 

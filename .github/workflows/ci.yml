@@ -103,6 +103,13 @@ jobs:
       - name: Shellcheck the installer
         run: shellcheck install.sh tools/*.sh
 
+      # The agent-facing tool catalog is hand-written; this checks only that it
+      # covers every runnable command.
+      - name: Check the MCP tool catalog covers every command
+        run: |
+          zig build
+          tools/check_mcp_tools.sh
+
   test-godot:
     name: godot round-trip
     # Downloads the Godot editor, so keep it off every PR push.

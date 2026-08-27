@@ -83,6 +83,18 @@ const PreparedSave = struct {
     }
 };
 
+/// `options` with one long name removed, for a command that redefines a shared
+/// option with different semantics.
+fn withoutOption(comptime options: []const spec.OptionSpec, comptime long: []const u8) []const spec.OptionSpec {
+    comptime {
+        var kept: []const spec.OptionSpec = &.{};
+        for (options) |opt| {
+            if (!std.mem.eql(u8, opt.long, long)) kept = kept ++ [_]spec.OptionSpec{opt};
+        }
+        return kept;
+    }
+}
+
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
 }
@@ -1722,11 +1734,15 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the instance root (%Name from owner scripts)" },
     } ++ save_options;
+    // save_options carries an --output that defaults to overwriting the input,
+    // which scene new redefines as required. Dropping it here keeps the option
+    // declared once: twice over, help listed it twice and completions offered
+    // it twice.
     const scene_new_options = [_]spec.OptionSpec{
         .{ .long = "output", .kind = .path, .description = "Output .tscn path (required)" },
         .{ .long = "root-name", .kind = .string, .description = "Scene root node name (default: Root)" },
         .{ .long = "root-type", .kind = .string, .description = "Scene root node type (default: Node)" },
-    } ++ save_options;
+    } ++ withoutOption(&save_options, "output");
     const refs_options = [_]spec.OptionSpec{
         project_root_opt,
     };
@@ -1750,7 +1766,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .name = "new",
                 .summary = "Create a new empty scene file",
                 .description = "Writes a minimal gd_scene with a single root node. Use scene node add to build the tree.",
-                .options = &scene_new_options,
+                .options = scene_new_options,
                 .handler = sceneNewHandler,
             },
             .{

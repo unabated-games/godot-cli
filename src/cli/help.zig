@@ -83,21 +83,24 @@ fn printGlobalOptions(writer: *std.Io.Writer) std.Io.Writer.Error!void {
 }
 
 fn printOption(writer: *std.Io.Writer, opt: spec.OptionSpec) std.Io.Writer.Error!void {
-    var label: [64]u8 = undefined;
-    // An option name too long for the buffer degrades to the bare long form
-    // rather than tripping an unreachable — help text is never worth a crash.
-    const label_text = if (opt.short) |short_char|
-        std.fmt.bufPrint(&label, "-{c}, --{s}", .{ short_char, opt.long }) catch opt.long
-    else
-        std.fmt.bufPrint(&label, "    --{s}", .{opt.long}) catch opt.long;
-
     const placeholder = switch (opt.kind) {
         .flag => "",
         .string => " <value>",
         .path => " <path>",
     };
 
-    try writer.print("  {s}{s:<12} {s}\n", .{ label_text, placeholder, opt.description });
+    // Pad the whole label — flag, short form, and value placeholder together —
+    // so descriptions line up in a column. Padding only the placeholder left
+    // every line starting at a different offset.
+    var label: [64]u8 = undefined;
+    // An option name too long for the buffer degrades to the bare long form
+    // rather than tripping an unreachable — help text is never worth a crash.
+    const label_text = if (opt.short) |short_char|
+        std.fmt.bufPrint(&label, "-{c}, --{s}{s}", .{ short_char, opt.long, placeholder }) catch opt.long
+    else
+        std.fmt.bufPrint(&label, "    --{s}{s}", .{ opt.long, placeholder }) catch opt.long;
+
+    try writer.print("  {s:<30} {s}\n", .{ label_text, opt.description });
 }
 
 pub fn findCommand(root: *const spec.CommandSpec, path: []const []const u8) ?*const spec.CommandSpec {

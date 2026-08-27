@@ -143,9 +143,6 @@ Godot res:// path for ID seeding (overrides \-\-project\-root)
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
 .TP
-\fB\-\-output\fR \fIpath\fR
-Output path (default: overwrite input)
-.TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
@@ -1175,12 +1172,12 @@ the move, since the editor is what refreshes that cache. Exits
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-dry\-run\fR
-Generate markdown without writing the output file
+Report which manifests would be repointed without writing them
 .SS godot\-cli catalog scan
 Scan project for catalog manifests
 .PP
-Walks the project for *.manifest.json and .tres manifests,
-parses fields, and validates catalog entries.
+Walks the project for *.manifest.json, parses fields, and validates
+catalog entries.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
@@ -1519,14 +1516,20 @@ Render with: godot\-cli man | man \-l \-
 \fB\-\-output\fR \fIpath\fR
 Write to this file instead of stdout
 .SS godot\-cli reference
-Print the Markdown command reference
+Print the command reference as Markdown or JSON
 .PP
-The same document committed as docs/commands.md, regenerated
-from the
-command tree.
+\-\-format markdown (default) prints the document committed
+as
+docs/commands.md. \-\-format json prints the whole command
+surface —
+every command, option, and value kind — for tools that wrap
+the CLI.
 .TP
 \fB\-\-output\fR \fIpath\fR
 Write to this file instead of stdout
+.TP
+\fB\-\-format\fR \fIvalue\fR
+markdown or json (default: markdown)
 .SH EXIT STATUS
 .TP
 .B 0

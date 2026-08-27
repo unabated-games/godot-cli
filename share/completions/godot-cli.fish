@@ -89,7 +89,7 @@ complete -c godot-cli -n '__godot_cli_at ""' -a 'batch' -d 'Run multiple CLI com
 complete -c godot-cli -n '__godot_cli_at ""' -a 'project' -d 'Read and write Godot project.godot settings'
 complete -c godot-cli -n '__godot_cli_at ""' -a 'completions' -d 'Print shell completions (bash, zsh, fish)'
 complete -c godot-cli -n '__godot_cli_at ""' -a 'man' -d 'Print the godot-cli(1) man page in roff format'
-complete -c godot-cli -n '__godot_cli_at ""' -a 'reference' -d 'Print the Markdown command reference'
+complete -c godot-cli -n '__godot_cli_at ""' -a 'reference' -d 'Print the command reference as Markdown or JSON'
 complete -c godot-cli -n '__godot_cli_at "uid"' -a 'encode' -d 'Encode a numeric Resource UID to uid:// text'
 complete -c godot-cli -n '__godot_cli_at "uid"' -a 'decode' -d 'Decode uid:// text to a numeric Resource UID'
 complete -c godot-cli -n '__godot_cli_at "uid"' -a 'create-for-path' -d 'Deterministic Resource UID for a project path and file'
@@ -206,7 +206,6 @@ complete -c godot-cli -n '__godot_cli_at "scene new"' -l root-type -r -d 'Scene 
 complete -c godot-cli -n '__godot_cli_at "scene new"' -l project-root -r -d 'Godot project root for res:// seed path and id session cache'
 complete -c godot-cli -n '__godot_cli_at "scene new"' -l resource-path -r -d 'Godot res:// path for ID seeding (overrides --project-root)'
 complete -c godot-cli -n '__godot_cli_at "scene new"' -l no-prepare-save -d 'Skip Godot save preparation (ID repair/sort)'
-complete -c godot-cli -n '__godot_cli_at "scene new"' -l output -r -d 'Output path (default: overwrite input)'
 complete -c godot-cli -n '__godot_cli_at "scene new"' -l dry-run -d 'Parse and validate edit without writing'
 complete -c godot-cli -n '__godot_cli_at "scene new"' -l id-session -r -d 'Path to ext_resource id session cache JSON'
 complete -c godot-cli -n '__godot_cli_at "scene new"' -l no-id-session -d 'Do not load or update ext_resource id session cache'
@@ -485,7 +484,7 @@ complete -c godot-cli -n '__godot_cli_at "catalog add"' -l update -d 'Update an 
 complete -c godot-cli -n '__godot_cli_at "catalog add"' -l output -r -d 'Manifest path (default: <scene>.manifest.json beside the scene)'
 complete -c godot-cli -n '__godot_cli_at "catalog add"' -l dry-run -d 'Render the manifest without writing it'
 complete -c godot-cli -n '__godot_cli_at "catalog relink"' -l project-root -r -d 'Godot project root (directory containing project.godot)'
-complete -c godot-cli -n '__godot_cli_at "catalog relink"' -l dry-run -d 'Generate markdown without writing the output file'
+complete -c godot-cli -n '__godot_cli_at "catalog relink"' -l dry-run -d 'Report which manifests would be repointed without writing them'
 complete -c godot-cli -n '__godot_cli_at "catalog scan"' -l project-root -r -d 'Godot project root (directory containing project.godot)'
 complete -c godot-cli -n '__godot_cli_at "catalog list"' -l project-root -r -d 'Godot project root (directory containing project.godot)'
 complete -c godot-cli -n '__godot_cli_at "catalog show"' -l project-root -r -d 'Godot project root (directory containing project.godot)'
@@ -562,6 +561,7 @@ complete -c godot-cli -n '__godot_cli_at "project physics validate"' -l project-
 complete -c godot-cli -n '__godot_cli_at "completions"' -l output -r -d 'Write to this file instead of stdout'
 complete -c godot-cli -n '__godot_cli_at "man"' -l output -r -d 'Write to this file instead of stdout'
 complete -c godot-cli -n '__godot_cli_at "reference"' -l output -r -d 'Write to this file instead of stdout'
+complete -c godot-cli -n '__godot_cli_at "reference"' -l format -r -d 'markdown or json'
 
 # Commands that take file or directory arguments
 complete -c godot-cli -F -n '__godot_cli_at "ping"'

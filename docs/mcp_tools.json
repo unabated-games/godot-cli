@@ -4,8 +4,16 @@
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "request_envelope": {
-    "argv": ["command", "subcommand", "positional...", "--option", "value"],
-    "options": { "json": true },
+    "argv": [
+      "command",
+      "subcommand",
+      "positional...",
+      "--option",
+      "value"
+    ],
+    "options": {
+      "json": true
+    },
     "response": {
       "ok": true,
       "data": {},
@@ -15,410 +23,1791 @@
   "tools": [
     {
       "name": "ping",
-      "argv": ["ping"],
-      "json_request": { "argv": ["ping", "--json"] }
+      "argv": [
+        "ping"
+      ],
+      "json_request": {
+        "argv": [
+          "ping",
+          "--json"
+        ]
+      }
     },
     {
       "name": "uid_encode",
-      "argv": ["uid", "encode", "<id>"],
-      "json_request": { "argv": ["uid", "encode", "1350303725746704497", "--json"] }
+      "argv": [
+        "uid",
+        "encode",
+        "<id>"
+      ],
+      "json_request": {
+        "argv": [
+          "uid",
+          "encode",
+          "1350303725746704497",
+          "--json"
+        ]
+      }
     },
     {
       "name": "uid_decode",
-      "argv": ["uid", "decode", "<uid-text>"],
-      "json_request": { "argv": ["uid", "decode", "uid://tidkmw585t0t", "--json"] }
+      "argv": [
+        "uid",
+        "decode",
+        "<uid-text>"
+      ],
+      "json_request": {
+        "argv": [
+          "uid",
+          "decode",
+          "uid://tidkmw585t0t",
+          "--json"
+        ]
+      }
     },
     {
       "name": "uid_create_for_path",
-      "argv": ["uid", "create-for-path", "<res-path>"],
-      "json_request": { "argv": ["uid", "create-for-path", "res://main.tscn", "--json"] }
+      "argv": [
+        "uid",
+        "create-for-path",
+        "<res-path>"
+      ],
+      "json_request": {
+        "argv": [
+          "uid",
+          "create-for-path",
+          "res://main.tscn",
+          "--json"
+        ]
+      }
     },
     {
       "name": "uid_scene_id_generate",
-      "argv": ["uid", "scene-id", "generate"],
-      "json_request": { "argv": ["uid", "scene-id", "generate", "--json"] }
+      "argv": [
+        "uid",
+        "scene-id",
+        "generate"
+      ],
+      "json_request": {
+        "argv": [
+          "uid",
+          "scene-id",
+          "generate",
+          "--json"
+        ]
+      }
     },
     {
       "name": "uid_cache_list",
-      "argv": ["uid", "cache", "list", "--project-root", "<path>"],
+      "argv": [
+        "uid",
+        "cache",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
       "json_request": {
-        "argv": ["uid", "cache", "list", "--project-root", ".", "--json"]
+        "argv": [
+          "uid",
+          "cache",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "uid_cache_lookup",
-      "argv": ["uid", "cache", "lookup", "<uid-or-path>", "--project-root", "<path>"],
+      "argv": [
+        "uid",
+        "cache",
+        "lookup",
+        "<uid-or-path>",
+        "--project-root",
+        "<path>"
+      ],
       "json_request": {
-        "argv": ["uid", "cache", "lookup", "uid://tidkmw585t0t", "--project-root", ".", "--json"]
+        "argv": [
+          "uid",
+          "cache",
+          "lookup",
+          "uid://tidkmw585t0t",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "uid_session_import",
-      "argv": ["uid", "session", "import", "--referrer", "<res-path>", "--from", "<godot-saved.tscn>", "--project-root", "<path>"],
+      "argv": [
+        "uid",
+        "session",
+        "import",
+        "--referrer",
+        "<res-path>",
+        "--from",
+        "<godot-saved.tscn>",
+        "--project-root",
+        "<path>"
+      ],
       "json_request": {
-        "argv": ["uid", "session", "import", "--referrer", "res://sample.tscn", "--from", "sample_godot_saved.tscn", "--project-root", ".", "--json"]
+        "argv": [
+          "uid",
+          "session",
+          "import",
+          "--referrer",
+          "res://sample.tscn",
+          "--from",
+          "sample_godot_saved.tscn",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_new",
-      "argv": ["scene", "new", "--output", "<file.tscn>"],
-      "options": ["--root-name", "--root-type", "--project-root", "--dry-run"],
+      "argv": [
+        "scene",
+        "new",
+        "--output",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--root-name",
+        "--root-type",
+        "--project-root",
+        "--dry-run"
+      ],
       "description": "Create a new empty scene with gd_scene header and root node.",
-      "json_request": { "argv": ["scene", "new", "--output", "main.tscn", "--root-name", "Main", "--root-type", "Node2D", "--json"] }
+      "json_request": {
+        "argv": [
+          "scene",
+          "new",
+          "--output",
+          "main.tscn",
+          "--root-name",
+          "Main",
+          "--root-type",
+          "Node2D",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_refs",
-      "argv": ["scene", "refs", "<file.tscn>"],
-      "options": ["--project-root"],
+      "argv": [
+        "scene",
+        "refs",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--project-root"
+      ],
       "description": "List ext_resource entries; with --project-root resolves filesystem paths and existence.",
-      "json_request": { "argv": ["scene", "refs", "main.tscn", "--project-root", ".", "--json"] }
+      "json_request": {
+        "argv": [
+          "scene",
+          "refs",
+          "main.tscn",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_ext_add",
-      "argv": ["scene", "ext", "add", "<file.tscn>"],
-      "options": ["--type", "--path", "--output", "--project-root", "--dry-run"],
-      "json_request": { "argv": ["scene", "ext", "add", "main.tscn", "--type", "Script", "--path", "res://player.gd", "--json"] }
+      "argv": [
+        "scene",
+        "ext",
+        "add",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--type",
+        "--path",
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "ext",
+          "add",
+          "main.tscn",
+          "--type",
+          "Script",
+          "--path",
+          "res://player.gd",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_ext_remove",
-      "argv": ["scene", "ext", "remove", "<file.tscn>", "<id>"],
-      "options": ["--output", "--project-root", "--dry-run"],
-      "json_request": { "argv": ["scene", "ext", "remove", "main.tscn", "1_abc12", "--json"] }
+      "argv": [
+        "scene",
+        "ext",
+        "remove",
+        "<file.tscn>",
+        "<id>"
+      ],
+      "options": [
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "ext",
+          "remove",
+          "main.tscn",
+          "1_abc12",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_sub_add",
-      "argv": ["scene", "sub", "add", "<file.tscn>"],
-      "options": ["--type", "--property", "--value", "--output", "--project-root", "--dry-run"],
-      "json_request": { "argv": ["scene", "sub", "add", "main.tscn", "--type", "RectangleShape2D", "--property", "size", "--value", "Vector2(16, 32)", "--json"] }
+      "argv": [
+        "scene",
+        "sub",
+        "add",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--type",
+        "--property",
+        "--value",
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "sub",
+          "add",
+          "main.tscn",
+          "--type",
+          "RectangleShape2D",
+          "--property",
+          "size",
+          "--value",
+          "Vector2(16, 32)",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_sub_remove",
-      "argv": ["scene", "sub", "remove", "<file.tscn>", "<id>"],
-      "options": ["--output", "--project-root", "--dry-run"],
-      "json_request": { "argv": ["scene", "sub", "remove", "main.tscn", "RectangleShape2D_abc12", "--json"] }
+      "argv": [
+        "scene",
+        "sub",
+        "remove",
+        "<file.tscn>",
+        "<id>"
+      ],
+      "options": [
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "sub",
+          "remove",
+          "main.tscn",
+          "RectangleShape2D_abc12",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_inspect",
-      "argv": ["scene", "inspect", "<file.tscn>"],
-      "options": ["--no-validate", "--no-parse-properties"],
+      "argv": [
+        "scene",
+        "inspect",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--no-validate",
+        "--no-parse-properties"
+      ],
       "description": "Returns section headers, property_count, and with --json parsed properties (name, kind, value) per section.",
-      "json_request": { "argv": ["scene", "inspect", "main.tscn", "--json"] }
+      "json_request": {
+        "argv": [
+          "scene",
+          "inspect",
+          "main.tscn",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_node_list",
-      "argv": ["scene", "node", "list", "<file.tscn>"],
-      "options": ["--project-root"],
+      "argv": [
+        "scene",
+        "node",
+        "list",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--project-root"
+      ],
       "description": "List scene nodes with name, type, parent, viewport path, section_line, and unique_id. --project-root is optional (ignored; file-only read).",
-      "json_request": { "argv": ["scene", "node", "list", "main.tscn", "--json"] }
+      "json_request": {
+        "argv": [
+          "scene",
+          "node",
+          "list",
+          "main.tscn",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_node_get",
-      "argv": ["scene", "node", "get", "<file.tscn>", "<node-path>"],
-      "options": ["--node-name", "--parent", "--project-root"],
+      "argv": [
+        "scene",
+        "node",
+        "get",
+        "<file.tscn>",
+        "<node-path>"
+      ],
+      "options": [
+        "--node-name",
+        "--parent",
+        "--project-root"
+      ],
       "description": "Get one node by viewport path positional or --node-name with optional --parent. --project-root optional (ignored).",
-      "json_request": { "argv": ["scene", "node", "get", "main.tscn", "/root/Player", "--json"] }
+      "json_request": {
+        "argv": [
+          "scene",
+          "node",
+          "get",
+          "main.tscn",
+          "/root/Player",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_node_add",
-      "argv": ["scene", "node", "add", "<file.tscn>"],
-      "options": ["--parent", "--name", "--type", "--property", "--value", "--unique-name", "--output", "--project-root", "--dry-run"],
+      "argv": [
+        "scene",
+        "node",
+        "add",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--parent",
+        "--name",
+        "--type",
+        "--property",
+        "--value",
+        "--unique-name",
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
       "description": "Add a child node under a viewport parent path (e.g. /root/Main).",
-      "json_request": { "argv": ["scene", "node", "add", "main.tscn", "--parent", "/root/Main", "--name", "Player", "--type", "CharacterBody2D", "--json"] }
+      "json_request": {
+        "argv": [
+          "scene",
+          "node",
+          "add",
+          "main.tscn",
+          "--parent",
+          "/root/Main",
+          "--name",
+          "Player",
+          "--type",
+          "CharacterBody2D",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_node_remove",
-      "argv": ["scene", "node", "remove", "<file.tscn>", "<node-path>"],
-      "options": ["--recursive", "--output", "--project-root", "--dry-run"],
-      "json_request": { "argv": ["scene", "node", "remove", "main.tscn", "/root/Main/Player", "--json"] }
+      "argv": [
+        "scene",
+        "node",
+        "remove",
+        "<file.tscn>",
+        "<node-path>"
+      ],
+      "options": [
+        "--recursive",
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "node",
+          "remove",
+          "main.tscn",
+          "/root/Main/Player",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_node_rename",
-      "argv": ["scene", "node", "rename", "<file.tscn>", "<node-path>"],
-      "options": ["--name", "--output", "--project-root", "--dry-run"],
-      "json_request": { "argv": ["scene", "node", "rename", "main.tscn", "/root/Main/Player", "--name", "Hero", "--json"] }
+      "argv": [
+        "scene",
+        "node",
+        "rename",
+        "<file.tscn>",
+        "<node-path>"
+      ],
+      "options": [
+        "--name",
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "node",
+          "rename",
+          "main.tscn",
+          "/root/Main/Player",
+          "--name",
+          "Hero",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_node_reparent",
-      "argv": ["scene", "node", "reparent", "<file.tscn>", "<node-path>"],
-      "options": ["--parent", "--output", "--project-root", "--dry-run"],
-      "json_request": { "argv": ["scene", "node", "reparent", "main.tscn", "/root/Main/Hero", "--parent", "/root/Main", "--json"] }
+      "argv": [
+        "scene",
+        "node",
+        "reparent",
+        "<file.tscn>",
+        "<node-path>"
+      ],
+      "options": [
+        "--parent",
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "node",
+          "reparent",
+          "main.tscn",
+          "/root/Main/Hero",
+          "--parent",
+          "/root/Main",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_validate",
-      "argv": ["scene", "validate", "<file.tscn>", "--project-root", "<path>"],
+      "argv": [
+        "scene",
+        "validate",
+        "<file.tscn>",
+        "--project-root",
+        "<path>"
+      ],
       "json_request": {
-        "argv": ["scene", "validate", "main.tscn", "--project-root", ".", "--json"]
+        "argv": [
+          "scene",
+          "validate",
+          "main.tscn",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       },
-      "exit_codes": { "0": "no errors", "1": "validation errors" }
+      "exit_codes": {
+        "0": "no errors",
+        "1": "validation errors"
+      }
     },
     {
       "name": "scene_validate_batch",
-      "argv": ["scene", "validate-batch", "<files...>", "--project-root", "<path>"],
+      "argv": [
+        "scene",
+        "validate-batch",
+        "<files...>",
+        "--project-root",
+        "<path>"
+      ],
       "json_request": {
-        "argv": ["scene", "validate-batch", "a.tscn", "b.tscn", "--project-root", ".", "--json"]
+        "argv": [
+          "scene",
+          "validate-batch",
+          "a.tscn",
+          "b.tscn",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_set_property",
-      "argv": ["scene", "set-property", "<file>", "<section-index>", "<key>", "<value>"],
-      "options": ["--output", "--resource-path", "--no-prepare-save", "--raw-value"],
+      "argv": [
+        "scene",
+        "set-property",
+        "<file>",
+        "<section-index>",
+        "<key>",
+        "<value>"
+      ],
+      "options": [
+        "--output",
+        "--resource-path",
+        "--no-prepare-save",
+        "--raw-value"
+      ],
       "json_request": {
-        "argv": ["scene", "set-property", "main.tscn", "2", "visible", "false", "--json"]
+        "argv": [
+          "scene",
+          "set-property",
+          "main.tscn",
+          "2",
+          "visible",
+          "false",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_normalize",
-      "argv": ["scene", "normalize", "<file>", "--output", "<out>"],
-      "options": ["--resource-path", "--no-prepare-save", "--normalize-properties", "--godot-save-format"],
+      "argv": [
+        "scene",
+        "normalize",
+        "<file>",
+        "--output",
+        "<out>"
+      ],
+      "options": [
+        "--resource-path",
+        "--no-prepare-save",
+        "--normalize-properties",
+        "--godot-save-format"
+      ],
       "description": "Repair IDs and sort ext_resources for save; optional --normalize-properties rewrites property values via Variant parse/format.",
       "json_request": {
-        "argv": ["scene", "normalize", "main.tscn", "--output", "out.tscn", "--resource-path", "res://main.tscn", "--json"]
+        "argv": [
+          "scene",
+          "normalize",
+          "main.tscn",
+          "--output",
+          "out.tscn",
+          "--resource-path",
+          "res://main.tscn",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_retarget_ext",
-      "argv": ["scene", "retarget-ext", "--from", "<res-path>", "--to", "<res-path>", "<file>"],
+      "argv": [
+        "scene",
+        "retarget-ext",
+        "--from",
+        "<res-path>",
+        "--to",
+        "<res-path>",
+        "<file>"
+      ],
       "json_request": {
-        "argv": ["scene", "retarget-ext", "--from", "res://old.gd", "--to", "res://new.gd", "main.tscn", "--json"]
+        "argv": [
+          "scene",
+          "retarget-ext",
+          "--from",
+          "res://old.gd",
+          "--to",
+          "res://new.gd",
+          "main.tscn",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_compare_godot",
-      "argv": ["scene", "compare-godot", "<file.tscn>", "<godot-reference.tscn>"],
+      "argv": [
+        "scene",
+        "compare-godot",
+        "<file.tscn>",
+        "<godot-reference.tscn>"
+      ],
       "json_request": {
-        "argv": ["scene", "compare-godot", "sample.tscn", "sample_godot_saved.tscn", "--json"]
+        "argv": [
+          "scene",
+          "compare-godot",
+          "sample.tscn",
+          "sample_godot_saved.tscn",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_round_trip",
-      "argv": ["scene", "round-trip", "<file>"],
-      "options": ["--dry-run"],
-      "json_request": { "argv": ["scene", "round-trip", "main.tscn", "--dry-run", "--json"] }
+      "argv": [
+        "scene",
+        "round-trip",
+        "<file>"
+      ],
+      "options": [
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "round-trip",
+          "main.tscn",
+          "--dry-run",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_instance_add",
-      "argv": ["scene", "instance", "add", "<file.tscn>"],
-      "options": ["--parent", "--name", "--scene", "--catalog-id", "--editable", "--unique-name", "--output", "--project-root", "--dry-run"],
+      "argv": [
+        "scene",
+        "instance",
+        "add",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--parent",
+        "--name",
+        "--scene",
+        "--catalog-id",
+        "--editable",
+        "--unique-name",
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
       "description": "Instance a PackedScene under a parent. Use --scene or --catalog-id (project entries only).",
       "json_request": {
-        "argv": ["scene", "instance", "add", "main.tscn", "--parent", "/root/Main", "--name", "StartButton", "--catalog-id", "ui/button", "--project-root", ".", "--json"]
+        "argv": [
+          "scene",
+          "instance",
+          "add",
+          "main.tscn",
+          "--parent",
+          "/root/Main",
+          "--name",
+          "StartButton",
+          "--catalog-id",
+          "ui/button",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_plan",
-      "argv": ["scene", "plan", "<file.tscn>", "--intent", "<intent.json>"],
-      "options": ["--patch", "--write-patch", "--project-root", "--dry-run"],
+      "argv": [
+        "scene",
+        "plan",
+        "<file.tscn>",
+        "--intent",
+        "<intent.json>"
+      ],
+      "options": [
+        "--patch",
+        "--write-patch",
+        "--project-root",
+        "--dry-run"
+      ],
       "description": "Expand intent recipes to patch JSON; optional dry-run preview against scene.",
       "json_request": {
-        "argv": ["scene", "plan", "main.tscn", "--intent", "intents/hud.json", "--project-root", ".", "--json"]
+        "argv": [
+          "scene",
+          "plan",
+          "main.tscn",
+          "--intent",
+          "intents/hud.json",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_apply",
-      "argv": ["scene", "apply", "<file.tscn>", "--patch", "<patch.json>"],
-      "options": ["--intent", "--snapshot", "--auto-snapshot", "--record-undo", "--write-undo-patch", "--output", "--project-root", "--dry-run", "--preview-properties", "--no-strict"],
+      "argv": [
+        "scene",
+        "apply",
+        "<file.tscn>",
+        "--patch",
+        "<patch.json>"
+      ],
+      "options": [
+        "--intent",
+        "--snapshot",
+        "--auto-snapshot",
+        "--record-undo",
+        "--write-undo-patch",
+        "--output",
+        "--project-root",
+        "--dry-run",
+        "--preview-properties",
+        "--no-strict"
+      ],
       "description": "Apply patch or intent; dry-run returns preview_diff. Optional snapshot and undo patch. See docs/agent_scene_authoring.md.",
       "json_request": {
-        "argv": ["scene", "apply", "main.tscn", "--patch", "patches/player.json", "--project-root", ".", "--json"]
+        "argv": [
+          "scene",
+          "apply",
+          "main.tscn",
+          "--patch",
+          "patches/player.json",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_restore",
-      "argv": ["scene", "restore", "<file.tscn>", "--from", "<snapshot>"],
+      "argv": [
+        "scene",
+        "restore",
+        "<file.tscn>",
+        "--from",
+        "<snapshot>"
+      ],
       "description": "Restore scene file from a snapshot copy.",
       "json_request": {
-        "argv": ["scene", "restore", "main.tscn", "--from", "main.tscn.godot-cli-snapshot", "--json"]
+        "argv": [
+          "scene",
+          "restore",
+          "main.tscn",
+          "--from",
+          "main.tscn.godot-cli-snapshot",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_diff",
-      "argv": ["scene", "diff", "<scene_a.tscn>", "<scene_b.tscn>"],
-      "options": ["--properties", "--project-root"],
+      "argv": [
+        "scene",
+        "diff",
+        "<scene_a.tscn>",
+        "<scene_b.tscn>"
+      ],
+      "options": [
+        "--properties",
+        "--project-root"
+      ],
       "description": "Compare node trees; --properties includes property-level diff. --project-root optional (ignored).",
       "json_request": {
-        "argv": ["scene", "diff", "before.tscn", "after.tscn", "--properties", "--json"]
+        "argv": [
+          "scene",
+          "diff",
+          "before.tscn",
+          "after.tscn",
+          "--properties",
+          "--json"
+        ]
       }
     },
     {
       "name": "scene_template_list",
-      "argv": ["scene", "template", "list"],
-      "options": ["--templates-root"],
-      "json_request": { "argv": ["scene", "template", "list", "--json"] }
+      "argv": [
+        "scene",
+        "template",
+        "list"
+      ],
+      "options": [
+        "--templates-root"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "template",
+          "list",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "scene_template_show",
+      "argv": [
+        "scene",
+        "template",
+        "show",
+        "<template-id>"
+      ],
+      "options": [
+        "--templates-root",
+        "--content",
+        "--no-parse-properties"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "template",
+          "show",
+          "2d/character_body",
+          "--json"
+        ]
+      }
     },
     {
       "name": "scene_template_copy",
-      "argv": ["scene", "template", "copy", "<template-id>", "--output", "<path.tscn>"],
-      "options": ["--templates-root", "--project-root", "--no-prepare-save", "--dry-run"],
-      "json_request": { "argv": ["scene", "template", "copy", "2d/character_body", "--output", "player.tscn", "--json"] }
+      "argv": [
+        "scene",
+        "template",
+        "copy",
+        "<template-id>",
+        "--output",
+        "<path.tscn>"
+      ],
+      "options": [
+        "--templates-root",
+        "--project-root",
+        "--no-prepare-save",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "template",
+          "copy",
+          "2d/character_body",
+          "--output",
+          "player.tscn",
+          "--json"
+        ]
+      }
     },
     {
       "name": "batch",
-      "argv": ["batch", "--file", "<batch.json>"],
-      "options": ["--json-body"],
+      "argv": [
+        "batch",
+        "--file",
+        "<batch.json>"
+      ],
+      "options": [
+        "--json-body"
+      ],
       "description": "Run multiple CLI steps in one call. Modes: stop, continue, atomic. See docs/agent_batch_commands.md.",
-      "json_request": { "argv": ["batch", "--file", "workflow.json", "--json"] }
+      "json_request": {
+        "argv": [
+          "batch",
+          "--file",
+          "workflow.json",
+          "--json"
+        ]
+      }
     },
     {
       "name": "resource_inspect",
-      "argv": ["resource", "inspect", "<file.tres>"],
-      "options": ["--no-validate", "--no-parse-properties"],
+      "argv": [
+        "resource",
+        "inspect",
+        "<file.tres>"
+      ],
+      "options": [
+        "--no-validate",
+        "--no-parse-properties"
+      ],
       "description": "Returns section headers, property_count, and with --json parsed properties (name, kind, value) per section.",
-      "json_request": { "argv": ["resource", "inspect", "mat.tres", "--json"] }
+      "json_request": {
+        "argv": [
+          "resource",
+          "inspect",
+          "mat.tres",
+          "--json"
+        ]
+      }
     },
     {
       "name": "resource_validate",
-      "argv": ["resource", "validate", "<file.tres>", "--project-root", "<path>"],
+      "argv": [
+        "resource",
+        "validate",
+        "<file.tres>",
+        "--project-root",
+        "<path>"
+      ],
       "json_request": {
-        "argv": ["resource", "validate", "mat.tres", "--project-root", ".", "--json"]
+        "argv": [
+          "resource",
+          "validate",
+          "mat.tres",
+          "--project-root",
+          ".",
+          "--json"
+        ]
       }
     },
     {
       "name": "resource_validate_batch",
-      "argv": ["resource", "validate-batch", "<files...>"],
-      "json_request": { "argv": ["resource", "validate-batch", "a.tres", "b.tres", "--json"] }
+      "argv": [
+        "resource",
+        "validate-batch",
+        "<files...>"
+      ],
+      "json_request": {
+        "argv": [
+          "resource",
+          "validate-batch",
+          "a.tres",
+          "b.tres",
+          "--json"
+        ]
+      }
     },
     {
       "name": "resource_set_property",
-      "argv": ["resource", "set-property", "<file>", "<section-index>", "<key>", "<value>"],
-      "options": ["--output", "--resource-path", "--no-prepare-save", "--raw-value"]
+      "argv": [
+        "resource",
+        "set-property",
+        "<file>",
+        "<section-index>",
+        "<key>",
+        "<value>"
+      ],
+      "options": [
+        "--output",
+        "--resource-path",
+        "--no-prepare-save",
+        "--raw-value"
+      ]
     },
     {
       "name": "resource_normalize",
-      "argv": ["resource", "normalize", "<file>", "--output", "<out>"],
-      "options": ["--resource-path", "--no-prepare-save", "--normalize-properties", "--godot-save-format"],
+      "argv": [
+        "resource",
+        "normalize",
+        "<file>",
+        "--output",
+        "<out>"
+      ],
+      "options": [
+        "--resource-path",
+        "--no-prepare-save",
+        "--normalize-properties",
+        "--godot-save-format"
+      ],
       "description": "Repair IDs and sort ext_resources for save; optional --normalize-properties rewrites property values via Variant parse/format."
     },
     {
       "name": "resource_retarget_ext",
-      "argv": ["resource", "retarget-ext", "--from", "<res-path>", "--to", "<res-path>", "<file>"]
+      "argv": [
+        "resource",
+        "retarget-ext",
+        "--from",
+        "<res-path>",
+        "--to",
+        "<res-path>",
+        "<file>"
+      ]
+    },
+    {
+      "name": "resource_compare_godot",
+      "argv": [
+        "resource",
+        "compare-godot",
+        "<file.tres>",
+        "<godot-reference.tres>"
+      ],
+      "options": [
+        "--reference"
+      ],
+      "json_request": {
+        "argv": [
+          "resource",
+          "compare-godot",
+          "material.tres",
+          "material_godot_saved.tres",
+          "--json"
+        ]
+      }
     },
     {
       "name": "resource_round_trip",
-      "argv": ["resource", "round-trip", "<file>"],
-      "options": ["--dry-run"]
+      "argv": [
+        "resource",
+        "round-trip",
+        "<file>"
+      ],
+      "options": [
+        "--dry-run"
+      ]
+    },
+    {
+      "name": "catalog_add",
+      "argv": [
+        "catalog",
+        "add",
+        "<res://scene.tscn>",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--project-root",
+        "--id",
+        "--summary",
+        "--when-to-use",
+        "--when-not-to-use",
+        "--notes",
+        "--tags",
+        "--related-ids",
+        "--update",
+        "--output",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "add",
+          "res://ui/button/button.tscn",
+          "--project-root",
+          ".",
+          "--summary",
+          "Project standard animated UI button",
+          "--tags",
+          "ui,button",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "catalog_relink",
+      "argv": [
+        "catalog",
+        "relink",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "relink",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "catalog_scan",
-      "argv": ["catalog", "scan", "--project-root", "<path>"],
-      "json_request": { "argv": ["catalog", "scan", "--project-root", ".", "--json"] }
+      "argv": [
+        "catalog",
+        "scan",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "scan",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "catalog_list",
-      "argv": ["catalog", "list", "--project-root", "<path>"],
-      "json_request": { "argv": ["catalog", "list", "--project-root", ".", "--json"] }
+      "argv": [
+        "catalog",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "catalog_show",
-      "argv": ["catalog", "show", "<id>", "--project-root", "<path>"],
-      "json_request": { "argv": ["catalog", "show", "ui/button", "--project-root", ".", "--json"] }
+      "argv": [
+        "catalog",
+        "show",
+        "<id>",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "show",
+          "ui/button",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "catalog_validate",
-      "argv": ["catalog", "validate", "--project-root", "<path>"],
-      "json_request": { "argv": ["catalog", "validate", "--project-root", ".", "--json"] }
+      "argv": [
+        "catalog",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "catalog_search",
-      "argv": ["catalog", "search", "--project-root", "<path>"],
-      "options": ["--tags", "--query"],
-      "json_request": { "argv": ["catalog", "search", "--project-root", ".", "--tags", "ui,button", "--json"] }
+      "argv": [
+        "catalog",
+        "search",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--tags",
+        "--query"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "search",
+          "--project-root",
+          ".",
+          "--tags",
+          "ui,button",
+          "--json"
+        ]
+      }
     },
     {
       "name": "catalog_export",
-      "argv": ["catalog", "export", "--project-root", "<path>"],
-      "options": ["--output", "--dry-run"],
-      "json_request": { "argv": ["catalog", "export", "--project-root", ".", "--output", "AGENTS.md", "--json"] }
+      "argv": [
+        "catalog",
+        "export",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--output",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "catalog",
+          "export",
+          "--project-root",
+          ".",
+          "--output",
+          "AGENTS.md",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_input_list",
-      "argv": ["project", "input", "list", "--project-root", "<path>"],
+      "argv": [
+        "project",
+        "input",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
       "description": "List Input Map actions from project.godot [input] section.",
-      "json_request": { "argv": ["project", "input", "list", "--project-root", ".", "--json"] }
+      "json_request": {
+        "argv": [
+          "project",
+          "input",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_input_apply",
-      "argv": ["project", "input", "apply", "--project-root", "<path>"],
-      "options": ["--intent", "--file", "--dry-run"],
+      "argv": [
+        "project",
+        "input",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--file",
+        "--dry-run"
+      ],
       "description": "Apply input map intent JSON (idempotent per-action replace). Event types: key, joypad_button, joypad_motion.",
-      "json_request": { "argv": ["project", "input", "apply", "--project-root", ".", "--intent", "intents/wasd_movement.json", "--json"] }
+      "json_request": {
+        "argv": [
+          "project",
+          "input",
+          "apply",
+          "--project-root",
+          ".",
+          "--intent",
+          "intents/wasd_movement.json",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_input_validate",
-      "argv": ["project", "input", "validate", "--project-root", "<path>"],
+      "argv": [
+        "project",
+        "input",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
       "description": "Validate [input] action blocks and embedded Object(...) events.",
-      "json_request": { "argv": ["project", "input", "validate", "--project-root", ".", "--json"] }
+      "json_request": {
+        "argv": [
+          "project",
+          "input",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_settings_list",
-      "argv": ["project", "settings", "list", "--project-root", "<path>"],
-      "options": ["--section"],
-      "description": "List scalar project settings (application, display, layer_names, …).",
-      "json_request": { "argv": ["project", "settings", "list", "--project-root", ".", "--json"] }
+      "argv": [
+        "project",
+        "settings",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--section"
+      ],
+      "description": "List scalar project settings (application, display, layer_names, \u2026).",
+      "json_request": {
+        "argv": [
+          "project",
+          "settings",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_settings_get",
-      "argv": ["project", "settings", "get", "--project-root", "<path>"],
-      "options": ["--section", "--key"],
-      "json_request": { "argv": ["project", "settings", "get", "--project-root", ".", "--section", "application", "--key", "run/main_scene", "--json"] }
+      "argv": [
+        "project",
+        "settings",
+        "get",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--section",
+        "--key"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "settings",
+          "get",
+          "--project-root",
+          ".",
+          "--section",
+          "application",
+          "--key",
+          "run/main_scene",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_settings_set",
+      "argv": [
+        "project",
+        "settings",
+        "set",
+        "--project-root",
+        "<path>",
+        "--section",
+        "<section>",
+        "--key",
+        "<key>",
+        "--value",
+        "<value>"
+      ],
+      "options": [
+        "--raw",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "settings",
+          "set",
+          "--project-root",
+          ".",
+          "--section",
+          "application",
+          "--key",
+          "run/main_scene",
+          "--value",
+          "res://main.tscn",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_settings_apply",
-      "argv": ["project", "settings", "apply", "--project-root", "<path>"],
-      "options": ["--intent", "--file", "--dry-run"],
-      "json_request": { "argv": ["project", "settings", "apply", "--project-root", ".", "--intent", "intents/main_scene.json", "--json"] }
+      "argv": [
+        "project",
+        "settings",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--file",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "settings",
+          "apply",
+          "--project-root",
+          ".",
+          "--intent",
+          "intents/main_scene.json",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_settings_validate",
+      "argv": [
+        "project",
+        "settings",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--section"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "settings",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_autoload_list",
-      "argv": ["project", "autoload", "list", "--project-root", "<path>"],
-      "json_request": { "argv": ["project", "autoload", "list", "--project-root", ".", "--json"] }
+      "argv": [
+        "project",
+        "autoload",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "autoload",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_autoload_apply",
-      "argv": ["project", "autoload", "apply", "--project-root", "<path>"],
-      "options": ["--intent", "--file", "--dry-run"],
-      "json_request": { "argv": ["project", "autoload", "apply", "--project-root", ".", "--intent", "intents/autoload_game_state.json", "--json"] }
+      "argv": [
+        "project",
+        "autoload",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--file",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "autoload",
+          "apply",
+          "--project-root",
+          ".",
+          "--intent",
+          "intents/autoload_game_state.json",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_autoload_validate",
+      "argv": [
+        "project",
+        "autoload",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "autoload",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_plugins_list",
-      "argv": ["project", "plugins", "list", "--project-root", "<path>"],
-      "json_request": { "argv": ["project", "plugins", "list", "--project-root", ".", "--json"] }
+      "argv": [
+        "project",
+        "plugins",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "plugins",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_plugins_enable",
-      "argv": ["project", "plugins", "enable", "--project-root", "<path>"],
-      "options": ["--plugin", "--path", "--dry-run"],
-      "json_request": { "argv": ["project", "plugins", "enable", "--project-root", ".", "--plugin", "my_addon", "--json"] }
+      "argv": [
+        "project",
+        "plugins",
+        "enable",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--plugin",
+        "--path",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "plugins",
+          "enable",
+          "--project-root",
+          ".",
+          "--plugin",
+          "my_addon",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_plugins_disable",
+      "argv": [
+        "project",
+        "plugins",
+        "disable",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--plugin",
+        "--path",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "plugins",
+          "disable",
+          "--project-root",
+          ".",
+          "--plugin",
+          "my_addon",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_plugins_apply",
-      "argv": ["project", "plugins", "apply", "--project-root", "<path>"],
-      "options": ["--intent", "--file", "--dry-run"],
-      "json_request": { "argv": ["project", "plugins", "apply", "--project-root", ".", "--intent", "intents/enable_sample_plugin.json", "--json"] }
+      "argv": [
+        "project",
+        "plugins",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--file",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "plugins",
+          "apply",
+          "--project-root",
+          ".",
+          "--intent",
+          "intents/enable_sample_plugin.json",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_plugins_validate",
+      "argv": [
+        "project",
+        "plugins",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "plugins",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_rendering_list",
+      "argv": [
+        "project",
+        "rendering",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "rendering",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_rendering_apply",
-      "argv": ["project", "rendering", "apply", "--project-root", "<path>"],
-      "options": ["--intent", "--file", "--dry-run"],
-      "json_request": { "argv": ["project", "rendering", "apply", "--project-root", ".", "--intent", "intents/rendering_forward_plus.json", "--json"] }
+      "argv": [
+        "project",
+        "rendering",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--file",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "rendering",
+          "apply",
+          "--project-root",
+          ".",
+          "--intent",
+          "intents/rendering_forward_plus.json",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_rendering_validate",
+      "argv": [
+        "project",
+        "rendering",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "rendering",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_physics_list",
+      "argv": [
+        "project",
+        "physics",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "physics",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_physics_apply",
-      "argv": ["project", "physics", "apply", "--project-root", "<path>"],
-      "options": ["--intent", "--file", "--dry-run"],
-      "json_request": { "argv": ["project", "physics", "apply", "--project-root", ".", "--intent", "intents/physics_jolt.json", "--json"] }
+      "argv": [
+        "project",
+        "physics",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--file",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "physics",
+          "apply",
+          "--project-root",
+          ".",
+          "--intent",
+          "intents/physics_jolt.json",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_physics_validate",
+      "argv": [
+        "project",
+        "physics",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "physics",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_show",
-      "argv": ["project", "show", "--project-root", "<path>"],
+      "argv": [
+        "project",
+        "show",
+        "--project-root",
+        "<path>"
+      ],
       "description": "Summarize key project.godot configuration (main scene, input count, autoloads, plugins, rendering, physics).",
-      "json_request": { "argv": ["project", "show", "--project-root", ".", "--json"] }
+      "json_request": {
+        "argv": [
+          "project",
+          "show",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "project_apply",
-      "argv": ["project", "apply", "--project-root", "<path>"],
-      "options": ["--intent", "--file", "--dry-run"],
+      "argv": [
+        "project",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--file",
+        "--dry-run"
+      ],
       "description": "Unified project intent: optional keys input, settings, autoload, plugins, rendering, physics.",
-      "json_request": { "argv": ["project", "apply", "--project-root", ".", "--intent", "intents/project_bootstrap.json", "--dry-run", "--json"] }
+      "json_request": {
+        "argv": [
+          "project",
+          "apply",
+          "--project-root",
+          ".",
+          "--intent",
+          "intents/project_bootstrap.json",
+          "--dry-run",
+          "--json"
+        ]
+      }
     }
   ]
 }

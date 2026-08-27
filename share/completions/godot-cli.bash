@@ -89,7 +89,7 @@ _godot_cli_options() {
             echo "--referrer --from --id-session --project-root"
             ;;
         'scene new')
-            echo "--output --root-name --root-type --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--output --root-name --root-type --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene refs')
             echo "--project-root"
@@ -305,7 +305,7 @@ _godot_cli_options() {
             echo "--output"
             ;;
         'reference')
-            echo "--output"
+            echo "--output --format"
             ;;
         *)
             echo ""

@@ -73,6 +73,23 @@ fn manHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 fn referenceHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
 
+    const format = inv.getOption("format") orelse "markdown";
+
+    if (std.mem.eql(u8, format, "json")) {
+        const tree = try gen.commandTree(cli.allocator, cli.root, version.name, version.version);
+
+        if (inv.getOption("output") == null) return .{ .data = tree };
+
+        var buffer: std.Io.Writer.Allocating = .init(cli.allocator);
+        defer buffer.deinit();
+        std.json.Stringify.value(tree, .{ .whitespace = .indent_2 }, &buffer.writer) catch return error.Io;
+        try buffer.writer.writeByte('\n');
+
+        return emitGenerated(cli, inv, "command tree", buffer.written());
+    }
+
+    if (!std.mem.eql(u8, format, "markdown")) return error.InvalidValue;
+
     const text = try gen.markdown(cli.allocator, cli.root, version.name, version.summary);
     return emitGenerated(cli, inv, "command reference", text);
 }
@@ -115,12 +132,21 @@ pub fn manCommand() spec.CommandSpec {
 pub fn referenceCommand() spec.CommandSpec {
     return .{
         .name = "reference",
-        .summary = "Print the Markdown command reference",
+        .summary = "Print the command reference as Markdown or JSON",
         .description =
-        \\The same document committed as docs/commands.md, regenerated from the
-        \\command tree.
+        \\--format markdown (default) prints the document committed as
+        \\docs/commands.md. --format json prints the whole command surface —
+        \\every command, option, and value kind — for tools that wrap the CLI.
         ,
-        .options = &.{output_option},
+        .options = &.{
+            output_option,
+            .{
+                .long = "format",
+                .kind = .string,
+                .description = "markdown or json",
+                .default_value = "markdown",
+            },
+        },
         .handler = referenceHandler,
     };
 }

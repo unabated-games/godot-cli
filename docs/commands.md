@@ -128,7 +128,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli project physics validate`](#godot-cli-project-physics-validate) | Validate known physics engine and scalar values |
 | [`godot-cli completions`](#godot-cli-completions) | Print shell completions (bash, zsh, fish) |
 | [`godot-cli man`](#godot-cli-man) | Print the godot-cli(1) man page in roff format |
-| [`godot-cli reference`](#godot-cli-reference) | Print the Markdown command reference |
+| [`godot-cli reference`](#godot-cli-reference) | Print the command reference as Markdown or JSON |
 
 ## Commands
 
@@ -361,7 +361,6 @@ godot-cli scene new [options] [args...]
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
-| `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
@@ -1288,13 +1287,13 @@ godot-cli catalog relink [options] [args...]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--dry-run` | — | Generate markdown without writing the output file | — |
+| `--dry-run` | — | Report which manifests would be repointed without writing them | — |
 
 ### `godot-cli catalog scan`
 
 Scan project for catalog manifests
 
-Walks the project for *.manifest.json and .tres manifests, parses fields, and validates catalog entries.
+Walks the project for *.manifest.json, parses fields, and validates catalog entries.
 
 ```
 godot-cli catalog scan [options] [args...]
@@ -1947,10 +1946,11 @@ godot-cli man [options] [args...]
 
 ### `godot-cli reference`
 
-Print the Markdown command reference
+Print the command reference as Markdown or JSON
 
-The same document committed as docs/commands.md, regenerated from the
-command tree.
+--format markdown (default) prints the document committed as
+docs/commands.md. --format json prints the whole command surface —
+every command, option, and value kind — for tools that wrap the CLI.
 
 ```
 godot-cli reference [options] [args...]
@@ -1961,6 +1961,7 @@ godot-cli reference [options] [args...]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--output` | `<path>` | Write to this file instead of stdout | — |
+| `--format` | `<value>` | markdown or json | `markdown` |
 
 ## Exit codes
 

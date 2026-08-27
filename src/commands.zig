@@ -54,3 +54,32 @@ test "root exposes uid commands" {
     try std.testing.expectEqualStrings("man", root.children[9].name);
     try std.testing.expectEqualStrings("reference", root.children[10].name);
 }
+
+/// Duplicate names are invisible in normal use — the parser takes the first
+/// match — but they show up twice in help, twice in the generated reference,
+/// and twice in every completion script. `scene new` carried a duplicate
+/// `--output` for exactly that reason.
+fn expectNoDuplicates(command: *const spec.CommandSpec) !void {
+    for (command.options, 0..) |opt, index| {
+        for (command.options[index + 1 ..]) |other| {
+            if (std.mem.eql(u8, opt.long, other.long)) {
+                std.debug.print("duplicate option --{s} on {s}\n", .{ opt.long, command.name });
+                return error.DuplicateOption;
+            }
+        }
+    }
+
+    for (command.children, 0..) |child, index| {
+        for (command.children[index + 1 ..]) |other| {
+            if (std.mem.eql(u8, child.name, other.name)) {
+                std.debug.print("duplicate subcommand {s} under {s}\n", .{ child.name, command.name });
+                return error.DuplicateSubcommand;
+            }
+        }
+        try expectNoDuplicates(&command.children[index]);
+    }
+}
+
+test "no command declares an option or subcommand twice" {
+    try expectNoDuplicates(&root);
+}

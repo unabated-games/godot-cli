@@ -6,7 +6,7 @@
 _godot_cli_children() {
     case "$1" in
         '')
-            _godot_cli_reply=( 'help:Show help for a command' 'ping:Framework health check' 'uid:Godot-compatible resource and scene ID helpers' 'scene:Inspect and edit Godot scene files' 'resource:Inspect and edit Godot resource files' 'catalog:Project component catalog' 'batch:Run multiple CLI commands in one invocation' 'project:Read and write Godot project.godot settings' 'completions:Print shell completions (bash, zsh, fish)' 'man:Print the godot-cli(1) man page in roff format' 'reference:Print the Markdown command reference' )
+            _godot_cli_reply=( 'help:Show help for a command' 'ping:Framework health check' 'uid:Godot-compatible resource and scene ID helpers' 'scene:Inspect and edit Godot scene files' 'resource:Inspect and edit Godot resource files' 'catalog:Project component catalog' 'batch:Run multiple CLI commands in one invocation' 'project:Read and write Godot project.godot settings' 'completions:Print shell completions (bash, zsh, fish)' 'man:Print the godot-cli(1) man page in roff format' 'reference:Print the command reference as Markdown or JSON' )
             ;;
         'uid')
             _godot_cli_reply=( 'encode:Encode a numeric Resource UID to uid\:// text' 'decode:Decode uid\:// text to a numeric Resource UID' 'create-for-path:Deterministic Resource UID for a project path and file' 'scene-id:Scene-local 5-character unique id helpers' 'cache:Inspect project uid_cache.bin' 'session:Persistent ext_resource id session cache' )
@@ -89,7 +89,7 @@ _godot_cli_options() {
             _godot_cli_reply=( '--referrer:Referrer res\:// path (scene being saved)' '--from:Godot-saved scene to import ids from' '--id-session:Session cache JSON path' '--project-root:Godot project root (default session path under .godot/)' )
             ;;
         'scene new')
-            _godot_cli_reply=( '--output:Output .tscn path (required)' '--root-name:Scene root node name (default\: Root)' '--root-type:Scene root node type (default\: Node)' '--project-root:Godot project root for res\:// seed path and id session cache' '--resource-path:Godot res\:// path for ID seeding (overrides --project-root)' '--no-prepare-save:Skip Godot save preparation (ID repair/sort)' '--output:Output path (default\: overwrite input)' '--dry-run:Parse and validate edit without writing' '--id-session:Path to ext_resource id session cache JSON' '--no-id-session:Do not load or update ext_resource id session cache' '--godot-save-format:Strip Godot-omitted header fields and default sub_resource properties' '--normalize-properties:Rewrite property values through Variant parse/format' )
+            _godot_cli_reply=( '--output:Output .tscn path (required)' '--root-name:Scene root node name (default\: Root)' '--root-type:Scene root node type (default\: Node)' '--project-root:Godot project root for res\:// seed path and id session cache' '--resource-path:Godot res\:// path for ID seeding (overrides --project-root)' '--no-prepare-save:Skip Godot save preparation (ID repair/sort)' '--dry-run:Parse and validate edit without writing' '--id-session:Path to ext_resource id session cache JSON' '--no-id-session:Do not load or update ext_resource id session cache' '--godot-save-format:Strip Godot-omitted header fields and default sub_resource properties' '--normalize-properties:Rewrite property values through Variant parse/format' )
             ;;
         'scene refs')
             _godot_cli_reply=( '--project-root:Godot project root for uid_cache lookup and res\:// seed path' )
@@ -200,7 +200,7 @@ _godot_cli_options() {
             _godot_cli_reply=( '--project-root:Godot project root (directory containing project.godot)' '--id:Catalog id (default\: scene path without res\:// and extension)' '--summary:One-line description of the component' '--when-to-use:When an agent should reach for this component' '--when-not-to-use:When an agent should use something else' '--notes:Edge cases and variant notes' '--tags:Comma-separated tags' '--related-ids:Comma-separated related catalog ids' '--update:Update an existing manifest, keeping prose already written' '--output:Manifest path (default\: <scene>.manifest.json beside the scene)' '--dry-run:Render the manifest without writing it' )
             ;;
         'catalog relink')
-            _godot_cli_reply=( '--project-root:Godot project root (directory containing project.godot)' '--dry-run:Generate markdown without writing the output file' )
+            _godot_cli_reply=( '--project-root:Godot project root (directory containing project.godot)' '--dry-run:Report which manifests would be repointed without writing them' )
             ;;
         'catalog scan')
             _godot_cli_reply=( '--project-root:Godot project root (directory containing project.godot)' )
@@ -305,7 +305,7 @@ _godot_cli_options() {
             _godot_cli_reply=( '--output:Write to this file instead of stdout' )
             ;;
         'reference')
-            _godot_cli_reply=( '--output:Write to this file instead of stdout' )
+            _godot_cli_reply=( '--output:Write to this file instead of stdout' '--format:markdown or json' )
             ;;
         *)
             _godot_cli_reply=()

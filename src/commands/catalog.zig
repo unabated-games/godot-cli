@@ -615,13 +615,16 @@ pub fn commands() spec.CommandSpec {
                 .name = "relink",
                 .summary = "Repoint manifests whose scene has moved",
                 .description = "For every manifest whose scene file is missing, resolves its scene_uid through .godot/uid_cache.bin and rewrites the scene path. Requires the project to have been opened in Godot since the move, since the editor is what refreshes that cache. Exits 1 if any manifest is still unrepaired.",
-                .options = &.{ project_root_opt, dry_run_opt },
+                .options = &.{
+                    project_root_opt,
+                    .{ .long = "dry-run", .kind = .flag, .description = "Report which manifests would be repointed without writing them" },
+                },
                 .handler = relinkHandler,
             },
             .{
                 .name = "scan",
                 .summary = "Scan project for catalog manifests",
-                .description = "Walks the project for *.manifest.json and .tres manifests, parses fields, and validates catalog entries.",
+                .description = "Walks the project for *.manifest.json, parses fields, and validates catalog entries.",
                 .options = &.{project_root_opt},
                 .handler = scanHandler,
             },

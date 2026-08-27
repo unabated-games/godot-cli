@@ -29,9 +29,16 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 - Release notes are composed from the CHANGELOG section for the tag (`tools/changelog_section.sh`) plus install and verification instructions, and releases publish directly instead of waiting as a draft.
 - Release archives carry a **build provenance attestation** (`gh attestation verify`).
 - CI job `generated docs and completions`: `zig build docs-check`, `mandoc -Tlint` on the man page, a parse check of the completions in bash, zsh, and fish, and `shellcheck` over `install.sh` and `tools/*.sh`.
+- **`godot-cli reference --format json`** — the whole command surface (every command, option, value kind, and default) as one JSON document, for tools that wrap the CLI.
+- `tools/check_mcp_tools.sh` — fails when a runnable command is missing from `docs/mcp_tools.json`, or when the catalog's version does not match the binary's. Runs in CI.
+- 13 commands the tool catalog had never listed: `scene template show`, `resource compare-godot`, `catalog add`, `catalog relink`, `project settings set|validate`, `project autoload validate`, `project plugins disable|validate`, `project rendering list|validate`, `project physics list|validate`.
 
 ### Fixed
 
+- `scene new` declared `--output` twice — once as required, once inherited from the shared save options. It showed up twice in help and in every completion script. A test now rejects any command that declares an option or subcommand twice.
+- `catalog relink --dry-run` was described as generating markdown, which is `catalog export`'s behaviour.
+- `catalog scan` still described itself as scanning `.tres` manifests, which 0.1.0 removed.
+- Option help lines align in a column again; padding was applied to the value placeholder rather than the whole label, so every description started at a different offset.
 - `LICENSE` is the unmodified MIT text again, so GitHub detects the licence. The third-party notice it used to carry lives in `THIRDPARTY.md`, which the README and every release archive already point at.
 
 ### Changed
