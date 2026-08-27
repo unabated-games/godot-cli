@@ -75,9 +75,14 @@ const PreparedSave = struct {
         if (self.session_path) |path| allocator.free(path);
     }
 
+    /// The id session cache only makes ext_resource ids reproducible across
+    /// runs; the scene has already been written by the time this is called.
+    /// Failing the command here would report a successful edit as an error and
+    /// leave the caller unsure whether the file changed — so a cache that
+    /// cannot be written is dropped instead.
     pub fn persistSession(self: *PreparedSave, allocator: std.mem.Allocator) !void {
         if (self.session_path) |path| {
-            if (self.session) |session| try session.saveToFile(path);
+            if (self.session) |session| session.saveToFile(path) catch {};
         }
         _ = allocator;
     }
@@ -841,14 +846,24 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
 
     var properties: [1]scene_resources.PropertyInput = undefined;
     var property_count: usize = 0;
+
+    // The normalized value has to outlive this block: addSubResource below
+    // copies it into the document. Freeing it at the end of the `if` wrote
+    // freed memory into the scene file.
+    var normalized_value: ?[]u8 = null;
+    defer if (normalized_value) |value| cli.allocator.free(value);
+
     if (inv.getOption("property")) |property_name| {
         const property_value = inv.getOption("value") orelse return error.Usage;
-        const written_value: []const u8 = if (inv.flag("raw-value")) property_value else blk: {
+
+        var written_value: []const u8 = property_value;
+        if (!inv.flag("raw-value")) {
             var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
             defer parsed.deinit(cli.allocator);
-            break :blk try parsed.formatForWrite(cli.allocator);
-        };
-        defer if (!inv.flag("raw-value")) cli.allocator.free(written_value);
+            normalized_value = try parsed.formatForWrite(cli.allocator);
+            written_value = normalized_value.?;
+        }
+
         properties[0] = .{ .name = property_name, .value = written_value };
         property_count = 1;
     }

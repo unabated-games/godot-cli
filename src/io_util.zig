@@ -28,3 +28,19 @@ pub fn writeFileAtomic(io: std.Io, path: []const u8, data: []const u8) !void {
 pub fn writeFile(path: []const u8, data: []const u8) !void {
     return writeFileAtomic(syncIo(), path, data);
 }
+
+/// Write `data` to `path`, creating the parent directory first when it is
+/// missing.
+///
+/// The id session cache lives in `<project>/.godot/`, which Godot creates when
+/// it first imports a project. A project checked out fresh — on CI, or by
+/// anyone who has not opened it in the editor yet — has no such directory, and
+/// a plain write there fails with FileNotFound.
+pub fn writeFileCreatingParent(path: []const u8, data: []const u8) !void {
+    if (std.fs.path.dirname(path)) |parent| {
+        if (parent.len != 0) {
+            std.Io.Dir.cwd().createDirPath(syncIo(), parent) catch {};
+        }
+    }
+    return writeFileAtomic(syncIo(), path, data);
+}

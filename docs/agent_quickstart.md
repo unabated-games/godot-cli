@@ -4,15 +4,15 @@ One-page guide for LLM agents. Full detail: `agent_scene_authoring.md` in the sa
 
 ## Setup (no source tree required)
 
-After install from the godot-cli repo:
-
 ```bash
-./install.sh --install-skill
+curl -fsSL https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.sh | bash
 source "$HOME/.godot-cli/env.sh"
 godot-cli ping --json
 ```
 
-`--install-skill` copies `godot-scene-authoring` to Cursor, Claude Code, OpenCode, and `~/.agents/skills/`. Refresh later with `./install.sh --skills-only`.
+That downloads the released binary for the platform, verifies it against the release checksums, and installs to `~/.godot-cli`. From a checkout, `./install.sh` builds instead.
+
+Add `--install-skill` to copy `godot-scene-authoring` to Cursor, Claude Code, OpenCode, and `~/.agents/skills/`. Refresh later with `install.sh --skills-only`.
 
 Environment variables set by `env.sh`:
 
@@ -21,6 +21,8 @@ Environment variables set by `env.sh`:
 | `GODOT_CLI` | Absolute path to binary |
 | `GODOT_CLI_HOME` | Install root (`~/.godot-cli`) |
 | `GODOT_CLI_TEMPLATES_ROOT` | Built-in scene templates |
+
+`env.sh` also puts `godot-cli` on `PATH`, loads shell completions, and adds the man page to `MANPATH` (`man godot-cli`). The full command reference is at `$GODOT_CLI_HOME/docs/commands.md`.
 
 Work from the **Godot project root** (folder containing `project.godot`). Pass `--json` on every command.
 

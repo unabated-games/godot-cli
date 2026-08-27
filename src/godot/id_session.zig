@@ -132,7 +132,7 @@ pub const Session = struct {
         }
 
         try out.appendSlice(self.referrers.allocator, "\n  }\n}\n");
-        try io_util.writeFile(path, out.items);
+        try io_util.writeFileCreatingParent(path, out.items);
     }
 
     pub fn defaultPath(allocator: std.mem.Allocator, project_root: []const u8) ![]const u8 {

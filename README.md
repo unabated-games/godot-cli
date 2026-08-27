@@ -1,242 +1,140 @@
 # godot-cli
 
-Create, edit, and manipulate Godot scenes and resource files from the command line.
+[![CI](https://github.com/unabated-games/godot-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/unabated-games/godot-cli/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/unabated-games/godot-cli?sort=semver)](https://github.com/unabated-games/godot-cli/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Godot 4.7](https://img.shields.io/badge/godot-4.7-478cbf.svg)](https://godotengine.org/)
+[![Zig 0.16](https://img.shields.io/badge/zig-0.16-f7a41d.svg)](https://ziglang.org/)
 
-Built in [Zig](https://ziglang.org/) 0.16. Designed for interactive use, scripting, and tool integration via a consistent JSON interface.
+Read, edit, and author Godot scene and resource files from the command line —
+without launching the editor.
 
-See **[CHANGELOG.md](CHANGELOG.md)** for recent changes.
+godot-cli parses `.tscn`, `.tres`, and `project.godot` into a document model,
+understands Godot's identifier systems and Variant text, and writes files back
+the way the editor writes them. Output is verified byte-for-byte against saves
+the Godot editor itself produced.
 
-## Status
-
-Early development. Godot-compatible **ID generation**, **UID cache**, **scene/resource inspect**, **validate**, **normalize**, **set-property**, and **Godot save round-trip** are available. Scene authoring Phases A–D (node CRUD, ext/sub resources, PackedScene instancing) and **catalog** commands are implemented — see [scene authoring roadmap](docs/scene_authoring_roadmap.md) and [catalog design](docs/catalog_design.md).
-
-**North star:** agents author **editor-like scenes** in `.tscn` — not runtime `instantiate()` workarounds. See [ABOUT.md](docs/ABOUT.md#north-star-editor-like-scene-authoring).
-
-Compatibility is verified against **Godot 4.7**, both in unit tests and in a round-trip suite that compares godot-cli's output byte-for-byte against files the editor itself saved.
-
-## Requirements
-
-- Zig 0.16.0 or later
-- Godot 4.7, only for `zig build test-godot`
-
-Supported targets: Linux (glibc and musl), macOS, and Windows, on x86_64 and aarch64. Every release builds all of them, and CI cross-compiles each on every change.
-
-## Building
+Every command works from argv or from a JSON request, and returns the same JSON
+envelope — so it reads the same to a person at a terminal, a CI script, or an
+LLM agent.
 
 ```bash
-zig build
+$ godot-cli scene new --output level.tscn --root-name Level --root-type Node2D
+$ godot-cli scene node add level.tscn --parent /root/Level --name Player --type CharacterBody2D
+$ godot-cli scene instance add level.tscn --parent /root/Level --scene res://ui/hud.tscn --name HUD
+$ godot-cli scene validate level.tscn --project-root . --json
+{"ok":true,"version":"0.1.0","command":["scene","validate"],"data":{"path":"level.tscn","issues":[]},...}
 ```
 
-The binary is installed to `zig-out/bin/godot-cli`.
+That scene is a normal Godot scene: the hierarchy lives in the file, the way a
+human would have built it in the editor. No `_ready()` spawning, no hand-edited
+scene text.
+
+## Install
 
 ```bash
-zig build test         # unit tests + CLI smoke tests
-zig build test-godot   # requires Godot 4.7 at the default macOS path (or -Dgodot=...)
-zig build run -- --help
-```
-
-CI runs `zig fmt --check` and `zig build test` on Linux and macOS for every push and pull request, plus a cross-compile of every supported target. The Godot round-trip suite runs on pushes to `main`.
-
-Optional build flag:
-
-```bash
-zig build -Dversion-string=0.2.0
-```
-
-## Install for agents (macOS)
-
-Package the binary, templates, docs, and examples into a self-contained install — no source-tree references needed:
-
-```bash
-./install.sh                         # build + install to ~/.godot-cli
-./install.sh --install-skill         # also install skill for Cursor, Claude Code, OpenCode, ~/.agents
-./install.sh --skills-only           # refresh skills after editing skills/godot-scene-authoring/
-```
-
-Activate in your shell (add to `~/.zshrc` for persistence):
-
-```bash
+curl -fsSL https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.sh | bash
 source "$HOME/.godot-cli/env.sh"
-godot-cli ping --json
+godot-cli --version
 ```
 
-Install layout:
+Installs the binary, scene templates, agent docs and examples, shell
+completions, and the man page into `~/.godot-cli`. No toolchain needed — it
+downloads the release archive for your platform and verifies it against the
+release checksums.
 
-| Path | Contents |
-|------|----------|
-| `~/.godot-cli/bin/godot-cli` | Binary |
-| `~/.godot-cli/templates/` | Scene templates (`scene template copy`) |
-| `~/.godot-cli/docs/` | Agent guides + `mcp_tools.json` |
-| `~/.godot-cli/examples/` | Intent and batch JSON examples |
-| `~/.godot-cli/skills/` | Bundled skill copy |
-| `~/.godot-cli/env.sh` | Sets `GODOT_CLI`, `GODOT_CLI_HOME`, `GODOT_CLI_TEMPLATES_ROOT` |
-
-**Agent skill** (`skills/godot-scene-authoring/` in repo) installs globally with `--install-skill`:
-
-| Tool | Path |
-|------|------|
-| Cursor | `~/.cursor/skills/godot-scene-authoring/` |
-| Claude Code | `~/.claude/skills/godot-scene-authoring/` |
-| OpenCode | `~/.config/opencode/skills/godot-scene-authoring/` |
-| Other agents | `~/.agents/skills/godot-scene-authoring/` |
-
-Agent quickstart: `$GODOT_CLI_HOME/docs/agent_quickstart.md`
-
-## Usage
+From a checkout instead:
 
 ```bash
-# Help
-godot-cli --help
-godot-cli help <command>
-
-# Version
-godot-cli --version
-godot-cli --version --json
-
-# Run a command (human-readable output)
-godot-cli ping
-
-# Machine-readable output
-godot-cli ping --json
-
-# Resource UIDs (Godot-compatible)
-godot-cli uid encode 1350303725746704497
-godot-cli uid decode uid://tidkmw585t0t
-godot-cli uid create-for-path --project-name TestProject --resource-path res://test.tscn \
-  test_fixtures/project/test.tscn
-godot-cli uid scene-id generate --seed 1290995245 --count 5
-godot-cli uid cache list --project-root test_fixtures/project
-# Inspect scenes/resources
-godot-cli scene inspect path/to/main.tscn --json
-# Validate (exit 1 on errors; use global --json for envelope)
-godot-cli scene validate test_fixtures/invalid_duplicate_id.tscn
-godot-cli scene validate path/to/main.tscn --project-root .   # enables stale uid checks
-godot-cli scene normalize --resource-path res://main.tscn --output out.tscn in.tscn
-godot-cli scene validate-batch *.tscn --project-root .
-godot-cli scene retarget-ext --from res://old.gd --to res://new.gd scenes/*.tscn
-godot-cli scene round-trip path/to/main.tscn --dry-run
-godot-cli scene compare-godot sample.tscn sample_godot_saved.tscn --json
-godot-cli scene normalize in.tscn --output out.tscn --project-root . --godot-save-format
-godot-cli uid session import --referrer res://main.tscn --from godot_saved.tscn --project-root .
-godot-cli scene set-property --node-name Player --property visible --value true path/to/main.tscn
-
-# Author a scene the way the editor would — nodes persisted in the .tscn
-godot-cli scene new --output main.tscn --root-name Main --root-type Node2D
-godot-cli scene node add main.tscn --parent /root/Main --name Player --type CharacterBody2D
-godot-cli scene node list main.tscn --json
-godot-cli scene node rename main.tscn /root/Main/Player --name Hero
-godot-cli scene node reparent main.tscn /root/Main/Hero --parent /root/Main/Playfield
-godot-cli scene ext add main.tscn --type Texture2D --path res://icon.svg
-godot-cli scene sub add main.tscn --type RectangleShape2D --property size --value "Vector2(16, 32)"
-godot-cli scene instance add main.tscn --parent /root/Main --name MyButton \
-  --scene res://ui/button/button.tscn --project-root .
-godot-cli scene template list --json
-godot-cli scene template copy ui/control_root --output hud.tscn
-
-# Declarative editing: intent -> patch -> apply, with a diff and an undo patch
-godot-cli scene plan main.tscn --intent intent.json --project-root . --json
-godot-cli scene apply main.tscn --patch patch.json --project-root . --write-undo-patch undo.json
-godot-cli scene diff before.tscn after.tscn --json
-godot-cli scene restore main.tscn --snapshot main.tscn.godot-cli-snapshot
-
-# Component catalog (project manifests + Godot builtins)
-godot-cli catalog add res://ui/button/button.tscn --project-root . \
-  --summary "Project standard animated UI button" --tags ui,button
-godot-cli catalog add res://ui/button/button.tscn --project-root . --update
-godot-cli catalog list --project-root . --json
-godot-cli catalog show ui/button --project-root . --json
-godot-cli catalog validate --project-root . --json
-godot-cli catalog relink --project-root . --dry-run   # repoint manifests whose scene moved
-godot-cli catalog search button --project-root . --json
-godot-cli catalog export --project-root . --output AGENTS.md
-
-# project.godot settings
-godot-cli project show --project-root . --json
-godot-cli project settings set --project-root . --section application --key run/main_scene --value res://main.tscn
-godot-cli project input apply --project-root . --intent share/examples/intents/wasd_movement.json
-godot-cli project autoload list --project-root . --json
-godot-cli project plugins enable --project-root . --plugin my_plugin
-godot-cli project apply --project-root . --intent share/examples/intents/project_bootstrap.json
-
-# Several commands in one invocation
-godot-cli batch --file share/examples/batch/apply_validate.json --json
-
-# Resource files (.tres)
-godot-cli resource inspect path/to/material.tres --json
-godot-cli resource set-property --section resource --property albedo_color --value "Color(1, 0, 0, 1)" path/to/material.tres
-
-# JSON command descriptor (alternative to argv)
-godot-cli --request '{"command":["ping"]}'
-godot-cli --json --request '{"command":["ping"]}'
-godot-cli --request-file request.json
-godot-cli --request-stdin < request.json
+zig build                 # binary at zig-out/bin/godot-cli
+./install.sh              # build, then install to ~/.godot-cli
 ```
+
+Releases ship Linux (musl), macOS, and Windows binaries for x86_64 and aarch64.
+See [Getting started](docs/getting_started.md) for the full install matrix,
+agent setup, and a first-scene walkthrough.
+
+## What it does
+
+| Layer | Commands |
+|-------|----------|
+| **Godot ID primitives** | `uid encode`/`decode`, `uid create-for-path`, scene-local ids, `.godot/uid_cache.bin` reads, id sessions |
+| **Read** | `scene inspect`, `resource inspect`, `scene node list`/`get`, parsed Variant values with types |
+| **Validate** | `scene validate`, `validate-batch`, `compare-godot`, `round-trip` |
+| **Edit and author** | `scene new`, `node add`/`remove`/`rename`/`reparent`, `ext add`, `sub add`, `instance add`, `set-property`, `normalize`, `retarget-ext` |
+| **Declarative editing** | `scene plan`, `scene apply --intent`/`--patch`, `scene diff`, `scene restore`, `batch` |
+| **Project settings** | `project show`/`apply`, `input`, `settings`, `autoload`, `plugins`, `rendering`, `physics` |
+| **Component catalog** | `catalog add`, `scan`, `list`, `show`, `validate`, `search`, `export`, `relink` |
+
+Full detail, option by option: **[Command reference](docs/commands.md)** — or
+`man godot-cli` after install.
+
+## For LLM agents
+
+The scene-authoring surface exists because agents are bad at editing `.tscn`
+text and reach for runtime `load().instantiate()` instead. godot-cli gives them
+tree operations, structured errors, and a component catalog describing which
+scene to instance and when.
+
+```bash
+./install.sh --install-skill   # skill for Cursor, Claude Code, OpenCode, ~/.agents
+```
+
+- [Agent quickstart](docs/agent_quickstart.md) — one page, the whole workflow
+- [Agent scene authoring](docs/agent_scene_authoring.md) — recipes, patch and intent format, anti-patterns
+- [Agent batch commands](docs/agent_batch_commands.md) — multi-step workflows in one invocation
+- [`docs/mcp_tools.json`](docs/mcp_tools.json) — JSON request shape for every command
+- `godot-cli reference --format json` — the whole command surface as data
 
 ## Documentation
 
-- [About godot-cli](docs/ABOUT.md) — what it is, what it can do, why it exists
-- [Agent quickstart](docs/agent_quickstart.md) — one-page guide for LLM agents (installed to `~/.godot-cli/docs/`)
-- [Agent scene authoring](docs/agent_scene_authoring.md) — full recipes and patch/intent format
-- [Agent batch commands](docs/agent_batch_commands.md) — multi-step workflows
-- [Scene authoring roadmap](docs/scene_authoring_roadmap.md) — LLM-first plan for full scene authoring
-- [Development principles](docs/development_principles.md) — CLI argument conventions, result shapes, and JSON contracts
-- [MCP tool catalog](docs/mcp_tools.json) — JSON request shapes for every command
-- [ID generation plan](docs/id_generation_plan.md) — Godot ID systems and roadmap for scene/resource I/O
+| Doc | What it covers |
+|-----|----------------|
+| [Getting started](docs/getting_started.md) | Install, first scene, agent setup |
+| [Command reference](docs/commands.md) | Every command, option, and exit code (generated) |
+| [About godot-cli](docs/ABOUT.md) | What it is, why it exists, what it is not |
+| [Development principles](docs/development_principles.md) | CLI and JSON contracts every command follows |
+| [Documentation index](docs/README.md) | Everything else, including design docs and roadmaps |
 
-Regenerate Godot import metadata for test fixtures:
+## Status
+
+Early development, released under [semantic versioning](CHANGELOG.md). The file
+format work — ID generation, UID cache, Variant parsing, save round-trip — is
+verified against **Godot 4.7** in unit tests and in a suite that compares
+godot-cli's output byte-for-byte against files the editor saved.
+
+Scene authoring, the component catalog, `project.godot` editing, and batch
+workflows are all implemented; see the
+[scene authoring roadmap](docs/scene_authoring_roadmap.md) for how they fit
+together.
+
+## Building
+
+Requires [Zig](https://ziglang.org/) 0.16.0 or later. Godot 4.7 is needed only
+for the round-trip suite.
 
 ```bash
-tools/import_fixtures.sh
-# or: GODOT=/path/to/Godot tools/import_fixtures.sh
-# optional: REGENERATE_RICH=1 tools/import_fixtures.sh  # material + scene shells via save_rich_fixtures.gd
+zig build                # binary at zig-out/bin/godot-cli
+zig build test           # unit tests + CLI smoke tests
+zig build test-godot     # round-trip against a real Godot save (-Dgodot=/path)
+zig build docs           # regenerate command reference, man page, completions
 ```
 
-Rich variant fixtures live in `test_fixtures/project/rich_variants.tscn` and `sample_material.tres` (see `src/godot/fixtures.zig` tests).
-
-## Project layout
-
-```
-src/
-  main.zig           Entry point
-  commands.zig       Command registry
-  commands/          Command implementations
-  godot/             Godot-compatible primitives (UID, scene IDs, …)
-  cli/               Argument parsing, help, JSON input
-  output/            Result emission (text and JSON)
-  catalog/           Bundled Godot builtin catalog data
-docs/                Agent guides, design docs, mcp_tools.json
-templates/           Built-in scene templates (scene template copy)
-share/examples/      Example intent, patch, and batch JSON
-skills/              Agent skill package (godot-scene-authoring)
-tools/
-  import_fixtures.sh   # Godot --import for test_fixtures/project
-  sync_id_session.sh   # Import ext_resource ids from Godot save into session cache
-test_fixtures/
-  project/           # Minimal Godot project (IDs, rich variant fixtures)
-third_party/
-  licenses/          # Full license texts for ported third-party code
-.github/
-  workflows/ci.yml       # fmt, tests, cross-compile, Godot round-trip
-  workflows/release.yml  # tagged release binaries
-```
-
-## Contributing
-
-Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
-for the development setup, what CI checks, and the conventions new commands follow.
-Participation is covered by our [Code of Conduct](CODE_OF_CONDUCT.md). To report a
-security issue, see [SECURITY.md](SECURITY.md).
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup, what CI checks,
+and the conventions new commands follow. Participation is covered by our
+[Code of Conduct](CODE_OF_CONDUCT.md); to report a security issue, see
+[SECURITY.md](SECURITY.md). Releases follow [RELEASING.md](RELEASING.md).
 
 ## License
 
-godot-cli is released under the [MIT License](LICENSE), copyright © 2026
-[Unabated Games](https://github.com/unabated-games).
+MIT, copyright © 2026 [Unabated Games](https://github.com/unabated-games) — see
+[LICENSE](LICENSE).
 
-It contains code ported from the Godot Engine (MIT) and from PCG
-(Apache-2.0). Those notices, and what was changed, are recorded in
-[THIRDPARTY.md](THIRDPARTY.md); the Apache-2.0 text is included at
+Contains code ported from the Godot Engine (MIT) and from PCG (Apache-2.0).
+Those notices, and what was changed, are recorded in
+[THIRDPARTY.md](THIRDPARTY.md); the Apache-2.0 text is at
 [`third_party/licenses/`](third_party/licenses/).
 
 "Godot" and the Godot Engine logo are trademarks of the Godot Foundation. This
-project is not affiliated with, endorsed by, or sponsored by the Godot Foundation
-or the Godot Engine project.
+project is not affiliated with, endorsed by, or sponsored by the Godot
+Foundation or the Godot Engine project.

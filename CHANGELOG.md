@@ -35,6 +35,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ### Fixed
 
+- **`scene sub add --property` wrote freed memory into the scene.** The normalized value was released at the end of the block that produced it, before the document copied it in, so `--value 16.0` could land in the file as `radius = \xfa\xfa`. A smoke test now checks written property text in the file rather than in the command's own output.
+- **A write could report failure after succeeding.** With `--project-root` pointing at a project that had never been opened in Godot — no `.godot/` directory — commands wrote the scene and then exited 1 trying to save the id session cache beside it. The directory is created when missing, and a cache that still cannot be written is dropped rather than failing an edit that already landed.
 - `scene new` declared `--output` twice — once as required, once inherited from the shared save options. It showed up twice in help and in every completion script. A test now rejects any command that declares an option or subcommand twice.
 - `catalog relink --dry-run` was described as generating markdown, which is `catalog export`'s behaviour.
 - `catalog scan` still described itself as scanning `.tres` manifests, which 0.1.0 removed.
@@ -43,6 +45,9 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ### Changed
 
+- **README is a landing page**, with the command list moved to the generated reference. New [`docs/getting_started.md`](docs/getting_started.md) covers install, a first scene, `--project-root`, and agent setup; [`docs/README.md`](docs/README.md) indexes every document.
+- [`RELEASING.md`](RELEASING.md) documents cutting a release; `.editorconfig`, `.gitattributes` (generated files marked, Godot fixtures never normalised), Dependabot for GitHub Actions, and `CODEOWNERS` added.
+- Agent quickstart and catalog design updated: the installer no longer needs a checkout, and the catalog docs no longer describe the `.tres` manifests 0.1.0 removed.
 - Global options (`--json`, `--request`, …) are declared once in `cli/spec.zig` and rendered from there by `--help`, the man page, the reference, and every completion script.
 
 ## [0.1.0] — 2026-08-14

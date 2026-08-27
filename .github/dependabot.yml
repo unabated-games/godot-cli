@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Zig dependencies are pinned by hash in build.zig.zon and Dependabot has no
+  # ecosystem for them; the actions in CI and the release workflow are the part
+  # that goes stale silently.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "Bump"
+    groups:
+      actions:
+        patterns: ["*"]

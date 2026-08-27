@@ -682,6 +682,46 @@ pub fn build(b: *std.Build) void {
     cmp_cmd.step.dependOn(&normalize_cmd.step);
     godot_step.dependOn(&cmp_cmd.step);
 
+    // Property values written through the Variant parser, checked in the file
+    // rather than in the command's own JSON: `sub add --property` used to free
+    // the normalized value before the document copied it, so the scene got
+    // whatever the allocator left behind.
+    const property_value_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\scene="$tmp/props.tscn" &&
+        \\./zig-out/bin/godot-cli scene new --output "$scene" --root-name Root --root-type Node2D &&
+        \\./zig-out/bin/godot-cli scene sub add "$scene" --type CapsuleShape2D --property radius --value 16.0 &&
+        \\./zig-out/bin/godot-cli scene sub add "$scene" --type RectangleShape2D --property size --value "Vector2(16, 32)" &&
+        \\./zig-out/bin/godot-cli scene set-property "$scene" --node-name Root --property rotation --value 1.5 &&
+        \\grep -q '^radius = 16$' "$scene" &&
+        \\grep -q '^size = Vector2(16, 32)$' "$scene" &&
+        \\grep -q '^rotation = 1.5$' "$scene"
+    });
+    property_value_smoke.setCwd(b.path("."));
+    property_value_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&property_value_smoke.step);
+
+    // A project that has never been opened in Godot has no .godot directory, so
+    // the id session cache has nowhere to be written. That used to fail the
+    // command *after* the scene was already written.
+    const fresh_project_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\touch "$tmp/project.godot" &&
+        \\mkdir -p "$tmp/ui" &&
+        \\printf '[gd_scene format=3]\n\n[node name="HUD" type="Control"]\n' > "$tmp/ui/hud.tscn" &&
+        \\./zig-out/bin/godot-cli scene new --output "$tmp/level.tscn" --root-name Level --root-type Node2D &&
+        \\./zig-out/bin/godot-cli scene instance add "$tmp/level.tscn" --parent /root/Level \
+        \\  --scene res://ui/hud.tscn --name HUD --project-root "$tmp" --json &&
+        \\grep -q 'instance=ExtResource' "$tmp/level.tscn"
+    });
+    fresh_project_smoke.setCwd(b.path("."));
+    fresh_project_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&fresh_project_smoke.step);
+
     // Generated CLI surface: the Markdown command reference, the man page, and
     // the shell completions all come from the CommandSpec tree, so they are
     // rebuilt by `zig build docs` and diffed by `zig build docs-check`.

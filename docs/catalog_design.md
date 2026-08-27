@@ -157,8 +157,6 @@ Two limits worth knowing:
   opened or imported; a `git mv` with the editor closed leaves it stale. Relink
   refuses to guess in that case, reporting `unresolved` and exiting 1 rather than
   inventing a path.
-- **`.tres` manifests are not rewritten.** They are reported as `manual`, with the
-  `resource set-property` invocation to run.
 
 `catalog relink` exits 1 if any manifest is still unrepaired afterwards, so it can
 gate CI without a separate `validate` pass.
@@ -353,7 +351,7 @@ On scan:
 
 ## Format policy
 
-- **Authoring:** Godot `.tres` only (via Godot Power AI addon)
+- **Authoring:** `*.manifest.json`, written by `catalog add` and edited by hand or by an agent
 - **Agent export:** JSON / markdown via `catalog export` and `catalog show --json`
 - **TOML / sidecar files:** deferred unless a concrete need appears
 
@@ -412,5 +410,5 @@ and `catalog scan` development. Its catalog entry lives at
 
 **Suggested catalog id** (if manifest created): `ui/button/button`
 
-**Manifest:** not yet authored — create `ui/button/button.manifest.tres` via Godot Power AI when testing scan/show/validate.
+**Manifest:** `test_fixtures/project/ui/button.manifest.json`, scaffolded with `catalog add` and used by the `catalog scan`/`show`/`validate` tests.
 
