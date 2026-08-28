@@ -156,19 +156,36 @@ release_target() {
 }
 
 latest_version() {
-  local tag=""
+  local tag="" redirect=""
 
   tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
     sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)" || true
 
   # The API is rate limited per IP; the /latest page redirects to the tag and is
-  # not, so it is a usable second source for the same answer.
+  # not, so it is a usable second source for the same answer. Only trust the
+  # redirect when it actually landed on a tag page: a private repository
+  # redirects to a login page, and taking that URL as the version puts the whole
+  # URL into the download path.
   if [[ -z "$tag" ]]; then
-    tag="$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-      "https://github.com/$REPO/releases/latest" 2>/dev/null | sed 's#.*/tag/##')" || true
+    redirect="$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+      "https://github.com/$REPO/releases/latest" 2>/dev/null)" || true
+    case "$redirect" in
+      */releases/tag/*) tag="${redirect##*/tag/}" ;;
+    esac
   fi
 
-  [[ -n "$tag" ]] || die "Could not resolve the latest release. Pass --version X.Y.Z."
+  # Whatever the source, the answer has to look like a version.
+  case "$tag" in
+    v[0-9]*|[0-9]*) ;;
+    *)
+      die "Could not resolve the latest release of $REPO.
+
+Pass --version X.Y.Z to install a specific release. If the repository is
+private, GitHub does not serve release assets to anonymous requests — use
+'gh release download' with an authenticated gh, or build from source."
+      ;;
+  esac
+
   echo "${tag#v}"
 }
 

@@ -103,6 +103,9 @@ jobs:
       - name: Shellcheck the installer
         run: shellcheck install.sh tools/*.sh
 
+      - name: Test the installer's release resolution
+        run: tools/test_install_sh.sh
+
       # The agent-facing tool catalog is hand-written; this checks only that it
       # covers every runnable command.
       - name: Check the MCP tool catalog covers every command

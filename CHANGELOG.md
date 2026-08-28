@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Fixed
+
+- `install.sh` could put a whole URL where the version belonged. When the releases API is unavailable it falls back to the redirect target of the `/latest` page, but it accepted that URL as a tag even when the redirect never reached a tag page — a private repository redirects to a login page — producing a download path with a URL embedded in it. The redirect is now only trusted when it landed on `/releases/tag/`, and the resolved version has to look like one; failing that, the error explains the private-repository case. `tools/test_install_sh.sh` covers both sources failing, lying, and answering, and runs in CI.
+
 ## [0.2.0] — 2026-08-28
 
 ### Added
