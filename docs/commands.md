@@ -866,7 +866,7 @@ godot-cli scene apply [options] [args...]
 | `--patch` | `<path>` | JSON patch file with { "ops": [ … ] } | — |
 | `--intent` | `<path>` | Intent JSON (expands to patch ops via scene plan) | — |
 | `--snapshot` | `<path>` | Copy scene to this path before applying | — |
-| `--auto-snapshot` | — | Save snapshot to <scene>.godot-cli-snapshot before apply | — |
+| `--auto-snapshot` | — | Save snapshot to &lt;scene&gt;.godot-cli-snapshot before apply | — |
 | `--record-undo` | — | Record undo patch ops in JSON output | — |
 | `--write-undo-patch` | `<path>` | Write undo patch JSON to this path (implies --record-undo) | — |
 | `--no-strict` | — | Continue applying ops after a failure (default: stop on first error) | — |
@@ -1250,7 +1250,7 @@ godot-cli catalog [options]
 
 Create or update a JSON catalog manifest for a scene
 
-Writes <scene>.manifest.json beside the scene, filling scene_uid from the scene header and scaffolding a row for each signal declared by the root script. With --update, prose already written is preserved.
+Writes &lt;scene&gt;.manifest.json beside the scene, filling scene_uid from the scene header and scaffolding a row for each signal declared by the root script. With --update, prose already written is preserved.
 
 ```
 godot-cli catalog add [options] [args...]
@@ -1269,7 +1269,7 @@ godot-cli catalog add [options] [args...]
 | `--tags` | `<value>` | Comma-separated tags | — |
 | `--related-ids` | `<value>` | Comma-separated related catalog ids | — |
 | `--update` | — | Update an existing manifest, keeping prose already written | — |
-| `--output` | `<path>` | Manifest path (default: <scene>.manifest.json beside the scene) | — |
+| `--output` | `<path>` | Manifest path (default: &lt;scene&gt;.manifest.json beside the scene) | — |
 | `--dry-run` | — | Render the manifest without writing it | — |
 
 ### `godot-cli catalog relink`
@@ -1914,9 +1914,9 @@ Print shell completions (bash, zsh, fish)
 Generated from the command tree, so completions stay in step with the
 binary that printed them.
 
-  bash:  godot-cli completions bash > ~/.godot-cli/share/completions/godot-cli.bash
-  zsh:   godot-cli completions zsh  > "${fpath[1]}/_godot-cli"
-  fish:  godot-cli completions fish > ~/.config/fish/completions/godot-cli.fish
+  bash:  godot-cli completions bash &gt; ~/.godot-cli/share/completions/godot-cli.bash
+  zsh:   godot-cli completions zsh  &gt; "${fpath[1]}/_godot-cli"
+  fish:  godot-cli completions fish &gt; ~/.config/fish/completions/godot-cli.fish
 
 ```
 godot-cli completions [options] [args...]

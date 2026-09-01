@@ -142,10 +142,14 @@ pub fn markdown(
     try w.writeAll("\n## Commands\n");
 
     for (all) |entry| {
-        try w.print("\n### `{s} {s}`\n\n{s}\n", .{ tool_name, entry.path, entry.command.summary });
+        try w.print("\n### `{s} {s}`\n\n", .{ tool_name, entry.path });
+        try writeMarkdownText(w, entry.command.summary);
+        try w.writeAll("\n");
 
         if (entry.command.description) |description| {
-            try w.print("\n{s}\n", .{description});
+            try w.writeAll("\n");
+            try writeMarkdownText(w, description);
+            try w.writeAll("\n");
         }
 
         try w.print("\n```\n{s} {s}", .{ tool_name, entry.path });
@@ -210,11 +214,24 @@ pub fn markdown(
     return allocator.dupe(u8, out.written());
 }
 
-/// Pipes end a table cell and newlines end a row, so both have to go.
+/// Pipes end a table cell and newlines end a row, so both have to go. Angle
+/// brackets are escaped because option descriptions use them as placeholders
+/// (`<scene>.manifest.json`), and a Markdown renderer reads those as HTML tags.
 fn writeMarkdownCell(w: *std.Io.Writer, text: []const u8) !void {
     for (text) |byte| switch (byte) {
         '|' => try w.writeAll("\\|"),
         '\n' => try w.writeAll(" "),
+        '<' => try w.writeAll("&lt;"),
+        '>' => try w.writeAll("&gt;"),
+        else => try w.writeByte(byte),
+    };
+}
+
+/// Prose outside a table: keeps newlines, still escapes angle brackets.
+fn writeMarkdownText(w: *std.Io.Writer, text: []const u8) !void {
+    for (text) |byte| switch (byte) {
+        '<' => try w.writeAll("&lt;"),
+        '>' => try w.writeAll("&gt;"),
         else => try w.writeByte(byte),
     };
 }

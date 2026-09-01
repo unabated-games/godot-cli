@@ -25,3 +25,6 @@ Thumbs.db
 
 # Backups left behind if a batch run is interrupted
 *.godot-cli-batch-backup
+
+# Built documentation site
+site/_build/

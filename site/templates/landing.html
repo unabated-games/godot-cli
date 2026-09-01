@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<meta name="description" content="{{ description }}">
+<meta property="og:title" content="{{ title }}">
+<meta property="og:description" content="{{ description }}">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="{{ base_url }}/assets/style.css">
+<link rel="stylesheet" href="{{ base_url }}/assets/highlight.css">
+<link rel="icon" href="{{ base_url }}/assets/favicon.svg" type="image/svg+xml">
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem("theme");
+      if (stored) document.documentElement.setAttribute("data-theme", stored);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body class="landing">
+<a class="skip" href="#content">Skip to content</a>
+<header class="site-header">
+  <a class="brand" href="{{ base_url }}/">
+    <span class="brand-mark" aria-hidden="true"></span>
+    godot-cli
+  </a>
+  <nav class="header-nav">
+    <a href="{{ base_url }}/getting-started/">Getting started</a>
+    <a href="{{ base_url }}/how-to/">How-to</a>
+    <a href="{{ base_url }}/reference/">Reference</a>
+    <a href="https://github.com/unabated-games/godot-cli">GitHub</a>
+  </nav>
+  <button class="theme-toggle" type="button" aria-label="Switch between light and dark theme"></button>
+</header>
+<main id="content" class="landing-content">
+  {{ content }}
+</main>
+<footer class="site-footer">
+  <p>godot-cli is MIT licensed, from <a href="https://github.com/unabated-games">Unabated Games</a>. Godot and the Godot Engine logo are trademarks of the Godot Foundation; this project is not affiliated with the Godot Foundation or the Godot Engine project.</p>
+</footer>
+<script src="{{ base_url }}/assets/site.js"></script>
+</body>
+</html>

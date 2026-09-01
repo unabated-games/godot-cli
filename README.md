@@ -6,8 +6,10 @@
 [![Godot 4.7](https://img.shields.io/badge/godot-4.7-478cbf.svg)](https://godotengine.org/)
 [![Zig 0.16](https://img.shields.io/badge/zig-0.16-f7a41d.svg)](https://ziglang.org/)
 
-Read, edit, and author Godot scene and resource files from the command line —
+Read, edit, and author Godot scene and resource files from the command line,
 without launching the editor.
+
+Documentation: **[unabated-games.github.io/godot-cli](https://unabated-games.github.io/godot-cli/)**
 
 godot-cli parses `.tscn`, `.tres`, and `project.godot` into a document model,
 understands Godot's identifier systems and Variant text, and writes files back
@@ -87,6 +89,11 @@ scene to instance and when.
 - `godot-cli reference --format json` — the whole command surface as data
 
 ## Documentation
+
+The full documentation site is at
+[unabated-games.github.io/godot-cli](https://unabated-games.github.io/godot-cli/),
+including how-to guides for scene authoring, the component catalog, batch edits,
+and agent setup.
 
 | Doc | What it covers |
 |-----|----------------|
