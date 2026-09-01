@@ -4,6 +4,10 @@ godot-cli reads and writes Godot 4 text scenes (`.tscn`), resources (`.tres`),
 and `project.godot`. This page covers installing it, authoring a first scene,
 and pointing an agent at it.
 
+The documentation site at <https://unabated-games.github.io/godot-cli/> carries
+this guide plus how-to guides for the component catalog, batch edits, UI, and
+agent setup.
+
 - Every command takes `--json` and returns [one envelope](development_principles.md#json-output---json).
 - Every command is listed in the [command reference](commands.md), or `man godot-cli`.
 
