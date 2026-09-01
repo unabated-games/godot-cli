@@ -287,4 +287,4 @@ An agent without a catalog has two bad options for reusing your work. It can cop
 
 Both leave you with a scene file that does not describe the scene. The editor shows an empty node, the layout only exists at runtime, and reviewing the change means reading GDScript to work out what the screen looks like.
 
-The catalog closes the gap. The agent knows the component exists, knows what it is for, knows its exports and signals, and has one command that writes the same `ext_resource` and `instance=` lines the editor writes. The result opens in Godot, diffs like a scene, and stays yours.
+The catalog closes that gap. The agent knows the component exists and what it is for, it can read the exports and signals, and it has one command that writes the same `ext_resource` and `instance=` lines the editor would. What comes out opens in Godot and diffs like any other scene.

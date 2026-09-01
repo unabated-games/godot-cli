@@ -36,7 +36,7 @@ A real one reads like this:
 }
 ```
 
-`stale_uid_for_path` needs `--project-root`, since it is a question about the project rather than the file. Resources get the same treatment with `resource validate` and `resource validate-batch`.
+`stale_uid_for_path` needs `--project-root`, since it is a question about the project, not the file on its own. Resources get the same treatment with `resource validate` and `resource validate-batch`.
 
 Validation does not open the files a scene points at. For that, `scene refs` resolves every `ext_resource` to a filesystem path and reports whether it is there:
 
@@ -88,9 +88,9 @@ Or apply the undo patch that `--write-undo-patch` produced during the edit. Both
 
 Validation passing means the file is well formed, not that the change is right. The things worth a human eye:
 
-Nodes are in the tree rather than created in `_ready()`. `scene node list` shows the structure that will exist when the scene opens; if a HUD is missing from it, the layout is being built in code.
+Nodes are in the tree, not created in `_ready()`. `scene node list` shows the structure that will exist when the scene opens; if a HUD is missing from it, the layout is being built in code.
 
-Reused components are instanced rather than copied. An instanced component shows as a node with `instance=ExtResource(...)` and no children in the parent scene. A copied one shows as a subtree that duplicates the component.
+Reused components are instanced, not copied. An instanced component shows as a node with `instance=ExtResource(...)` and no children in the parent scene. A copied one shows as a subtree that duplicates the component.
 
 Presentation is on the nodes, not only in scripts. `scene inspect` lists the theme overrides and layout properties, so a Control with no styling and a script full of `add_theme_*_override` calls is easy to spot.
 

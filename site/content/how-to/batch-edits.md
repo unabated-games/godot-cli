@@ -93,7 +93,7 @@ Applying `undo.json` reverses the change. For a copy of the whole file instead, 
 
 ## Several commands in one process
 
-`batch` runs whole commands rather than ops, which suits apply, then validate, then diff:
+`batch` runs whole commands, not individual ops, which suits apply, then validate, then diff:
 
 ```json
 {

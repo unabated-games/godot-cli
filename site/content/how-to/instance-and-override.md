@@ -50,11 +50,11 @@ An instance keeps its own values for anything exported by the instanced scene's 
 godot-cli scene apply scenes/main.tscn --patch override.json --project-root . --json
 ```
 
-String values keep their quotes inside the JSON string, as `"\"Player\""` above, because the value is Variant text rather than a plain string. `catalog show <id>` lists the export names and their types if you are not sure what an instance accepts.
+String values keep their quotes inside the JSON string, as `"\"Player\""` above, because the value is Variant text, and a Variant string carries its own quotes. `catalog show <id>` lists the export names and their types if you are not sure what an instance accepts.
 
 ## Editable children
 
-To change a node inside the instanced scene rather than the instance root, mark the instance editable and target the child:
+To change a node inside the instanced scene, as opposed to the instance root, mark the instance editable and target the child:
 
 ```bash
 godot-cli scene instance add scenes/main.tscn --parent /root/Main \

@@ -73,7 +73,7 @@ move_left={
 }
 ```
 
-Applying the same intent twice replaces each action by name rather than appending, so re-running after an edit is safe. A ready-made WASD intent ships at `$GODOT_CLI_HOME/examples/intents/wasd_movement.json`.
+Applying the same intent twice replaces each action by name instead of appending a second copy, so re-running after an edit is safe. A ready-made WASD intent ships at `$GODOT_CLI_HOME/examples/intents/wasd_movement.json`.
 
 ## Autoloads
 
@@ -106,7 +106,7 @@ This toggles plugins that already exist at `addons/<name>/plugin.cfg`. godot-cli
 
 ## Rendering and physics
 
-Both take friendly aliases rather than raw setting keys:
+Both take short aliases in place of the raw setting keys:
 
 ```bash
 godot-cli project rendering list --project-root . --json

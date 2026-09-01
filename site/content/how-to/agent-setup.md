@@ -7,7 +7,7 @@ description: Install the skill, write project rules that keep an agent editing s
 
 Coding agents are good at GDScript and bad at `.tscn`. Left alone, a request for a pause menu comes back as a script that builds the menu at runtime, because that is the shape of most Godot examples online and because scene text is hard to write blind.
 
-Three things change that: the tool, so scene edits are commands instead of text; the rules, so the agent knows which shape you want; and the catalog, so it can reuse what you have built.
+Three things change that. The tool turns scene edits into commands. The rules tell the agent which shape you want. The catalog tells it what you have already built, so it has something to reuse.
 
 ## 1. Install the CLI and the skill
 
@@ -19,7 +19,7 @@ install.sh --install-skill
 
 The skill lands in `~/.cursor/skills/`, `~/.claude/skills/`, `~/.config/opencode/skills/`, and `~/.agents/skills/`, all as `godot-scene-authoring`. It carries the workflow checklist, the command cheat sheet, and the anti-patterns. Refresh it after an upgrade with `install.sh --skills-only`.
 
-Agents should reference `$GODOT_CLI_HOME` rather than a source checkout. The guides they need are installed at `$GODOT_CLI_HOME/docs/agent_quickstart.md`, `agent_scene_authoring.md`, and `agent_batch_commands.md`, with copy-paste intents in `$GODOT_CLI_HOME/examples/`.
+Point agents at `$GODOT_CLI_HOME`, never at a source checkout. The guides they need are installed at `$GODOT_CLI_HOME/docs/agent_quickstart.md`, `agent_scene_authoring.md`, and `agent_batch_commands.md`, with copy-paste intents in `$GODOT_CLI_HOME/examples/`.
 
 ## 2. Write the project rules
 

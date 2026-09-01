@@ -60,9 +60,9 @@ The project runs the strong version in CI. Godot 4.7 saves a fixture scene headl
 
 ## Variant values
 
-Property values are parsed into typed values rather than treated as strings, which is what makes `scene inspect` useful and what stops `16.0` being written where Godot writes `16`. The parser covers booleans and numbers, strings and StringNames, vectors, rects, transforms, colors, node paths, `Object(...)` bodies, arrays and dictionaries including typed ones, packed arrays including base64 `PackedByteArray`, and ext or sub resource references.
+Property values are parsed into typed values, not carried around as strings, which is what makes `scene inspect` useful and what stops `16.0` being written where Godot writes `16`. The parser covers booleans and numbers, strings and StringNames, vectors, rects, transforms, colors, node paths, `Object(...)` bodies, arrays and dictionaries including typed ones, packed arrays including base64 `PackedByteArray`, and ext or sub resource references.
 
-Anything it cannot parse is preserved verbatim and reported with `parse_error` rather than being rewritten, so an unknown construct survives an edit untouched.
+Anything it cannot parse is preserved verbatim and reported with `parse_error` instead of being rewritten, so an unknown construct survives an edit untouched.
 
 ## Version support
 
