@@ -35,7 +35,7 @@ jobs:
           - x86_64-windows
           - aarch64-windows
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Zig
         uses: mlugg/setup-zig@v2
@@ -91,7 +91,7 @@ jobs:
           esac
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: godot-cli-${{ matrix.target }}
           path: ${{ steps.package.outputs.artifact }}
@@ -103,9 +103,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -153,7 +153,7 @@ jobs:
           cat release-notes.md
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         # Attestations need a public repository (or GitHub Advanced Security);
         # a missing attestation should not block the release itself.
         continue-on-error: true
@@ -161,7 +161,7 @@ jobs:
           subject-path: "dist/*"
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           body_path: release-notes.md
