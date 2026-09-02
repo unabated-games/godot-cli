@@ -16,7 +16,7 @@ pub fn writeDocument(allocator: std.mem.Allocator, doc: *const document.Document
             while (i < section.leading_blank_lines) : (i += 1) {
                 try out.append(allocator, '\n');
             }
-        } else if (index > 0) {
+        } else if (index > 0 and !contiguousWithPrevious(doc, index)) {
             try out.append(allocator, '\n');
         }
 
@@ -32,6 +32,15 @@ pub fn writeDocument(allocator: std.mem.Allocator, doc: *const document.Document
     }
 
     return try out.toOwnedSlice(allocator);
+}
+
+/// Godot separates every section with a blank line except consecutive
+/// `[connection]` lines, which it writes one after another.
+fn contiguousWithPrevious(doc: *const document.Document, index: usize) bool {
+    const current = doc.sections.items[index];
+    const previous = doc.sections.items[index - 1];
+    return std.mem.eql(u8, current.header.name, "connection") and
+        std.mem.eql(u8, previous.header.name, "connection");
 }
 
 pub fn writeFile(

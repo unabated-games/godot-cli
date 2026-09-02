@@ -5,6 +5,7 @@ const document = @import("text_format/document.zig");
 const node_tree = @import("node_tree.zig");
 const scene_edit = @import("scene_edit.zig");
 const scene_resources = @import("scene_resources.zig");
+const scene_connections = @import("scene_connections.zig");
 const io_util = @import("../io_util.zig");
 
 pub const Error = error{
@@ -81,6 +82,48 @@ pub fn recordNodeAddUndo(recorder: *UndoRecorder, path: []const u8) Error!void {
     try obj.put(a, "path", .{ .string = try a.dupe(u8, path) });
     try obj.put(a, "recursive", .{ .bool = true });
     try recorder.prepend(.{ .object = obj });
+}
+
+pub fn recordConnectionAddUndo(recorder: *UndoRecorder, from: []const u8, signal: []const u8, to: []const u8, method: []const u8) Error!void {
+    const a = recorder.allocator();
+    var obj: std.json.ObjectMap = .{};
+    try obj.put(a, "op", .{ .string = "connection_remove" });
+    try obj.put(a, "from", .{ .string = try a.dupe(u8, from) });
+    try obj.put(a, "signal", .{ .string = try a.dupe(u8, signal) });
+    try obj.put(a, "to", .{ .string = try a.dupe(u8, to) });
+    try obj.put(a, "method", .{ .string = try a.dupe(u8, method) });
+    try recorder.prepend(.{ .object = obj });
+}
+
+/// Capture every connection that a `connection_remove` will drop, as
+/// `connection_add` ops, so the undo patch restores flags and binds too.
+pub fn captureConnectionRemoveUndo(
+    recorder: *UndoRecorder,
+    allocator: std.mem.Allocator,
+    doc: *const document.Document,
+    from: []const u8,
+    signal: []const u8,
+    to: []const u8,
+    method: ?[]const u8,
+) Error!void {
+    var connections = scene_connections.collect(allocator, doc) catch return error.OutOfMemory;
+    defer connections.deinit(allocator);
+    const a = recorder.allocator();
+    for (connections.items) |*info| {
+        if (!std.mem.eql(u8, info.from_path, from) or !std.mem.eql(u8, info.signal, signal) or !std.mem.eql(u8, info.to_path, to)) continue;
+        if (method) |m| if (!std.mem.eql(u8, info.method, m)) continue;
+        var obj: std.json.ObjectMap = .{};
+        try obj.put(a, "op", .{ .string = "connection_add" });
+        try obj.put(a, "from", .{ .string = try a.dupe(u8, info.from_path) });
+        try obj.put(a, "signal", .{ .string = try a.dupe(u8, info.signal) });
+        try obj.put(a, "to", .{ .string = try a.dupe(u8, info.to_path) });
+        try obj.put(a, "method", .{ .string = try a.dupe(u8, info.method) });
+        if (info.deferred()) try obj.put(a, "deferred", .{ .bool = true });
+        if (info.oneShot()) try obj.put(a, "one_shot", .{ .bool = true });
+        if (info.binds) |b| try obj.put(a, "binds", .{ .string = try a.dupe(u8, b) });
+        if (info.unbinds) |u| try obj.put(a, "unbinds", .{ .integer = u });
+        try recorder.prepend(.{ .object = obj });
+    }
 }
 
 pub fn recordNodeSetUndo(

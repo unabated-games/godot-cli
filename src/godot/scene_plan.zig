@@ -161,6 +161,21 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         return;
     }
 
+    if (std.mem.eql(u8, recipe, "connect")) {
+        try ops.append(try makeOpObject(ops_alloc, &[_]Field{
+            .{ "op", "connection_add" },
+            .{ "from", try requiredString(step, "from") },
+            .{ "signal", try requiredString(step, "signal") },
+            .{ "to", try requiredString(step, "to") },
+            .{ "method", try requiredString(step, "method") },
+        }));
+        const last = &ops.items[ops.items.len - 1];
+        for ([_][]const u8{ "deferred", "one_shot", "binds", "unbinds" }) |key| {
+            if (step.get(key)) |value| try last.object.put(ops_alloc, key, value);
+        }
+        return;
+    }
+
     if (std.mem.eql(u8, recipe, "instance_catalog")) {
         try ops.append(try makeOpObject(ops_alloc, &[_]Field{
             .{ "op", "instance_add" },

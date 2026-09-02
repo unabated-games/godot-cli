@@ -534,7 +534,7 @@ godot-cli scene plan scenes/main.tscn \
 godot-cli scene apply scenes/main.tscn --patch patches/generated.json --project-root .
 ```
 
-**Intent recipes:** `add_node`, `instance_catalog`, `instance_scene`, `node_set`, `assign_ext`, `instance_override`, `catalog_button`, `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`  
+**Intent recipes:** `add_node`, `connect`, `instance_catalog`, `instance_scene`, `node_set`, `assign_ext`, `instance_override`, `catalog_button`, `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`  
 **Passthrough:** intent file with `"ops": [ … ]` same as patch format  
 **Direct op in steps:** `{ "op": "node_add", … }` without `recipe`
 
@@ -664,6 +664,8 @@ A missing required field fails the same way with `"kind": "missing_field"` and t
 | `sub_remove` | `id` | Fails if resource is referenced |
 | `instance_add` | `parent`, `name` | `scene` **or** `catalog_id`; optional `editable` |
 | `instance_override` | `path`, `property`, `value` | Optional `child` + `type` for editable child nodes; optional `editable`: false |
+| `connection_add` | `from`, `signal`, `to`, `method` | Viewport paths; optional `deferred`, `one_shot` (bools), `binds` (array text), `unbinds` (int) |
+| `connection_remove` | `from`, `signal`, `to` | Optional `method`; without it every connection of that signal between the nodes goes |
 
 `id_hint` lets later ops reference stable ids in `ExtResource("…")` / `SubResource("…")` strings.
 
@@ -708,6 +710,29 @@ Built-in templates: `2d/character_body`, `2d/top_down_player`, `2d/camera_rig`, 
 ```
 
 ---
+
+## Signal connections
+
+Wiring a button belongs in the scene, not in `_ready()`. The editor writes a `[connection]` section per connected signal, and so does godot-cli:
+
+```bash
+godot-cli scene connection add scenes/main.tscn --from /root/Main/Menu/Resume --signal pressed \
+  --to /root/Main/Menu --method _on_resume_pressed --project-root .
+godot-cli scene connection list scenes/main.tscn --json
+```
+
+```
+[connection signal="pressed" from="Menu/Resume" to="Menu" method="_on_resume_pressed"]
+```
+
+The receiving node needs a script with that method; godot-cli writes the connection, it does not write GDScript. `--deferred`, `--one-shot`, `--binds '["quit"]'`, and `--unbinds 1` map to Godot's connect flags. In an intent the recipe is `connect`:
+
+```json
+{ "recipe": "connect", "from": "/root/Main/Menu/Resume", "signal": "pressed",
+  "to": "/root/Main/Menu", "method": "_on_resume_pressed" }
+```
+
+`node get` lists a node's connections, `diff` reports added and removed ones, rename and reparent rewrite the paths, removing a node removes its connections, and `validate` fails on a connection to a node that is not in the scene.
 
 ## Catalog integration
 

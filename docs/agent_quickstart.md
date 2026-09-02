@@ -42,6 +42,15 @@ Agents may pass `--project-root .` on all scene commands when working inside a G
 
 Persist scene hierarchy in `.tscn` files — the same structure a human builds in the Godot editor. Do **not** use `load().instantiate()` in `_ready()` for static UI or level layout.
 
+## Wire signals in the scene
+
+```bash
+godot-cli scene connection add <scene> --from /root/Main/Menu/Resume --signal pressed \
+  --to /root/Main/Menu --method _on_resume_pressed --project-root .
+```
+
+That writes the `[connection]` section the editor's Node dock writes. Do not connect static UI signals in `_ready()`; the method still lives in the receiving node's script.
+
 ## Run the game and check the result
 
 After a scene change, `scene validate` proves the file is well formed. To see the result, run the game from the terminal; Godot writes a frame and a log with no extra tooling:

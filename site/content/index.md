@@ -34,7 +34,7 @@ The game runs, so it looks like a success. Open the scene in the editor and ther
 
 Agents write this because scene text is hard to write blind. A `.tscn` has resource ids with a particular shape, sections in a particular order, a `load_steps` count that has to be right, and a float format where `16.0` is wrong and `16` is correct. Faced with all that, GDScript is the safer bet, and the agent takes it.
 
-godot-cli removes the reason. The same request is one command:
+godot-cli removes the reason. The same request is one command, and wiring the button afterwards is another (`scene connection add`), which writes the `[connection]` section the Node dock would:
 
 ```bash
 godot-cli scene instance add hud.tscn --parent /root/HUD --name PlayerHealth \

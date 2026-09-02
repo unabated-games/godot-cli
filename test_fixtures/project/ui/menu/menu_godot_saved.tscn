@@ -1,0 +1,24 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/menu/menu.gd" id="1_lti8b"]
+
+[node name="Menu" type="Control" unique_id=1939991062]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_lti8b")
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=998816145]
+layout_mode = 0
+
+[node name="Resume" type="Button" parent="Box" unique_id=691074650]
+layout_mode = 2
+
+[node name="Quit" type="Button" parent="Box" unique_id=933996167]
+layout_mode = 2
+
+[node name="Bar" type="HSlider" parent="." unique_id=631223008]
+layout_mode = 0
+
+[connection signal="pressed" from="Box/Resume" to="." method="_on_resume_pressed"]
+[connection signal="pressed" from="Box/Quit" to="." method="_on_quit_pressed" flags=3 binds= ["quit"]]
+[connection signal="value_changed" from="Bar" to="." method="_on_bar_value_changed" flags=6 unbinds=1]

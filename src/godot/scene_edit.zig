@@ -4,6 +4,7 @@ const std = @import("std");
 const document = @import("text_format/document.zig");
 const tag = @import("text_format/tag.zig");
 const node_tree = @import("node_tree.zig");
+const scene_connections = @import("scene_connections.zig");
 const node_section_order = @import("node_section_order.zig");
 
 pub const Error = error{
@@ -18,7 +19,7 @@ pub const Error = error{
     HasChildren,
     InvalidNodePath,
     AmbiguousNodeName,
-} || document.EditError;
+} || document.EditError || scene_connections.Error;
 
 pub const AddNodeResult = struct {
     section_index: usize,
@@ -142,6 +143,14 @@ pub fn removeNode(
         }
     }
 
+    // The editor drops connections to a deleted node; keeping them would leave
+    // Godot warning about a missing path on every load.
+    const attr_prefix = try nodePathPrefixFromViewport(allocator, scene_root.name, target.path);
+    defer allocator.free(attr_prefix);
+    const connection_indices = try scene_connections.referencingSectionIndices(allocator, doc, attr_prefix);
+    defer allocator.free(connection_indices);
+    try indices.appendSlice(allocator, connection_indices);
+
     std.mem.sort(usize, indices.items, {}, descUsize);
 
     var removed: usize = 0;
@@ -204,6 +213,7 @@ pub fn renameNode(
                 try section.header.setStringField(allocator, "parent", rewritten);
             }
         }
+        try scene_connections.rewritePaths(allocator, doc, old_prefix, new_prefix);
     }
 
     return new_path;
@@ -270,6 +280,7 @@ pub fn reparentNode(
                 try child_section.header.setStringField(allocator, "parent", rewritten);
             }
         }
+        try scene_connections.rewritePaths(allocator, doc, old_prefix, new_prefix);
     }
 
     try node_section_order.moveSubtreeAfterReparent(allocator, doc, section_index, new_parent.path);

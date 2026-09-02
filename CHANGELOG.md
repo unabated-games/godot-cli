@@ -15,6 +15,16 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **Signal connections.** `scene connection list|add|remove` read and write the `[connection signal="pressed" from="Menu/Resume" to="Menu" method="_on_resume_pressed"]` sections the editor's Node dock writes, with `--deferred`, `--one-shot`, `--binds`, and `--unbinds` for Godot's connect flags. Patch ops `connection_add` and `connection_remove`, intent recipe `connect`, undo patches for both, `scene node get` lists a node's connections, and `scene diff` reports added and removed ones. Renaming or reparenting a node rewrites the `from` and `to` paths of its connections; removing a node removes them, as the editor does. This was the one request in the agent trial with no scene-level answer, so the agent connected the button in `_ready()`.
+- `scene validate` error `connection_node_missing` when a connection's `from` or `to` names a node that is not in the scene.
+- Fixture `test_fixtures/project/ui/menu/menu_godot_saved.tscn`, saved by Godot with plain, deferred-with-binds, and one-shot-with-unbinds connections; a smoke test rewrites it byte for byte.
+
+### Fixed
+
+- **Any scene with signal connections lost byte-exactness on every edit.** The header parser read an unquoted array such as `binds= ["quit"]` as a string and wrote it back quoted (`binds="[\"quit\"]"`), an array containing a space failed to parse the whole file, and the writer put a blank line between connections where Godot writes none. Unquoted header values are kept verbatim, bracketed values are read to their closing bracket, and consecutive connections stay contiguous.
+
 ## [0.3.0] — 2026-09-02
 
 ### Added

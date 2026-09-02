@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const error_details = @import("error_details.zig");
+const scene_connections = @import("scene_connections.zig");
 const variant_parse = @import("variant/parse.zig");
 const document = @import("text_format/document.zig");
 const scene_edit = @import("scene_edit.zig");
@@ -23,7 +24,7 @@ pub const Error = error{
     ProjectRootRequired,
     NotAnInstance,
     MissingChildType,
-} || scene_edit.Error || scene_resources.Error || scene_instance.Error || document.EditError || catalog_scan.ScanError || scene_undo.Error;
+} || scene_connections.Error || scene_edit.Error || scene_resources.Error || scene_instance.Error || document.EditError || catalog_scan.ScanError || scene_undo.Error;
 
 pub const ApplyOptions = struct {
     seed_path: []const u8,
@@ -124,6 +125,40 @@ fn applyOneOp(
             try scene_undo.recordNodeAddUndo(recorder, added.path);
         }
         return std.fmt.allocPrint(allocator, "added node {s} at {s}", .{ name, added.path });
+    }
+
+    if (std.mem.eql(u8, op_name, "connection_add")) {
+        const from = try requiredString(op_value.object, "from");
+        const signal = try requiredString(op_value.object, "signal");
+        const to = try requiredString(op_value.object, "to");
+        const method = try requiredString(op_value.object, "method");
+        const binds = if (op_value.object.get("binds")) |b| try jsonString(b) else null;
+        const unbinds: ?i64 = if (op_value.object.get("unbinds")) |u| switch (u) {
+            .integer => |n| n,
+            else => return error.InvalidPatch,
+        } else null;
+        _ = try scene_connections.add(allocator, doc, from, signal, to, method, .{
+            .deferred = readBool(op_value.object.get("deferred")) orelse false,
+            .one_shot = readBool(op_value.object.get("one_shot")) orelse false,
+            .binds = binds,
+            .unbinds = unbinds,
+        });
+        if (options.undo) |recorder| {
+            try scene_undo.recordConnectionAddUndo(recorder, from, signal, to, method);
+        }
+        return std.fmt.allocPrint(allocator, "connected {s} {s} to {s} {s}", .{ from, signal, to, method });
+    }
+
+    if (std.mem.eql(u8, op_name, "connection_remove")) {
+        const from = try requiredString(op_value.object, "from");
+        const signal = try requiredString(op_value.object, "signal");
+        const to = try requiredString(op_value.object, "to");
+        const method = if (op_value.object.get("method")) |m| try jsonString(m) else null;
+        if (options.undo) |recorder| {
+            try scene_undo.captureConnectionRemoveUndo(recorder, allocator, doc, from, signal, to, method);
+        }
+        const removed = try scene_connections.remove(allocator, doc, from, signal, to, method);
+        return std.fmt.allocPrint(allocator, "removed {d} connection(s) of {s} {s} to {s}", .{ removed, from, signal, to });
     }
 
     if (std.mem.eql(u8, op_name, "node_remove")) {

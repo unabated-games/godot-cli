@@ -719,6 +719,107 @@
       }
     },
     {
+      "name": "scene_connection_list",
+      "argv": [
+        "scene",
+        "connection",
+        "list",
+        "<file.tscn>"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "connection",
+          "list",
+          "main.tscn",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "scene_connection_add",
+      "argv": [
+        "scene",
+        "connection",
+        "add",
+        "<file.tscn>",
+        "--from",
+        "<path>",
+        "--signal",
+        "<name>",
+        "--to",
+        "<path>",
+        "--method",
+        "<name>"
+      ],
+      "options": [
+        "--deferred",
+        "--one-shot",
+        "--binds",
+        "--unbinds",
+        "--project-root",
+        "--output",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "connection",
+          "add",
+          "main.tscn",
+          "--from",
+          "/root/Main/Menu/Resume",
+          "--signal",
+          "pressed",
+          "--to",
+          "/root/Main/Menu",
+          "--method",
+          "_on_resume_pressed",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "scene_connection_remove",
+      "argv": [
+        "scene",
+        "connection",
+        "remove",
+        "<file.tscn>",
+        "--from",
+        "<path>",
+        "--signal",
+        "<name>",
+        "--to",
+        "<path>"
+      ],
+      "options": [
+        "--method",
+        "--project-root",
+        "--output",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "scene",
+          "connection",
+          "remove",
+          "main.tscn",
+          "--from",
+          "/root/Main/Menu/Resume",
+          "--signal",
+          "pressed",
+          "--to",
+          "/root/Main/Menu",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
       "name": "scene_plan",
       "argv": [
         "scene",

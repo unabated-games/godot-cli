@@ -746,6 +746,33 @@ pub fn build(b: *std.Build) void {
     agent_findings_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&agent_findings_smoke.step);
 
+    // Signal connections against a scene Godot itself saved: the file has to
+    // survive a rewrite byte for byte (binds= [...] spacing, no blank lines
+    // between connections), renames have to follow, and a dangling endpoint
+    // has to fail validation.
+    const connections_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\ref=test_fixtures/project/ui/menu/menu_godot_saved.tscn &&
+        \\./zig-out/bin/godot-cli scene normalize "$ref" --output "$tmp/rt.tscn" --project-root test_fixtures/project --resource-path res://ui/menu/menu.tscn &&
+        \\cmp "$ref" "$tmp/rt.tscn" &&
+        \\cp "$ref" "$tmp/m.tscn" &&
+        \\./zig-out/bin/godot-cli scene connection add "$tmp/m.tscn" --from /root/Menu/Bar --signal drag_ended --to /root/Menu --method _on_drag --one-shot --no-prepare-save --json | grep -q '"ok":true' &&
+        \\grep -q '^\[connection signal="drag_ended" from="Bar" to="." method="_on_drag" flags=6\]$' "$tmp/m.tscn" &&
+        \\./zig-out/bin/godot-cli scene node rename "$tmp/m.tscn" /root/Menu/Box --name Panel --no-prepare-save &&
+        \\grep -q 'from="Panel/Quit" to="." method="_on_quit_pressed" flags=3 binds= \["quit"\]' "$tmp/m.tscn" &&
+        \\./zig-out/bin/godot-cli scene node remove "$tmp/m.tscn" /root/Menu/Panel/Quit --no-prepare-save &&
+        \\! grep -q '_on_quit_pressed' "$tmp/m.tscn" &&
+        \\./zig-out/bin/godot-cli scene connection list "$tmp/m.tscn" --json | grep -q '"connection_count":3' &&
+        \\printf '[gd_scene format=3]\n\n[node name="Menu" type="Control"]\n\n[connection signal="pressed" from="Gone" to="." method="_on_gone"]\n' > "$tmp/bad.tscn" &&
+        \\! ./zig-out/bin/godot-cli scene validate "$tmp/bad.tscn" --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene validate "$tmp/bad.tscn" --json | grep -q connection_node_missing
+    });
+    connections_smoke.setCwd(b.path("."));
+    connections_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&connections_smoke.step);
+
     // Generated CLI surface: the Markdown command reference, the man page, and
     // the shell completions all come from the CommandSpec tree, so they are
     // rebuilt by `zig build docs` and diffed by `zig build docs-check`.

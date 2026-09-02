@@ -15,6 +15,7 @@ const scene_resources = @import("../godot/scene_resources.zig");
 const scene_instance = @import("../godot/scene_instance.zig");
 const resource_uid_lookup = @import("../godot/resource_uid_lookup.zig");
 const scene_patch = @import("../godot/scene_patch.zig");
+const scene_connections = @import("../godot/scene_connections.zig");
 const scene_plan = @import("../godot/scene_plan.zig");
 const scene_diff = @import("../godot/scene_diff.zig");
 const scene_undo = @import("../godot/scene_undo.zig");
@@ -386,7 +387,7 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
         var it = section.header.fields.iterator();
         while (it.next()) |entry| {
             const value_json: std.json.Value = switch (entry.value_ptr.*) {
-                .string => |s| .{ .string = s },
+                .string, .raw => |s| .{ .string = s },
                 .integer => |n| .{ .integer = n },
                 .float => |f| .{ .float = f },
                 .bool => |b| .{ .bool = b },
@@ -561,6 +562,17 @@ fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
         try data.put(cli.allocator, "unique_id", .{ .integer = id });
     }
 
+    // Connections touching this node, in either direction.
+    var connections = try scene_connections.collect(cli.allocator, &doc);
+    defer connections.deinit(cli.allocator);
+    var connection_rows = std.json.Array.init(cli.allocator);
+    for (connections.items) |*info| {
+        if (std.mem.eql(u8, info.from_path, node.path) or std.mem.eql(u8, info.to_path, node.path)) {
+            try connection_rows.append(try scene_connections.toJson(cli.allocator, info));
+        }
+    }
+    try data.put(cli.allocator, "connections", .{ .array = connection_rows });
+
     const summary = try std.fmt.allocPrint(cli.allocator, "{s} ({s})", .{ node.name, node.path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
@@ -685,6 +697,91 @@ fn sceneNodeRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     const summary = try std.fmt.allocPrint(cli.allocator, "removed {d} node section(s) from {s}", .{ removed, node_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneConnectionListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const path = inv.positionals[0];
+
+    const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
+    var connections = try scene_connections.collect(cli.allocator, &doc);
+    defer connections.deinit(cli.allocator);
+
+    var rows = std.json.Array.init(cli.allocator);
+    for (connections.items) |*info| try rows.append(try scene_connections.toJson(cli.allocator, info));
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, path) });
+    try data.put(cli.allocator, "connection_count", .{ .integer = @intCast(connections.items.len) });
+    try data.put(cli.allocator, "connections", .{ .array = rows });
+    const summary = try std.fmt.allocPrint(cli.allocator, "{d} connection(s) in {s}", .{ connections.items.len, path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const from = inv.getOption("from") orelse return error.Usage;
+    const signal = inv.getOption("signal") orelse return error.Usage;
+    const to = inv.getOption("to") orelse return error.Usage;
+    const method = inv.getOption("method") orelse return error.Usage;
+    const unbinds: ?i64 = if (inv.getOption("unbinds")) |text|
+        std.fmt.parseInt(i64, text, 10) catch return error.InvalidValue
+    else
+        null;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const section_index = try scene_connections.add(cli.allocator, &doc, from, signal, to, method, .{
+        .deferred = inv.flag("deferred"),
+        .one_shot = inv.flag("one-shot"),
+        .binds = inv.getOption("binds"),
+        .unbinds = unbinds,
+    });
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "from", .{ .string = try cli.allocator.dupe(u8, from) });
+    try data.put(cli.allocator, "signal", .{ .string = try cli.allocator.dupe(u8, signal) });
+    try data.put(cli.allocator, "to", .{ .string = try cli.allocator.dupe(u8, to) });
+    try data.put(cli.allocator, "method", .{ .string = try cli.allocator.dupe(u8, method) });
+    try data.put(cli.allocator, "section_index", .{ .integer = @intCast(section_index) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "connected {s} {s} to {s} {s}", .{ from, signal, to, method });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+fn sceneConnectionRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const from = inv.getOption("from") orelse return error.Usage;
+    const signal = inv.getOption("signal") orelse return error.Usage;
+    const to = inv.getOption("to") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const removed = try scene_connections.remove(cli.allocator, &doc, from, signal, to, inv.getOption("method"));
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "removed_count", .{ .integer = @intCast(removed) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "removed {d} connection(s) of {s} {s} to {s}", .{ removed, from, signal, to });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
@@ -1783,6 +1880,22 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
     } ++ save_options;
     const resource_remove_options = save_options;
+    const connection_add_options = [_]spec.OptionSpec{
+        .{ .long = "from", .kind = .string, .description = "Emitting node, viewport path (e.g. /root/Main/Menu/Resume)" },
+        .{ .long = "signal", .kind = .string, .description = "Signal name (e.g. pressed)" },
+        .{ .long = "to", .kind = .string, .description = "Receiving node, viewport path" },
+        .{ .long = "method", .kind = .string, .description = "Method on the receiving node's script (e.g. _on_resume_pressed)" },
+        .{ .long = "deferred", .kind = .flag, .description = "CONNECT_DEFERRED: call at idle time" },
+        .{ .long = "one-shot", .kind = .flag, .description = "CONNECT_ONE_SHOT: disconnect after the first emission" },
+        .{ .long = "binds", .kind = .string, .description = "Extra arguments as Godot array text, e.g. '[\"quit\"]'" },
+        .{ .long = "unbinds", .kind = .string, .description = "Number of trailing signal arguments to drop" },
+    } ++ save_options;
+    const connection_remove_options = [_]spec.OptionSpec{
+        .{ .long = "from", .kind = .string, .description = "Emitting node, viewport path" },
+        .{ .long = "signal", .kind = .string, .description = "Signal name" },
+        .{ .long = "to", .kind = .string, .description = "Receiving node, viewport path" },
+        .{ .long = "method", .kind = .string, .description = "Method name; omit to remove every connection of that signal between the two nodes" },
+    } ++ save_options;
 
     return .{
         .name = "scene",
@@ -1891,6 +2004,31 @@ pub fn sceneCommands() spec.CommandSpec {
                         .summary = "Move a node under a new parent path",
                         .options = &node_edit_options,
                         .handler = sceneNodeReparentHandler,
+                    },
+                },
+            },
+            .{
+                .name = "connection",
+                .summary = "Signal connections stored in the scene ([connection] sections)",
+                .description = "The editor's Node dock writes a [connection] section per connected signal. These commands read and write the same sections, so a button wired here shows connected in the editor and needs no _ready() code.",
+                .children = &.{
+                    .{
+                        .name = "list",
+                        .summary = "List signal connections with from/to as viewport paths",
+                        .handler = sceneConnectionListHandler,
+                    },
+                    .{
+                        .name = "add",
+                        .summary = "Connect a signal from one node to a method on another",
+                        .description = "Both nodes must exist. Fails with DuplicateConnection if the same signal, nodes, and method are already connected.",
+                        .options = &connection_add_options,
+                        .handler = sceneConnectionAddHandler,
+                    },
+                    .{
+                        .name = "remove",
+                        .summary = "Remove a signal connection",
+                        .options = &connection_remove_options,
+                        .handler = sceneConnectionRemoveHandler,
                     },
                 },
             },

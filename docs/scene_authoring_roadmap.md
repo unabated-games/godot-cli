@@ -235,7 +235,7 @@ Defer MCP server; CLI + batch + patch JSON is enough.
 
 ---
 
-### Phase J — Signal connections — **next**
+### Phase J — Signal connections — **done**
 
 Found by driving the tool with a fresh agent (2026-09-02): asked to "wire the
 Resume button so pressing it hides the pause menu", it had no scene-level way
@@ -271,6 +271,7 @@ translation as `parent=` applies, and rename/reparent have to rewrite them.
 | 7 | G | Documentation and agent workflows | **done** |
 | 8 | H | Verification (`diff`, apply intent, recipes, undo) | **done** |
 | 9 | I | Dry-run diff, resource remove ops, instance overrides, templates, batch CLI | **done** |
+| 10 | J | Signal connections | **done** |
 
 ---
 

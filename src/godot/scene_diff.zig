@@ -3,8 +3,9 @@
 const std = @import("std");
 const document = @import("text_format/document.zig");
 const node_tree = @import("node_tree.zig");
+const scene_connections = @import("scene_connections.zig");
 
-pub const Error = error{OutOfMemory} || node_tree.Error;
+pub const Error = error{OutOfMemory} || node_tree.Error || scene_connections.Error;
 
 pub const DiffItem = struct {
     kind: []const u8,
@@ -36,6 +37,22 @@ pub const PropertyDiffItem = struct {
     }
 };
 
+pub const ConnectionDiffItem = struct {
+    kind: []const u8,
+    from: []const u8,
+    signal: []const u8,
+    to: []const u8,
+    method: []const u8,
+
+    pub fn deinit(self: *const ConnectionDiffItem, allocator: std.mem.Allocator) void {
+        allocator.free(self.kind);
+        allocator.free(self.from);
+        allocator.free(self.signal);
+        allocator.free(self.to);
+        allocator.free(self.method);
+    }
+};
+
 pub const DiffOptions = struct {
     include_properties: bool = false,
 };
@@ -43,6 +60,7 @@ pub const DiffOptions = struct {
 pub const DiffResult = struct {
     nodes: []DiffItem,
     properties: []PropertyDiffItem,
+    connections: []ConnectionDiffItem = &.{},
     identical: bool,
     node_count_a: usize,
     node_count_b: usize,
@@ -52,6 +70,8 @@ pub const DiffResult = struct {
         allocator.free(self.nodes);
         for (self.properties) |*item| item.deinit(allocator);
         allocator.free(self.properties);
+        for (self.connections) |*item| item.deinit(allocator);
+        if (self.connections.len != 0) allocator.free(self.connections);
     }
 };
 
@@ -65,7 +85,60 @@ pub fn diffDocuments(
     defer list_a.deinit(allocator);
     var list_b = try node_tree.collectNodes(allocator, doc_b);
     defer list_b.deinit(allocator);
-    return diffNodeLists(allocator, doc_a, doc_b, &list_a, &list_b, options);
+    var result = try diffNodeLists(allocator, doc_a, doc_b, &list_a, &list_b, options);
+    errdefer result.deinit(allocator);
+    result.connections = try diffConnections(allocator, doc_a, doc_b);
+    if (result.connections.len != 0) result.identical = false;
+    return result;
+}
+
+/// A connection is identified by everything Godot writes for it, so a change
+/// to flags or binds shows as a remove plus an add.
+fn connectionKey(allocator: std.mem.Allocator, info: *const scene_connections.ConnectionInfo) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "{s}\x00{s}\x00{s}\x00{s}\x00{d}\x00{s}\x00{d}", .{
+        info.from_path, info.signal, info.to_path, info.method, info.flags, info.binds orelse "", info.unbinds orelse 0,
+    });
+}
+
+fn diffConnections(allocator: std.mem.Allocator, doc_a: *const document.Document, doc_b: *const document.Document) Error![]ConnectionDiffItem {
+    var a = try scene_connections.collect(allocator, doc_a);
+    defer a.deinit(allocator);
+    var b = try scene_connections.collect(allocator, doc_b);
+    defer b.deinit(allocator);
+
+    var items: std.ArrayList(ConnectionDiffItem) = .empty;
+    errdefer {
+        for (items.items) |*item| item.deinit(allocator);
+        items.deinit(allocator);
+    }
+
+    for ([_]struct { from: []scene_connections.ConnectionInfo, against: []scene_connections.ConnectionInfo, kind: []const u8 }{
+        .{ .from = a.items, .against = b.items, .kind = "removed" },
+        .{ .from = b.items, .against = a.items, .kind = "added" },
+    }) |side| {
+        for (side.from) |*info| {
+            const key = try connectionKey(allocator, info);
+            defer allocator.free(key);
+            var found = false;
+            for (side.against) |*other| {
+                const other_key = try connectionKey(allocator, other);
+                defer allocator.free(other_key);
+                if (std.mem.eql(u8, key, other_key)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) continue;
+            try items.append(allocator, .{
+                .kind = try allocator.dupe(u8, side.kind),
+                .from = try allocator.dupe(u8, info.from_path),
+                .signal = try allocator.dupe(u8, info.signal),
+                .to = try allocator.dupe(u8, info.to_path),
+                .method = try allocator.dupe(u8, info.method),
+            });
+        }
+    }
+    return try items.toOwnedSlice(allocator);
 }
 
 pub fn diffToObjectMap(allocator: std.mem.Allocator, diff: *const DiffResult) Error!std.json.ObjectMap {
@@ -98,7 +171,18 @@ pub fn diffToObjectMap(allocator: std.mem.Allocator, diff: *const DiffResult) Er
         try properties_json.append(.{ .object = row });
     }
 
-    const total_diffs = diff.nodes.len + diff.properties.len;
+    var connections_json = std.json.Array.init(allocator);
+    for (diff.connections) |*item| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(allocator, "kind", .{ .string = try allocator.dupe(u8, item.kind) });
+        try row.put(allocator, "from", .{ .string = try allocator.dupe(u8, item.from) });
+        try row.put(allocator, "signal", .{ .string = try allocator.dupe(u8, item.signal) });
+        try row.put(allocator, "to", .{ .string = try allocator.dupe(u8, item.to) });
+        try row.put(allocator, "method", .{ .string = try allocator.dupe(u8, item.method) });
+        try connections_json.append(.{ .object = row });
+    }
+
+    const total_diffs = diff.nodes.len + diff.properties.len + diff.connections.len;
 
     var data: std.json.ObjectMap = .{};
     try data.put(allocator, "identical", .{ .bool = diff.identical });
@@ -107,8 +191,10 @@ pub fn diffToObjectMap(allocator: std.mem.Allocator, diff: *const DiffResult) Er
     try data.put(allocator, "node_diff_count", .{ .integer = @intCast(diff.nodes.len) });
     try data.put(allocator, "property_diff_count", .{ .integer = @intCast(diff.properties.len) });
     try data.put(allocator, "diff_count", .{ .integer = @intCast(total_diffs) });
+    try data.put(allocator, "connection_diff_count", .{ .integer = @intCast(diff.connections.len) });
     try data.put(allocator, "nodes", .{ .array = nodes_json });
     try data.put(allocator, "properties", .{ .array = properties_json });
+    try data.put(allocator, "connections", .{ .array = connections_json });
     return data;
 }
 

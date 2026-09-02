@@ -263,7 +263,7 @@ pub fn buildShowData(allocator: std.mem.Allocator, doc: *const document.Document
         var it = section.header.fields.iterator();
         while (it.next()) |entry| {
             const value_json: std.json.Value = switch (entry.value_ptr.*) {
-                .string => |s| .{ .string = s },
+                .string, .raw => |s| .{ .string = s },
                 .integer => |n| .{ .integer = n },
                 .float => |f| .{ .float = f },
                 .bool => |b| .{ .bool = b },

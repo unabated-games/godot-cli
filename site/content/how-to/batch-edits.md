@@ -33,13 +33,13 @@ godot-cli scene apply scenes/main.tscn --patch player.json --project-root . --js
 
 `id_hint` is what makes the third op possible: it fixes the sub-resource id as `CapsuleShape2D_player` so a later op can reference it. Without a hint, ids are generated the way Godot generates them and you would have to read one command's output to write the next.
 
-The ops are `node_add`, `node_remove`, `node_rename`, `node_reparent`, `node_set`, `ext_add`, `ext_remove`, `sub_add`, `sub_remove`, `assign_ext`, `instance_add`, and `instance_override`. The [command reference]({{ base_url }}/reference/) and `$GODOT_CLI_HOME/docs/agent_scene_authoring.md` carry the required fields for each.
+The ops are `node_add`, `node_remove`, `node_rename`, `node_reparent`, `node_set`, `ext_add`, `ext_remove`, `sub_add`, `sub_remove`, `assign_ext`, `instance_add`, `instance_override`, `connection_add`, and `connection_remove`. The [command reference]({{ base_url }}/reference/) and `$GODOT_CLI_HOME/docs/agent_scene_authoring.md` carry the required fields for each.
 
 Every property value is Variant text, which trips people up exactly once: `"16.0"` is a float, `"Vector2(1, 2)"` is a vector, and a string carries its own quotes, so a label's text is `"\"Paused\""`. A bare `"Paused"` is rejected before anything is written, and the failure names the op, the field, and the quoted form to use instead. That check exists because the alternative was `text = Paused` landing in a scene Godot then refused to load.
 
 ## Intents
 
-An intent is a higher-level description. Recipes such as `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, and `catalog_button` expand into the ops above:
+An intent is a higher-level description. Recipes such as `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `catalog_button`, and `connect` expand into the ops above:
 
 ```json
 {

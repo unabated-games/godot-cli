@@ -50,6 +50,10 @@ scene content.
 Presentation lives on nodes as theme_override_* and layout properties, not in
 _ready() styling calls.
 
+Connect signals in the scene, not in _ready():
+  godot-cli scene connection add <scene> --from <emitter path> --signal <name> \
+    --to <receiver path> --method <method> --project-root .
+
 Finish every change with:
   godot-cli scene validate <scene> --project-root . --json
   godot-cli scene node list <scene> --json
@@ -79,11 +83,13 @@ If the HUD nodes are in that list, the scene contains the HUD. If the list is sh
 
 ## When it drifts back to building nodes in code
 
-This usually has one of three causes, and each has a fix.
+This usually has one of four causes, and each has a fix.
 
 The component was not in the catalog, so the agent had nothing to instance and fell back to what it knows. Add a manifest and re-export the digest.
 
 The rules never said which shape you wanted. "Use godot-cli" alone is not enough, because instancing at runtime through `load()` is still using Godot. The rule has to name the anti-pattern and its one legitimate use, as in the block above.
+
+The thing it needed had no scene-level form. Until 0.4.0 that was true of signal connections, and the trial that found it produced exactly this: a correct scene plus a `_ready()` that connected the button. If an agent keeps writing runtime code for one specific thing, check whether the tool can express it at all before blaming the rules.
 
 The agent hit an error and worked around it. This is worth reading the transcript for: a failed `scene instance add` followed by a GDScript workaround usually means a missing `--project-root`, or a `res://` path that does not exist. `scene refs --project-root .` lists every external path in a scene and whether it resolves.
 

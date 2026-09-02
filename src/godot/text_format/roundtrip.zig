@@ -172,6 +172,10 @@ fn valuesEqual(a: @import("tag.zig").Value, b: @import("tag.zig").Value) bool {
             .string => |t| std.mem.eql(u8, s, t),
             else => false,
         },
+        .raw => |s| switch (b) {
+            .raw => |t| std.mem.eql(u8, s, t),
+            else => false,
+        },
         .integer => |n| switch (b) {
             .integer => |m| n == m,
             else => false,

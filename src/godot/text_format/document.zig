@@ -188,6 +188,7 @@ pub fn parseFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) Par
 fn cloneTagValue(allocator: std.mem.Allocator, value: tag.Value) ParseError!tag.Value {
     return switch (value) {
         .string => |s| .{ .string = try allocator.dupe(u8, s) },
+        .raw => |s| .{ .raw = try allocator.dupe(u8, s) },
         .integer => |n| .{ .integer = n },
         .float => |f| .{ .float = f },
         .bool => |b| .{ .bool = b },

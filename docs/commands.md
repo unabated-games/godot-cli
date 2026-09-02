@@ -59,6 +59,10 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli scene node remove`](#godot-cli-scene-node-remove) | Remove a node by viewport path |
 | [`godot-cli scene node rename`](#godot-cli-scene-node-rename) | Rename a node and rewrite descendant parent attributes |
 | [`godot-cli scene node reparent`](#godot-cli-scene-node-reparent) | Move a node under a new parent path |
+| [`godot-cli scene connection`](#godot-cli-scene-connection) | Signal connections stored in the scene ([connection] sections) |
+| [`godot-cli scene connection list`](#godot-cli-scene-connection-list) | List signal connections with from/to as viewport paths |
+| [`godot-cli scene connection add`](#godot-cli-scene-connection-add) | Connect a signal from one node to a method on another |
+| [`godot-cli scene connection remove`](#godot-cli-scene-connection-remove) | Remove a signal connection |
 | [`godot-cli scene instance`](#godot-cli-scene-instance) | Add instanced PackedScene nodes |
 | [`godot-cli scene instance add`](#godot-cli-scene-instance-add) | Instance a PackedScene under a parent node |
 | [`godot-cli scene template`](#godot-cli-scene-template) | Built-in scene templates for scaffolding |
@@ -327,6 +331,7 @@ godot-cli scene [options]
 | [`sub`](#godot-cli-scene-sub) | Add or remove sub-resources |
 | [`inspect`](#godot-cli-scene-inspect) | Parse a .tscn file and report structure and ID issues |
 | [`node`](#godot-cli-scene-node) | List and query scene node tree |
+| [`connection`](#godot-cli-scene-connection) | Signal connections stored in the scene ([connection] sections) |
 | [`instance`](#godot-cli-scene-instance) | Add instanced PackedScene nodes |
 | [`template`](#godot-cli-scene-template) | Built-in scene templates for scaffolding |
 | [`plan`](#godot-cli-scene-plan) | Expand intent JSON to a patch and preview (no write) |
@@ -689,6 +694,90 @@ godot-cli scene node reparent [options] [args...]
 | `--value` | `<value>` | Property value (Variant text) | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli scene connection`
+
+Signal connections stored in the scene ([connection] sections)
+
+The editor's Node dock writes a [connection] section per connected signal. These commands read and write the same sections, so a button wired here shows connected in the editor and needs no _ready() code.
+
+```
+godot-cli scene connection [options]
+```
+
+**Subcommands**
+
+| Subcommand | Summary |
+|------------|---------|
+| [`list`](#godot-cli-scene-connection-list) | List signal connections with from/to as viewport paths |
+| [`add`](#godot-cli-scene-connection-add) | Connect a signal from one node to a method on another |
+| [`remove`](#godot-cli-scene-connection-remove) | Remove a signal connection |
+
+### `godot-cli scene connection list`
+
+List signal connections with from/to as viewport paths
+
+```
+godot-cli scene connection list [args...]
+```
+
+### `godot-cli scene connection add`
+
+Connect a signal from one node to a method on another
+
+Both nodes must exist. Fails with DuplicateConnection if the same signal, nodes, and method are already connected.
+
+```
+godot-cli scene connection add [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--from` | `<value>` | Emitting node, viewport path (e.g. /root/Main/Menu/Resume) | — |
+| `--signal` | `<value>` | Signal name (e.g. pressed) | — |
+| `--to` | `<value>` | Receiving node, viewport path | — |
+| `--method` | `<value>` | Method on the receiving node's script (e.g. _on_resume_pressed) | — |
+| `--deferred` | — | CONNECT_DEFERRED: call at idle time | — |
+| `--one-shot` | — | CONNECT_ONE_SHOT: disconnect after the first emission | — |
+| `--binds` | `<value>` | Extra arguments as Godot array text, e.g. '["quit"]' | — |
+| `--unbinds` | `<value>` | Number of trailing signal arguments to drop | — |
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli scene connection remove`
+
+Remove a signal connection
+
+```
+godot-cli scene connection remove [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--from` | `<value>` | Emitting node, viewport path | — |
+| `--signal` | `<value>` | Signal name | — |
+| `--to` | `<value>` | Receiving node, viewport path | — |
+| `--method` | `<value>` | Method name; omit to remove every connection of that signal between the two nodes | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |

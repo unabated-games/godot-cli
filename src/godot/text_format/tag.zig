@@ -7,6 +7,10 @@ pub const Value = union(enum) {
     integer: i64,
     float: f64,
     bool: bool,
+    /// An unquoted value written back verbatim: `ExtResource("1_a")`, or the
+    /// `binds= ["quit"]` array on a connection line. Godot writes a space after
+    /// the equals sign for bracketed values, and the round-trip has to keep it.
+    raw: []const u8,
 };
 
 pub const Tag = struct {
@@ -19,7 +23,7 @@ pub const Tag = struct {
         while (it.next()) |entry| {
             allocator.free(entry.key_ptr.*);
             switch (entry.value_ptr.*) {
-                .string => |s| allocator.free(s),
+                .string, .raw => |s| allocator.free(s),
                 else => {},
             }
         }
@@ -29,7 +33,16 @@ pub const Tag = struct {
     pub fn getString(self: *const Tag, key: []const u8) ?[]const u8 {
         const value = self.fields.get(key) orelse return null;
         return switch (value) {
-            .string => |s| s,
+            .string, .raw => |s| s,
+            else => null,
+        };
+    }
+
+    /// The verbatim text of an unquoted field, or null for quoted strings.
+    pub fn getRaw(self: *const Tag, key: []const u8) ?[]const u8 {
+        const value = self.fields.get(key) orelse return null;
+        return switch (value) {
+            .raw => |s| s,
             else => null,
         };
     }
@@ -48,7 +61,7 @@ pub const Tag = struct {
 
         if (self.fields.getPtr(key)) |existing| {
             switch (existing.*) {
-                .string => |s| allocator.free(s),
+                .string, .raw => |s| allocator.free(s),
                 else => {},
             }
             existing.* = .{ .string = value_copy };
@@ -60,10 +73,29 @@ pub const Tag = struct {
         try self.fields.put(allocator, key_copy, .{ .string = value_copy });
     }
 
+    /// Store an unquoted value to be written verbatim.
+    pub fn setRawField(self: *Tag, allocator: std.mem.Allocator, key: []const u8, value: []const u8) !void {
+        const value_copy = try allocator.dupe(u8, value);
+        errdefer allocator.free(value_copy);
+
+        if (self.fields.getPtr(key)) |existing| {
+            switch (existing.*) {
+                .string, .raw => |s| allocator.free(s),
+                else => {},
+            }
+            existing.* = .{ .raw = value_copy };
+            return;
+        }
+
+        const key_copy = try allocator.dupe(u8, key);
+        errdefer allocator.free(key_copy);
+        try self.fields.put(allocator, key_copy, .{ .raw = value_copy });
+    }
+
     pub fn setIntegerField(self: *Tag, allocator: std.mem.Allocator, key: []const u8, value: i64) !void {
         if (self.fields.getPtr(key)) |existing| {
             switch (existing.*) {
-                .string => |s| allocator.free(s),
+                .string, .raw => |s| allocator.free(s),
                 else => {},
             }
             existing.* = .{ .integer = value };
@@ -82,7 +114,7 @@ pub const Tag = struct {
         self.fields.swapRemoveAt(index);
         allocator.free(removed_key);
         switch (removed_value) {
-            .string => |s| allocator.free(s),
+            .string, .raw => |s| allocator.free(s),
             else => {},
         }
     }
@@ -177,9 +209,33 @@ fn readValue(allocator: std.mem.Allocator, text: []const u8, index: *usize, end:
         return error.UnexpectedEof;
     }
 
+    // A bare token runs to the next whitespace, except inside brackets or a
+    // quoted string: `binds= ["a", "b"]` is one value.
     const start = index.*;
-    while (index.* < end and !std.ascii.isWhitespace(text[index.*])) index.* += 1;
+    var depth: usize = 0;
+    var in_quotes = false;
+    while (index.* < end) {
+        const c = text[index.*];
+        if (in_quotes) {
+            if (c == '\\') {
+                index.* += 1;
+            } else if (c == '"') {
+                in_quotes = false;
+            }
+        } else if (c == '"') {
+            in_quotes = true;
+        } else if (c == '[' or c == '(' or c == '{') {
+            depth += 1;
+        } else if (c == ']' or c == ')' or c == '}') {
+            if (depth == 0) break;
+            depth -= 1;
+        } else if (depth == 0 and std.ascii.isWhitespace(c)) {
+            break;
+        }
+        index.* += 1;
+    }
     const token = text[start..index.*];
+    if (token.len == 0) return error.InvalidSyntax;
 
     if (std.mem.eql(u8, token, "true")) return .{ .bool = true };
     if (std.mem.eql(u8, token, "false")) return .{ .bool = false };
@@ -192,7 +248,7 @@ fn readValue(allocator: std.mem.Allocator, text: []const u8, index: *usize, end:
         return .{ .float = value };
     } else |_| {}
 
-    return .{ .string = try allocator.dupe(u8, token) };
+    return .{ .raw = try allocator.dupe(u8, token) };
 }
 
 pub fn formatLine(allocator: std.mem.Allocator, header: *const Tag) ![]u8 {
@@ -222,6 +278,12 @@ fn formatValue(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: Val
             } else {
                 try writeQuoted(allocator, out, s);
             }
+        },
+        .raw => |s| {
+            // Godot writes `binds= [...]` with a space; every other bare value
+            // sits directly after the equals sign.
+            if (s.len > 0 and s[0] == '[') try out.append(allocator, ' ');
+            try out.appendSlice(allocator, s);
         },
         .integer => |n| {
             var buf: [32]u8 = undefined;
@@ -296,4 +358,29 @@ test "parse ext_resource header" {
 
     try std.testing.expectEqualStrings("ext_resource", tag.name);
     try std.testing.expectEqualStrings("1_ldc4g", tag.getString("id").?);
+}
+
+test "connection header with a bound array round-trips verbatim" {
+    const allocator = std.testing.allocator;
+    const line = "[connection signal=\"pressed\" from=\"Box/Quit\" to=\".\" method=\"_on_quit\" flags=3 binds= [\"quit\", \"a b\"]]";
+    var tag = try parseLine(allocator, line);
+    defer tag.deinit(allocator);
+
+    try std.testing.expectEqual(@as(i64, 3), tag.getInteger("flags").?);
+    try std.testing.expectEqualStrings("[\"quit\", \"a b\"]", tag.getRaw("binds").?);
+
+    const out = try formatLine(allocator, &tag);
+    defer allocator.free(out);
+    try std.testing.expectEqualStrings(line, out);
+}
+
+test "instance reference stays unquoted after a parse" {
+    const allocator = std.testing.allocator;
+    const line = "[node name=\"HUD\" parent=\".\" instance=ExtResource(\"1_a\")]";
+    var tag = try parseLine(allocator, line);
+    defer tag.deinit(allocator);
+    try std.testing.expectEqualStrings("ExtResource(\"1_a\")", tag.getString("instance").?);
+    const out = try formatLine(allocator, &tag);
+    defer allocator.free(out);
+    try std.testing.expectEqualStrings(line, out);
 }

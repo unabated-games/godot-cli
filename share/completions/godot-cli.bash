@@ -21,7 +21,7 @@ _godot_cli_children() {
             echo "import"
             ;;
         'scene')
-            echo "new refs ext sub inspect node instance template plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
+            echo "new refs ext sub inspect node connection instance template plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
             ;;
         'scene ext')
             echo "add remove"
@@ -31,6 +31,9 @@ _godot_cli_children() {
             ;;
         'scene node')
             echo "list get add remove rename reparent"
+            ;;
+        'scene connection')
+            echo "list add remove"
             ;;
         'scene instance')
             echo "add"
@@ -126,6 +129,12 @@ _godot_cli_options() {
             ;;
         'scene node reparent')
             echo "--parent --name --type --property --value --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'scene connection add')
+            echo "--from --signal --to --method --deferred --one-shot --binds --unbinds --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'scene connection remove')
+            echo "--from --signal --to --method --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene instance add')
             echo "--parent --name --scene --catalog-id --editable --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -336,6 +345,9 @@ _godot_cli_takes_args() {
         'scene node remove') return 0 ;;
         'scene node rename') return 0 ;;
         'scene node reparent') return 0 ;;
+        'scene connection list') return 0 ;;
+        'scene connection add') return 0 ;;
+        'scene connection remove') return 0 ;;
         'scene instance add') return 0 ;;
         'scene template list') return 0 ;;
         'scene template show') return 0 ;;

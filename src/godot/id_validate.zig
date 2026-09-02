@@ -7,6 +7,7 @@ const uid_cache = @import("uid_cache.zig");
 const project_config = @import("project_config.zig");
 const document = @import("text_format/document.zig");
 const node_section_order = @import("node_section_order.zig");
+const scene_connections = @import("scene_connections.zig");
 
 pub const ValidateContext = struct {
     cache: ?*const uid_cache.Cache = null,
@@ -460,6 +461,18 @@ pub fn validateDocument(
     }
 
     try node_section_order.validateNodeParentOrder(&report, allocator, doc);
+
+    const missing = scene_connections.missingEndpoints(allocator, doc) catch &.{};
+    defer if (missing.len != 0) allocator.free(missing);
+    for (missing) |endpoint| {
+        const msg = try std.fmt.allocPrint(
+            allocator,
+            "connection {s}=\"{s}\" names a node that is not in the scene",
+            .{ endpoint.field, endpoint.attr },
+        );
+        defer allocator.free(msg);
+        try report.add(allocator, .err, "connection_node_missing", msg, endpoint.section_line);
+    }
 
     return report;
 }

@@ -182,7 +182,9 @@ Instance a project component by id, never by copying its nodes:
 
 Adding a child node in _ready() with load().instantiate() is only for objects
 the game spawns while playing, such as projectiles or enemy waves. Menus, HUDs,
-and level layout belong in the scene file.
+and level layout belong in the scene file. So do signal connections:
+  godot-cli scene connection add <scene> --from <path> --signal pressed \
+    --to <path> --method <method> --project-root .
 
 Finish with: godot-cli scene validate <scene> --project-root . --json
 ```

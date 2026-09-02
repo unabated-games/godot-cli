@@ -68,6 +68,23 @@ godot-cli scene instance add scenes/main.tscn --parent /root/Main \
 
 That writes an `[editable path="..."]` section, the same thing the editor writes when you tick "Editable Children". Reach for it when the alternative is a copy of the component, and prefer an `@export` on the component's root when the value is something instances legitimately vary.
 
+## Wire a signal
+
+A button that does something needs its `pressed` signal connected to a method somewhere, and the editor stores that in the scene as a `[connection]` section. So does godot-cli:
+
+```bash
+godot-cli scene connection add scenes/main.tscn --from /root/Main/Menu/Resume --signal pressed \
+  --to /root/Main/Menu --method _on_resume_pressed --project-root .
+```
+
+```text
+[connection signal="pressed" from="Menu/Resume" to="Menu" method="_on_resume_pressed"]
+```
+
+The method lives in the receiving node's script, which you still write. What you no longer write is `$Resume.pressed.connect(_on_resume_pressed)` in `_ready()`, which is where an agent puts it when the scene has no way to hold it. Open the scene in Godot and the Node dock shows the connection like any other.
+
+`--deferred`, `--one-shot`, `--binds '["quit"]'`, and `--unbinds 1` map to Godot's connect flags. `scene connection list` prints every connection with viewport paths, `scene node get` includes the ones touching a node, and `scene diff` reports connections added or removed. Renaming or reparenting a node rewrites its connections' paths, and removing a node removes them.
+
 ## Removing an instance
 
 `scene node remove <path>` deletes the instance node. The `ext_resource` stays, since another node may still reference it. To drop that too:
