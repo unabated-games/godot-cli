@@ -20,12 +20,18 @@ pub const NodeInfo = struct {
     section_line: usize,
     section_index: usize,
     unique_id: ?i64,
+    /// For an instanced node: the `ext_resource` id in `instance=ExtResource("...")`
+    /// and the `res://` path that id points at.
+    instance: ?[]const u8 = null,
+    instance_path: ?[]const u8 = null,
 
     pub fn deinit(self: *const NodeInfo, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
         allocator.free(self.node_type);
         allocator.free(self.parent);
         allocator.free(self.path);
+        if (self.instance) |v| allocator.free(v);
+        if (self.instance_path) |v| allocator.free(v);
     }
 };
 
@@ -45,7 +51,26 @@ const RawNode = struct {
     section_line: usize,
     section_index: usize,
     unique_id: ?i64,
+    instance_attr: ?[]const u8 = null,
 };
+
+/// `ExtResource("1_abc")` -> `1_abc`.
+fn extResourceIdFromRef(text: []const u8) ?[]const u8 {
+    const prefix = "ExtResource(\"";
+    if (!std.mem.startsWith(u8, text, prefix)) return null;
+    const rest = text[prefix.len..];
+    const end = std.mem.indexOfScalar(u8, rest, '"') orelse return null;
+    return rest[0..end];
+}
+
+fn extResourcePathForId(doc: *const document.Document, id: []const u8) ?[]const u8 {
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const section_id = section.header.getString("id") orelse continue;
+        if (std.mem.eql(u8, section_id, id)) return section.header.getString("path");
+    }
+    return null;
+}
 
 pub fn collectNodes(allocator: std.mem.Allocator, doc: *const document.Document) Error!NodeList {
     var raw_nodes: std.ArrayList(RawNode) = .empty;
@@ -65,6 +90,7 @@ pub fn collectNodes(allocator: std.mem.Allocator, doc: *const document.Document)
             .section_line = section.line,
             .section_index = index,
             .unique_id = unique_id,
+            .instance_attr = section.header.getString("instance"),
         });
     }
 
@@ -95,6 +121,7 @@ pub fn collectNodes(allocator: std.mem.Allocator, doc: *const document.Document)
         const path = try buildNodePath(allocator, scene_root_name, raw.parent_attr, raw.name);
         errdefer allocator.free(path);
 
+        const instance_id = if (raw.instance_attr) |attr| extResourceIdFromRef(attr) else null;
         nodes[index] = .{
             .name = try allocator.dupe(u8, raw.name),
             .node_type = try allocator.dupe(u8, raw.node_type),
@@ -103,6 +130,8 @@ pub fn collectNodes(allocator: std.mem.Allocator, doc: *const document.Document)
             .section_line = raw.section_line,
             .section_index = raw.section_index,
             .unique_id = raw.unique_id,
+            .instance = if (instance_id) |id| try allocator.dupe(u8, id) else null,
+            .instance_path = if (instance_id) |id| (if (extResourcePathForId(doc, id)) |p| try allocator.dupe(u8, p) else null) else null,
         };
     }
 
@@ -145,6 +174,12 @@ pub fn nodeToJson(allocator: std.mem.Allocator, node: *const NodeInfo) !std.json
     try row.put(allocator, "section_index", .{ .integer = @intCast(node.section_index) });
     if (node.unique_id) |id| {
         try row.put(allocator, "unique_id", .{ .integer = id });
+    }
+    if (node.instance) |id| {
+        try row.put(allocator, "instance", .{ .string = try allocator.dupe(u8, id) });
+    }
+    if (node.instance_path) |path| {
+        try row.put(allocator, "instance_path", .{ .string = try allocator.dupe(u8, path) });
     }
     return .{ .object = row };
 }

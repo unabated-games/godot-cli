@@ -32,7 +32,7 @@ func _ready() -> void:
 
 The game runs, so it looks like a success. Open the scene in the editor and there is nothing in it. The layout exists only while the game is playing. The next tweak goes into the script too, because that is where the HUD now lives, and a few months on the project has two ways of building UI and nobody is sure which screens use which.
 
-Agents write this because scene text is hard to write blind. A `.tscn` has resource ids with a particular shape, sections in a particular order, a `load_steps` count that has to be right, and a float format where `16.0` is wrong and `16` is correct. Faced with all that, GDScript is the safer bet, and the agent takes it.
+Agents write this because scene text is hard to write blind. A `.tscn` has resource ids with a particular shape, sections in a particular order, a `load_steps` count that has to be right, and a float format where a property is `16.0` but a vector component is `Vector2(2, 1.5)`. Faced with all that, GDScript is the safer bet, and the agent takes it.
 
 godot-cli removes the reason. The same request is one command, and wiring the button afterwards is another (`scene connection add`), which writes the `[connection]` section the Node dock would:
 

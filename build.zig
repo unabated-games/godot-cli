@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.3.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.4.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
@@ -695,7 +695,7 @@ pub fn build(b: *std.Build) void {
         \\./zig-out/bin/godot-cli scene sub add "$scene" --type CapsuleShape2D --property radius --value 16.0 &&
         \\./zig-out/bin/godot-cli scene sub add "$scene" --type RectangleShape2D --property size --value "Vector2(16, 32)" &&
         \\./zig-out/bin/godot-cli scene set-property "$scene" --node-name Root --property rotation --value 1.5 &&
-        \\grep -q '^radius = 16$' "$scene" &&
+        \\grep -q '^radius = 16.0$' "$scene" &&
         \\grep -q '^size = Vector2(16, 32)$' "$scene" &&
         \\grep -q '^rotation = 1.5$' "$scene"
     });

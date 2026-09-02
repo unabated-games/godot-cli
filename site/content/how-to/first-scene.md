@@ -32,7 +32,7 @@ godot-cli scene set-property scenes/main.tscn --node-name Player \
   --property position --value "Vector2(320, 180)" --project-root .
 ```
 
-Property values go through the Variant parser, so `16.0` is written as `16` and `Color(1, 0, 0, 1)` keeps the format Godot uses. Pass `--raw-value` when you have already formatted the text yourself.
+Property values go through the Variant parser, so a float lands as `16.0` on a property and as `2` inside `Vector2(2, 1.5)`, which is what the editor writes for each. Pass `--raw-value` when you have already formatted the text yourself.
 
 `scene node add` also takes `--property` and `--value` directly, which saves a second command when the value is known at creation time.
 

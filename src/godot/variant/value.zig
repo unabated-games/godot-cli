@@ -53,6 +53,10 @@ pub const Value = struct {
     }
 
     pub fn formatForWrite(self: Value, allocator: std.mem.Allocator) ![]u8 {
+        return self.formatForWriteInner(allocator);
+    }
+
+    fn formatForWriteInner(self: Value, allocator: std.mem.Allocator) ![]u8 {
         return switch (self.kind) {
             .raw => try allocator.dupe(u8, self.raw),
             .array => if (self.elements) |elements|
@@ -83,7 +87,7 @@ pub const Value = struct {
             .null => try allocator.dupe(u8, "null"),
             .bool => if (self.bool_val) try allocator.dupe(u8, "true") else try allocator.dupe(u8, "false"),
             .integer => try std.fmt.allocPrint(allocator, "{d}", .{self.integer}),
-            .float => try lex.formatGodotFloat(allocator, self.float_val),
+            .float => try formatScalarFloat(allocator, self.float_val),
             .string => try lex.quoteString(allocator, self.string),
             .string_name => try lex.quoteStringName(allocator, self.string),
             .color => try formatComponents(allocator, "Color", self.components_f[0..self.component_count]),
@@ -196,4 +200,37 @@ test "format Vector3 and ext resource" {
     const ext_fmt = try ext.formatForWrite(std.testing.allocator);
     defer std.testing.allocator.free(ext_fmt);
     try std.testing.expectEqualStrings("ExtResource(\"1_abc\")", ext_fmt);
+}
+
+/// A scalar float property. Godot's VariantWriter appends `.0` when
+/// `rtos_fix` produced an integer-looking string (`offset_left = 16.0`,
+/// `rotation = 1.0`), but not for components inside a constructor, which stay
+/// `Vector2(2, 1.5)`. Only the top-level float takes this path.
+fn formatScalarFloat(allocator: std.mem.Allocator, value: f64) ![]u8 {
+    const text = try lex.formatGodotFloat(allocator, value);
+    if (std.mem.eql(u8, text, "inf") or std.mem.eql(u8, text, "inf_neg") or std.mem.eql(u8, text, "nan")) return text;
+    if (std.mem.indexOfScalar(u8, text, '.') != null or std.mem.indexOfScalar(u8, text, 'e') != null) return text;
+    defer allocator.free(text);
+    return try std.fmt.allocPrint(allocator, "{s}.0", .{text});
+}
+
+test "scalar floats keep a trailing .0 like the editor, components do not" {
+    const allocator = std.testing.allocator;
+    var scalar = try @import("parse.zig").parsePropertyValue(allocator, "16.0");
+    defer scalar.deinit(allocator);
+    const scalar_text = try scalar.formatForWrite(allocator);
+    defer allocator.free(scalar_text);
+    try std.testing.expectEqualStrings("16.0", scalar_text);
+
+    var zero = try @import("parse.zig").parsePropertyValue(allocator, "0.0");
+    defer zero.deinit(allocator);
+    const zero_text = try zero.formatForWrite(allocator);
+    defer allocator.free(zero_text);
+    try std.testing.expectEqualStrings("0.0", zero_text);
+
+    var vec = try @import("parse.zig").parsePropertyValue(allocator, "Vector2(2.0, 1.5)");
+    defer vec.deinit(allocator);
+    const vec_text = try vec.formatForWrite(allocator);
+    defer allocator.free(vec_text);
+    try std.testing.expectEqualStrings("Vector2(2, 1.5)", vec_text);
 }
