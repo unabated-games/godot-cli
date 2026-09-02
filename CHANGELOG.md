@@ -15,6 +15,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-02
+
 ### Added
 
 - **`failure.details` for patch and intent errors.** A bare word given as a property value (`"text": "Paused"`) now fails with `invalid_property_value` and details naming the op, the field, the value, and the quoted form to use; it used to be written verbatim as `text = Paused`, which Godot cannot load. A missing required field fails with `missing_field` and the op and field in details instead of a bare `MissingPatchField`. `set-property`, `node add --property`, and `sub add --property` apply the same check unless `--raw-value` is passed.
