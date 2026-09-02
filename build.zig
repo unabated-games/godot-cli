@@ -722,6 +722,30 @@ pub fn build(b: *std.Build) void {
     fresh_project_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&fresh_project_smoke.step);
 
+    // Findings from driving the tool with a fresh agent: a bare word as a
+    // property value used to be written verbatim (invalid scene), inspect
+    // emitted bare `inf` (invalid JSON), and id_hint ids tripped the validator.
+    const agent_findings_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\touch "$tmp/project.godot" && printf 'extends Control\n' > "$tmp/pm.gd" &&
+        \\./zig-out/bin/godot-cli scene new --output "$tmp/a.tscn" --root-name Main --root-type Control --project-root "$tmp" &&
+        \\printf '{ "steps": [ { "recipe": "add_node", "parent": "/root/Main", "name": "Title", "type": "Label", "properties": { "text": "Paused" } } ] }' > "$tmp/bad.json" &&
+        \\out=$(./zig-out/bin/godot-cli scene apply "$tmp/a.tscn" --intent "$tmp/bad.json" --project-root "$tmp" --json || true) &&
+        \\echo "$out" | grep -q '"kind":"invalid_property_value"' &&
+        \\echo "$out" | grep -q '"field":"text"' &&
+        \\! grep -q '^text' "$tmp/a.tscn" &&
+        \\printf '{ "steps": [ { "recipe": "assign_ext", "path": "/root/Main", "property": "script", "type": "Script", "res_path": "res://pm.gd", "id_hint": "pause_menu" } ] }' > "$tmp/ext.json" &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp/a.tscn" --intent "$tmp/ext.json" --project-root "$tmp" --json | grep -q '"ok":true' &&
+        \\./zig-out/bin/godot-cli scene validate "$tmp/a.tscn" --project-root "$tmp" --json | grep -q '"issues":\[\]' &&
+        \\./zig-out/bin/godot-cli scene set-property "$tmp/a.tscn" --node /root/Main --property probe --value inf --raw-value --project-root "$tmp" &&
+        \\./zig-out/bin/godot-cli scene inspect "$tmp/a.tscn" --json | python3 -c 'import json,sys; json.load(sys.stdin)'
+    });
+    agent_findings_smoke.setCwd(b.path("."));
+    agent_findings_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&agent_findings_smoke.step);
+
     // Generated CLI surface: the Markdown command reference, the man page, and
     // the shell completions all come from the CommandSpec tree, so they are
     // rebuilt by `zig build docs` and diffed by `zig build docs-check`.

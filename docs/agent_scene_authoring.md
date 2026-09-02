@@ -637,6 +637,18 @@ Property diffs (with `--properties`): `property_added`, `property_removed`, `pro
 }
 ```
 
+### Property values are Variant text
+
+Every `properties` value, `node_set` value, and `instance_override` value is Godot Variant text, not a plain string. `"Vector2(1, 2)"` is a vector, `"true"` is a bool, `"1.5"` is a float, and a string carries its own quotes: `"\"Paused\""`. A bare word such as `"Paused"` is rejected before anything is written:
+
+```json
+{ "ok": false, "failure": { "kind": "invalid_property_value",
+  "details": { "op": "node_add", "field": "text", "value": "Paused",
+               "hint": "not valid Variant text; for a string write \"\\\"Paused\\\"\"" } } }
+```
+
+A missing required field fails the same way with `"kind": "missing_field"` and the op and field in `details`. The CLI commands (`set-property`, `node add --property`, `sub add --property`) apply the same check unless `--raw-value` is passed.
+
 ### Patch op reference
 
 | `op` | Required fields | Notes |

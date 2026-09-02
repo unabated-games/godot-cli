@@ -42,6 +42,17 @@ Agents may pass `--project-root .` on all scene commands when working inside a G
 
 Persist scene hierarchy in `.tscn` files — the same structure a human builds in the Godot editor. Do **not** use `load().instantiate()` in `_ready()` for static UI or level layout.
 
+## Run the game and check the result
+
+After a scene change, `scene validate` proves the file is well formed. To see the result, run the game from the terminal; Godot writes a frame and a log with no extra tooling:
+
+```bash
+godot --headless --path . --import --quit          # once after adding files, so Godot assigns UIDs
+godot --path . --resolution 640x360 --write-movie shot.png --quit-after 5 --log-file godot.log --no-header
+```
+
+Read the highest-numbered `shot*.png` and `godot.log`. The log holds every `print()`, `push_warning`, `push_error`, and script error with a backtrace; any `ERROR` or `SCRIPT ERROR` line means the change is not done. Without a display, drop `--write-movie` and add `--headless` to get the log alone.
+
 ## Standard workflow
 
 ```text

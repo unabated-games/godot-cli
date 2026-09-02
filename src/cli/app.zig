@@ -6,6 +6,7 @@ const parser = @import("parser.zig");
 const spec = @import("spec.zig");
 const emit = @import("../output/emit.zig");
 const scene_resources = @import("../godot/scene_resources.zig");
+const error_details = @import("../godot/error_details.zig");
 
 pub const App = struct {
     root: *const spec.CommandSpec,
@@ -133,6 +134,22 @@ pub const App = struct {
                         "scene resource id already exists in file"
                     else
                         "ext_resource path already exists in file";
+                    failure.details = .{ .object = details };
+                }
+            }
+            // Field and value errors from patches and intents carry the
+            // context an agent needs to fix its own document.
+            const name = @errorName(err);
+            if (std.mem.eql(u8, name, "InvalidPropertyValue") or
+                std.mem.eql(u8, name, "MissingPatchField") or
+                std.mem.eql(u8, name, "MissingIntentField"))
+            {
+                failure.kind = if (std.mem.eql(u8, name, "InvalidPropertyValue")) "invalid_property_value" else "missing_field";
+                failure.message = if (std.mem.eql(u8, name, "InvalidPropertyValue"))
+                    "property value is not valid Variant text"
+                else
+                    "required field is missing";
+                if (error_details.takeJson(self.allocator) catch null) |details| {
                     failure.details = .{ .object = details };
                 }
             }

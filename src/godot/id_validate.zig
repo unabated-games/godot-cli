@@ -126,6 +126,13 @@ pub fn validateSceneResourceId(id: []const u8) ?Issue {
         }
     }
 
+    // `Class_hint` ids come from id_hint in patches and intents, so an agent
+    // can reference a resource it is about to create. Godot loads any id
+    // string; only the editor's own generated ids have the 5-character suffix.
+    if (underscore) |at| {
+        if (at > 0 and at + 1 < id.len) return null;
+    }
+
     // Legacy numeric-only ids still load in Godot.
     for (id) |c| {
         if (c < '0' or c > '9') {

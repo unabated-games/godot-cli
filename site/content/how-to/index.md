@@ -29,6 +29,8 @@ Each guide is a task with the commands to finish it. If you are new here, read [
 
 [Review and validate changes]({{ base_url }}/how-to/review-changes/): what each validation error means, node and property diffs, snapshots, and what a human should still look at before committing a generated scene.
 
+[Run the game and capture a screenshot and the log]({{ base_url }}/how-to/run-and-capture/): one Godot command that writes a PNG of the running scene and a log of every print and error, with no extra tooling.
+
 ## Compatibility and scripting
 
 [Stay byte-compatible with Godot]({{ base_url }}/how-to/godot-compatibility/): save preparation, id sessions, the UID cache, normalization, and comparing your output against a file the editor saved.

@@ -67,12 +67,21 @@ pub fn buildPropertyJson(allocator: std.mem.Allocator, prop: document.PropertyLi
     return .{ .object = row };
 }
 
+/// JSON has no spelling for infinity or NaN; std.json writes them as bare
+/// `inf`, which nothing can parse. Godot's own text forms are used instead.
+fn jsonFloat(allocator: std.mem.Allocator, f: f64) ?std.json.Value {
+    if (std.math.isFinite(f)) return .{ .float = f };
+    const text: []const u8 = if (std.math.isNan(f)) "nan" else if (f > 0) "inf" else "inf_neg";
+    const copy = allocator.dupe(u8, text) catch return null;
+    return .{ .string = copy };
+}
+
 fn valueToJson(allocator: std.mem.Allocator, value: Value) ?std.json.Value {
     return switch (value.kind) {
         .null => .null,
         .bool => .{ .bool = value.bool_val },
         .integer => .{ .integer = value.integer },
-        .float => .{ .float = value.float_val },
+        .float => jsonFloat(allocator, value.float_val),
         .string, .string_name, .node_path, .ext_resource, .sub_resource, .resource => blk: {
             const copy = allocator.dupe(u8, value.string) catch return null;
             break :blk .{ .string = copy };
@@ -86,7 +95,7 @@ fn valueToJson(allocator: std.mem.Allocator, value: Value) ?std.json.Value {
             const count = value.component_count;
             var arr = std.json.Array.init(allocator);
             for (value.components_f[0..count]) |part| {
-                arr.append(.{ .float = part }) catch return null;
+                arr.append(jsonFloat(allocator, part) orelse return null) catch return null;
             }
             break :blk .{ .array = arr };
         },

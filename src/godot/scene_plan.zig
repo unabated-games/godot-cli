@@ -1,6 +1,7 @@
 //! Expand high-level intent JSON into patch ops and preview plans (no write).
 
 const std = @import("std");
+const error_details = @import("error_details.zig");
 const scene_patch = @import("scene_patch.zig");
 const document = @import("text_format/document.zig");
 
@@ -201,7 +202,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     if (std.mem.eql(u8, recipe, "assign_ext")) {
         const node_path = try requiredString(step, "path");
         const property = try requiredString(step, "property");
-        const ext_type = if (step.get("ext_type")) |v| blk: {
+        const ext_type = if (step.get("ext_type") orelse step.get("type")) |v| blk: {
             if (v != .string) return error.InvalidIntent;
             break :blk v.string;
         } else if (step.get("type")) |v| blk: {
@@ -570,48 +571,78 @@ fn renderPatchJson(allocator: std.mem.Allocator, ops_alloc: std.mem.Allocator, o
 
 fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.json.ObjectMap, op_count: usize) Error![]const u8 {
     if (std.mem.eql(u8, recipe, "player_2d")) {
-        const name = step.get("name") orelse return error.MissingIntentField;
+        const name = step.get("name") orelse {
+            error_details.record(.{ .op = recipe, .field = "name" });
+            return error.MissingIntentField;
+        };
         if (name != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "player_2d {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "instance_catalog")) {
-        const id = step.get("catalog_id") orelse return error.MissingIntentField;
+        const id = step.get("catalog_id") orelse {
+            error_details.record(.{ .op = recipe, .field = "catalog_id" });
+            return error.MissingIntentField;
+        };
         if (id != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "instance catalog {s} ({d} ops)", .{ id.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "instance_override") or std.mem.eql(u8, recipe, "instance_set")) {
-        const path = step.get("path") orelse return error.MissingIntentField;
+        const path = step.get("path") orelse {
+            error_details.record(.{ .op = recipe, .field = "path" });
+            return error.MissingIntentField;
+        };
         if (path != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "instance_override {s} ({d} ops)", .{ path.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "catalog_button")) {
-        const name = step.get("name") orelse return error.MissingIntentField;
+        const name = step.get("name") orelse {
+            error_details.record(.{ .op = recipe, .field = "name" });
+            return error.MissingIntentField;
+        };
         if (name != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "catalog_button {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "camera_2d")) {
-        const name = step.get("name") orelse return error.MissingIntentField;
+        const name = step.get("name") orelse {
+            error_details.record(.{ .op = recipe, .field = "name" });
+            return error.MissingIntentField;
+        };
         if (name != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "camera_2d {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "ui_panel")) {
-        const name = step.get("name") orelse return error.MissingIntentField;
+        const name = step.get("name") orelse {
+            error_details.record(.{ .op = recipe, .field = "name" });
+            return error.MissingIntentField;
+        };
         if (name != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "ui_panel {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "tilemap_layer")) {
-        const name = step.get("name") orelse return error.MissingIntentField;
+        const name = step.get("name") orelse {
+            error_details.record(.{ .op = recipe, .field = "name" });
+            return error.MissingIntentField;
+        };
         if (name != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "tilemap_layer {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "audio_player")) {
-        const name = step.get("name") orelse return error.MissingIntentField;
+        const name = step.get("name") orelse {
+            error_details.record(.{ .op = recipe, .field = "name" });
+            return error.MissingIntentField;
+        };
         if (name != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "audio_player {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "assign_ext")) {
-        const path = step.get("path") orelse return error.MissingIntentField;
-        const property = step.get("property") orelse return error.MissingIntentField;
+        const path = step.get("path") orelse {
+            error_details.record(.{ .op = recipe, .field = "path" });
+            return error.MissingIntentField;
+        };
+        const property = step.get("property") orelse {
+            error_details.record(.{ .op = recipe, .field = "property" });
+            return error.MissingIntentField;
+        };
         if (path != .string or property != .string) return error.InvalidIntent;
         return std.fmt.allocPrint(allocator, "assign_ext {s}.{s} ({d} ops)", .{ path.string, property.string, op_count });
     }

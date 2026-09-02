@@ -210,7 +210,8 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene ext remove
 Remove an ext_resource by id
 .PP
-Fails with referrer list if the id is still referenced in property
+Takes the scene path and the resource id (e.g. 1_abc12). Fails
+with referrer list if the id is still referenced in property
 text.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
@@ -290,7 +291,8 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene sub remove
 Remove a sub_resource by id
 .PP
-Fails with referrer list if the id is still referenced in property
+Takes the scene path and the resource id (e.g. 1_abc12). Fails
+with referrer list if the id is still referenced in property
 text.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
@@ -388,9 +390,6 @@ Write property value verbatim
 Set unique_name_in_owner on the new node (Access as Unique
 Name / %Name)
 .TP
-\fB\-\-recursive\fR
-Remove descendant nodes as well
-.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -421,29 +420,8 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene node remove
 Remove a node by viewport path
 .PP
+Takes the scene path and the node's viewport path (e.g. /root/Main/Player).
 Fails if the node has children unless \-\-recursive is set.
-.TP
-\fB\-\-parent\fR \fIvalue\fR
-Viewport parent path (e.g. /root/Main)
-.TP
-\fB\-\-name\fR \fIvalue\fR
-Node name
-.TP
-\fB\-\-type\fR \fIvalue\fR
-Godot node class name (e.g. CharacterBody2D)
-.TP
-\fB\-\-property\fR \fIvalue\fR
-Optional property to set on the new node
-.TP
-\fB\-\-value\fR \fIvalue\fR
-Property value (Variant text)
-.TP
-\fB\-\-raw\-value\fR
-Write property value verbatim
-.TP
-\fB\-\-unique\-name\fR
-Set unique_name_in_owner on the new node (Access as Unique
-Name / %Name)
 .TP
 \fB\-\-recursive\fR
 Remove descendant nodes as well
@@ -500,9 +478,6 @@ Write property value verbatim
 Set unique_name_in_owner on the new node (Access as Unique
 Name / %Name)
 .TP
-\fB\-\-recursive\fR
-Remove descendant nodes as well
-.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -554,9 +529,6 @@ Write property value verbatim
 \fB\-\-unique\-name\fR
 Set unique_name_in_owner on the new node (Access as Unique
 Name / %Name)
-.TP
-\fB\-\-recursive\fR
-Remove descendant nodes as well
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -825,8 +797,9 @@ Godot project root for uid_cache lookup and res:// seed path
 .SS godot\-cli scene set\-property
 Set a property on a node section and save the scene
 .PP
-Target a section with \-\-node\-name or \-\-section\-line.
-Value is written verbatim after =.
+Target a node with \-\-node (viewport path) or \-\-node\-name,
+or a section with \-\-section\-line. Value is written verbatim
+after =.
 .TP
 \fB\-\-property\fR \fIvalue\fR
 Property name to set
@@ -836,6 +809,9 @@ Property value (normalized unless \-\-raw\-value)
 .TP
 \fB\-\-raw\-value\fR
 Write value verbatim without Variant normalization
+.TP
+\fB\-\-node\fR \fIvalue\fR
+Target node by viewport path (e.g. /root/Main/Player)
 .TP
 \fB\-\-node\-name\fR \fIvalue\fR
 Target node section by name attribute

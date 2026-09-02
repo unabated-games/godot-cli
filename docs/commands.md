@@ -428,7 +428,7 @@ godot-cli scene ext add [options] [args...]
 
 Remove an ext_resource by id
 
-Fails with referrer list if the id is still referenced in property text.
+Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.
 
 ```
 godot-cli scene ext remove [options] [args...]
@@ -495,7 +495,7 @@ godot-cli scene sub add [options] [args...]
 
 Remove a sub_resource by id
 
-Fails with referrer list if the id is still referenced in property text.
+Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.
 
 ```
 godot-cli scene sub remove [options] [args...]
@@ -606,7 +606,6 @@ godot-cli scene node add [options] [args...]
 | `--value` | `<value>` | Property value (Variant text) | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
-| `--recursive` | — | Remove descendant nodes as well | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -621,7 +620,7 @@ godot-cli scene node add [options] [args...]
 
 Remove a node by viewport path
 
-Fails if the node has children unless --recursive is set.
+Takes the scene path and the node's viewport path (e.g. /root/Main/Player). Fails if the node has children unless --recursive is set.
 
 ```
 godot-cli scene node remove [options] [args...]
@@ -631,13 +630,6 @@ godot-cli scene node remove [options] [args...]
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
-| `--parent` | `<value>` | Viewport parent path (e.g. /root/Main) | — |
-| `--name` | `<value>` | Node name | — |
-| `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) | — |
-| `--property` | `<value>` | Optional property to set on the new node | — |
-| `--value` | `<value>` | Property value (Variant text) | — |
-| `--raw-value` | — | Write property value verbatim | — |
-| `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--recursive` | — | Remove descendant nodes as well | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
@@ -668,7 +660,6 @@ godot-cli scene node rename [options] [args...]
 | `--value` | `<value>` | Property value (Variant text) | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
-| `--recursive` | — | Remove descendant nodes as well | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -698,7 +689,6 @@ godot-cli scene node reparent [options] [args...]
 | `--value` | `<value>` | Property value (Variant text) | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
-| `--recursive` | — | Remove descendant nodes as well | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -948,7 +938,7 @@ godot-cli scene validate-batch [options] [args...]
 
 Set a property on a node section and save the scene
 
-Target a section with --node-name or --section-line. Value is written verbatim after =.
+Target a node with --node (viewport path) or --node-name, or a section with --section-line. Value is written verbatim after =.
 
 ```
 godot-cli scene set-property [options] [args...]
@@ -961,6 +951,7 @@ godot-cli scene set-property [options] [args...]
 | `--property` | `<value>` | Property name to set | — |
 | `--value` | `<value>` | Property value (normalized unless --raw-value) | — |
 | `--raw-value` | — | Write value verbatim without Variant normalization | — |
+| `--node` | `<value>` | Target node by viewport path (e.g. /root/Main/Player) | — |
 | `--node-name` | `<value>` | Target node section by name attribute | — |
 | `--section-line` | `<value>` | Target section by header line number | — |
 | `--section` | `<value>` | Target section by tag name (e.g. resource) | — |

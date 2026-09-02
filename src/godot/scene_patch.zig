@@ -1,6 +1,8 @@
 //! Apply declarative JSON patches to scene documents.
 
 const std = @import("std");
+const error_details = @import("error_details.zig");
+const variant_parse = @import("variant/parse.zig");
 const document = @import("text_format/document.zig");
 const scene_edit = @import("scene_edit.zig");
 const scene_resources = @import("scene_resources.zig");
@@ -14,6 +16,7 @@ pub const Error = error{
     OutOfMemory,
     InvalidPatch,
     MissingPatchField,
+    InvalidPropertyValue,
     UnknownPatchOp,
     BuiltinCatalogEntry,
     CatalogEntryNotFound,
@@ -106,6 +109,7 @@ fn applyOneOp(
 ) Error![]const u8 {
     if (op_value.* != .object) return error.InvalidPatch;
     const op_name = try requiredString(op_value.object, "op");
+    error_details.setCurrentOp(op_name);
 
     if (std.mem.eql(u8, op_name, "node_add")) {
         const parent = try requiredString(op_value.object, "parent");
@@ -218,7 +222,7 @@ fn applyOneOp(
     if (std.mem.eql(u8, op_name, "assign_ext")) {
         const node_path = try requiredString(op_value.object, "path");
         const property = try requiredString(op_value.object, "property");
-        const res_type = if (op_value.object.get("type")) |type_value|
+        const res_type = if (op_value.object.get("type") orelse op_value.object.get("ext_type")) |type_value|
             try jsonString(type_value)
         else if (op_value.object.get("ext_type")) |type_value|
             try jsonString(type_value)
@@ -444,7 +448,7 @@ fn applyNodeProperties(
     if (props_value != .object) return error.InvalidPatch;
     var it = props_value.object.iterator();
     while (it.next()) |entry| {
-        const value_text = try jsonValueToPropertyText(allocator, entry.value_ptr.*);
+        const value_text = try jsonValueToPropertyText(allocator, entry.key_ptr.*, entry.value_ptr.*);
         defer allocator.free(value_text);
         try scene_edit.setNodeProperty(allocator, doc, node_path, entry.key_ptr.*, value_text);
     }
@@ -458,7 +462,7 @@ fn collectPropertyInputs(
     if (props_value != .object) return error.InvalidPatch;
     var it = props_value.object.iterator();
     while (it.next()) |entry| {
-        const value_text = try jsonValueToPropertyText(allocator, entry.value_ptr.*);
+        const value_text = try jsonValueToPropertyText(allocator, entry.key_ptr.*, entry.value_ptr.*);
         errdefer allocator.free(value_text);
         const name_copy = try allocator.dupe(u8, entry.key_ptr.*);
         errdefer allocator.free(name_copy);
@@ -466,14 +470,31 @@ fn collectPropertyInputs(
     }
 }
 
-fn jsonValueToPropertyText(allocator: std.mem.Allocator, value: std.json.Value) Error![]const u8 {
+/// A JSON string is Variant text, not a Godot string: `"Vector2(1, 2)"` is a
+/// vector and `"\"Paused\""` is a string. A bare `"Paused"` is neither, and
+/// writing it produces `text = Paused`, which Godot cannot load. Rejecting it
+/// with the quoted form in `details.hint` lets an agent fix its own patch.
+fn jsonValueToPropertyText(allocator: std.mem.Allocator, property: []const u8, value: std.json.Value) Error![]const u8 {
     return switch (value) {
-        .string => |s| try allocator.dupe(u8, s),
+        .string => |s| {
+            try rejectRawVariantText(allocator, property, s);
+            return try allocator.dupe(u8, s);
+        },
         .float => |f| std.fmt.allocPrint(allocator, "{d}", .{f}),
         .integer => |i| std.fmt.allocPrint(allocator, "{d}", .{i}),
         .bool => |b| allocator.dupe(u8, if (b) "true" else "false"),
         else => error.InvalidPatch,
     };
+}
+
+pub fn rejectRawVariantText(allocator: std.mem.Allocator, property: []const u8, text: []const u8) Error!void {
+    var parsed = variant_parse.parsePropertyValue(allocator, text) catch return;
+    defer parsed.deinit(allocator);
+    if (parsed.kind != .raw) return;
+
+    const hint = try std.fmt.allocPrint(allocator, "not valid Variant text; for a string write \"\\\"{s}\\\"\"", .{text});
+    error_details.record(.{ .field = property, .value = text, .hint = hint });
+    return error.InvalidPropertyValue;
 }
 
 fn extIdFromHint(allocator: std.mem.Allocator, res_type: []const u8, hint: []const u8) Error![]const u8 {
@@ -507,13 +528,20 @@ fn countExtResources(doc: *const document.Document) usize {
 }
 
 fn requiredString(map: std.json.ObjectMap, key: []const u8) Error![]const u8 {
-    const value = map.get(key) orelse return error.MissingPatchField;
+    const value = map.get(key) orelse {
+        error_details.record(.{ .field = key });
+        return error.MissingPatchField;
+    };
     return jsonString(value);
 }
 
 fn requiredPropertyValue(allocator: std.mem.Allocator, map: std.json.ObjectMap, key: []const u8) Error![]const u8 {
-    const value = map.get(key) orelse return error.MissingPatchField;
-    return jsonValueToPropertyText(allocator, value);
+    const value = map.get(key) orelse {
+        error_details.record(.{ .field = key });
+        return error.MissingPatchField;
+    };
+    const property = if (map.get("property")) |name| (jsonString(name) catch key) else key;
+    return jsonValueToPropertyText(allocator, property, value);
 }
 
 fn jsonString(value: std.json.Value) Error![]const u8 {

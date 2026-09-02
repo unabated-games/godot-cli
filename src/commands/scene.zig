@@ -241,6 +241,7 @@ fn formatPropertyValueForWrite(
     raw: bool,
 ) ![]const u8 {
     if (raw) return try allocator.dupe(u8, property_value);
+    try scene_patch.rejectRawVariantText(allocator, "value", property_value);
     var parsed = try variant.parse.parsePropertyValue(allocator, property_value);
     const formatted = try parsed.formatForWrite(allocator);
     parsed.deinit(allocator);
@@ -260,6 +261,12 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         if (inv.getOption("section-line")) |line_text| {
             const line = std.fmt.parseInt(usize, line_text, 10) catch return error.InvalidValue;
             break :blk text_format.document.findSectionIndexByLine(&doc, line) orelse return error.Usage;
+        }
+        if (inv.getOption("node")) |node_path| {
+            var list = try node_tree.collectNodes(cli.allocator, &doc);
+            defer list.deinit(cli.allocator);
+            const info = node_tree.findByPath(&list, node_path) orelse return error.Usage;
+            break :blk info.section_index;
         }
         if (inv.getOption("node-name")) |node_name| {
             break :blk text_format.document.findSectionIndexByNodeName(&doc, node_name) orelse return error.Usage;
@@ -858,6 +865,7 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
 
         var written_value: []const u8 = property_value;
         if (!inv.flag("raw-value")) {
+            try scene_patch.rejectRawVariantText(cli.allocator, property_name, property_value);
             var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
             defer parsed.deinit(cli.allocator);
             normalized_value = try parsed.formatForWrite(cli.allocator);
@@ -1645,6 +1653,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "property", .kind = .string, .description = "Property name to set" },
         .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
+        .{ .long = "node", .kind = .string, .description = "Target node by viewport path (e.g. /root/Main/Player)" },
         .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },
         .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (e.g. resource)" },
@@ -1695,6 +1704,8 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text)" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
+    } ++ save_options;
+    const node_remove_options = [_]spec.OptionSpec{
         .{ .long = "recursive", .kind = .flag, .description = "Remove descendant nodes as well" },
     } ++ save_options;
     const plan_options = [_]spec.OptionSpec{
@@ -1805,7 +1816,7 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "remove",
                         .summary = "Remove an ext_resource by id",
-                        .description = "Fails with referrer list if the id is still referenced in property text.",
+                        .description = "Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.",
                         .options = &resource_remove_options,
                         .handler = sceneExtRemoveHandler,
                     },
@@ -1825,7 +1836,7 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "remove",
                         .summary = "Remove a sub_resource by id",
-                        .description = "Fails with referrer list if the id is still referenced in property text.",
+                        .description = "Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.",
                         .options = &resource_remove_options,
                         .handler = sceneSubRemoveHandler,
                     },
@@ -1865,8 +1876,8 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "remove",
                         .summary = "Remove a node by viewport path",
-                        .description = "Fails if the node has children unless --recursive is set.",
-                        .options = &node_edit_options,
+                        .description = "Takes the scene path and the node's viewport path (e.g. /root/Main/Player). Fails if the node has children unless --recursive is set.",
+                        .options = &node_remove_options,
                         .handler = sceneNodeRemoveHandler,
                     },
                     .{
@@ -1965,7 +1976,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "set-property",
                 .summary = "Set a property on a node section and save the scene",
-                .description = "Target a section with --node-name or --section-line. Value is written verbatim after =.",
+                .description = "Target a node with --node (viewport path) or --node-name, or a section with --section-line. Value is written verbatim after =.",
                 .options = &set_property_options,
                 .handler = sceneSetPropertyHandler,
             },

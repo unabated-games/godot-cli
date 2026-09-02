@@ -235,6 +235,29 @@ Defer MCP server; CLI + batch + patch JSON is enough.
 
 ---
 
+### Phase J — Signal connections — **next**
+
+Found by driving the tool with a fresh agent (2026-09-02): asked to "wire the
+Resume button so pressing it hides the pause menu", it had no scene-level way
+to do it and connected the signal in `_ready()`. The editor writes that as a
+`[connection signal="pressed" from="ResumeButton" to="." method="_on_resume"]`
+section, and nothing in godot-cli reads or writes those.
+
+**Commands:**
+
+```bash
+godot-cli scene connection list main.tscn --json
+godot-cli scene connection add main.tscn --from /root/Main/Menu/Resume --signal pressed \
+  --to /root/Main/Menu --method _on_resume_pressed --project-root .
+godot-cli scene connection remove main.tscn --from ... --signal pressed --to ...
+```
+
+Plus a `connection_add` patch op and inclusion in `scene diff` and `node get`.
+Paths in the section are relative to the scene root, so the same viewport-path
+translation as `parent=` applies, and rename/reparent have to rewrite them.
+
+---
+
 ## Priority order (recommended)
 
 | Order | Phase | Rationale |
