@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- "Godot project and scene basics" in the agent quickstart and the skill: what a project folder is and why a scene outside it cannot resolve `res://`, one root node per scene, that `anchors_preset` is an editor label and runtime layout needs `anchor_*` and `grow_*` (with the full-rect, centred, and top-left recipes), which containers stack children and which hold one, and the import pass after adding files. Written after two agent trials made the same layout mistake.
+
 ## [0.4.0] — 2026-09-02
 
 ### Added

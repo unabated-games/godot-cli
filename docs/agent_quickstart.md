@@ -51,6 +51,19 @@ godot-cli scene connection add <scene> --from /root/Main/Menu/Resume --signal pr
 
 That writes the `[connection]` section the editor's Node dock writes. Do not connect static UI signals in `_ready()`; the method still lives in the receiving node's script.
 
+## Godot project and scene basics
+
+Things Godot assumes that an agent often does not know:
+
+- A project is a folder with `project.godot` at its root, and `res://` is that folder. A `.tscn` outside it cannot resolve `res://` paths, so create scenes inside the project and set `application/run/main_scene` with `project settings set`.
+- A scene has exactly one root node; the root has no `parent` attribute. Pick the root type for the job: `Node2D` for 2D worlds, `Node3D` for 3D, `Control` for UI screens.
+- `anchors_preset` is an editor label only. Runtime layout comes from `anchor_left/top/right/bottom` (0 to 1), `offset_*`, and `grow_horizontal/grow_vertical`. A `Control` with default anchors is 0 by 0 pixels, and anything centred inside it lands at the top-left corner.
+  - Full rect: `anchors_preset = 15`, `anchor_right = 1.0`, `anchor_bottom = 1.0`, `grow_horizontal = 2`, `grow_vertical = 2`.
+  - Centred: `anchors_preset = 8`, all four anchors `0.5`, `grow_horizontal = 2`, `grow_vertical = 2`.
+  - Top-left with an offset: leave anchors at 0 and set `offset_left` and `offset_top`.
+- Containers lay children out; plain Controls do not. `VBoxContainer` and `HBoxContainer` stack children. `MarginContainer`, `PanelContainer`, and `CenterContainer` hold one child, and stack several on top of each other. Give leaf controls (`ProgressBar`, `TextureRect`) a `custom_minimum_size` so a container knows how big they are.
+- After adding scripts or scenes from outside the editor, run `godot --headless --path . --import --quit` once so Godot assigns UIDs; then run the game and read the frame and the log (below).
+
 ## Run the game and check the result
 
 After a scene change, `scene validate` proves the file is well formed. To see the result, run the game from the terminal; Godot writes a frame and a log with no extra tooling:
