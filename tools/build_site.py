@@ -54,6 +54,7 @@ NAV = [
             ("how-to/review-changes.md", "Review and validate changes"),
             ("how-to/run-and-capture.md", "Run the game and capture output"),
             ("how-to/agent-setup.md", "Set up an agent"),
+            ("how-to/godot-basics.md", "Godot basics an agent needs"),
             ("how-to/godot-compatibility.md", "Stay byte-compatible with Godot"),
             ("how-to/scripting.md", "Script godot-cli"),
         ],

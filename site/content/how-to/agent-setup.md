@@ -59,6 +59,8 @@ Finish every change with:
   godot-cli scene node list <scene> --json
 ```
 
+Add the [Godot basics]({{ base_url }}/how-to/godot-basics/) to the same file if the agent is new to Godot; the layout mistakes in the trials came from not knowing them, not from ignoring the rules.
+
 ## 3. Give it your components
 
 Rules tell an agent how to build. The catalog tells it what not to rebuild. That workflow has its own guide: [teach an agent your sub-scenes]({{ base_url }}/how-to/your-own-components/).

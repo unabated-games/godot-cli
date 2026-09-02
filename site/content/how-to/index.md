@@ -21,6 +21,8 @@ Each guide is a task with the commands to finish it. If you are new here, read [
 
 [Teach an agent your sub-scenes]({{ base_url }}/how-to/your-own-components/) is the one to read first. It walks the component catalog end to end, from describing a scene you have already built to an agent instancing it by id instead of rebuilding it from raw nodes.
 
+[Godot basics a coding agent needs]({{ base_url }}/how-to/godot-basics/): projects, scenes, and Control layout as Godot assumes them, and the rules text that stops an agent positioning a panel with a label the runtime ignores.
+
 [Set up an agent]({{ base_url }}/how-to/agent-setup/): install the skill, write project rules that keep an agent authoring scene files, and recognise the three ways it drifts back to building nodes in code.
 
 ## Editing at scale
