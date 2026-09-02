@@ -8,6 +8,7 @@ const project_config = @import("project_config.zig");
 const document = @import("text_format/document.zig");
 const node_section_order = @import("node_section_order.zig");
 const scene_connections = @import("scene_connections.zig");
+const resource_uid_lookup = @import("resource_uid_lookup.zig");
 
 pub const ValidateContext = struct {
     cache: ?*const uid_cache.Cache = null,
@@ -169,30 +170,6 @@ pub fn validateNodeUniqueId(value: i64) ?Issue {
     return null;
 }
 
-fn checkStaleUidForPath(
-    report: *Report,
-    allocator: std.mem.Allocator,
-    uid_text: []const u8,
-    project_name: []const u8,
-    resource_path: []const u8,
-    file_bytes: []const u8,
-    line: usize,
-) !void {
-    if (validateUidText(uid_text) != null) return;
-
-    const declared = resource_uid.textToId(uid_text);
-    const expected = try resource_uid.createIdForPath(allocator, project_name, resource_path, file_bytes);
-    if (declared != expected) {
-        try report.add(
-            allocator,
-            .warning,
-            "stale_uid_for_path",
-            "declared uid does not match create_id_for_path for current file bytes",
-            line,
-        );
-    }
-}
-
 fn checkExtResourceStaleUid(
     report: *Report,
     allocator: std.mem.Allocator,
@@ -210,10 +187,28 @@ fn checkExtResourceStaleUid(
     const fs_path_owned = fs_path orelse return;
     defer allocator.free(fs_path_owned);
 
+    const declared = resource_uid.textToId(uid_text);
+
+    // A `.uid` sidecar is the UID Godot assigned and will keep; the file's
+    // bytes changing afterwards does not change it. Only without a sidecar is
+    // the derived value the right comparison.
+    if (resource_uid_lookup.readSidecarUid(allocator, io, fs_path_owned)) |sidecar| {
+        defer allocator.free(sidecar);
+        if (declared != resource_uid.textToId(sidecar)) {
+            try report.add(
+                allocator,
+                .warning,
+                "stale_uid_for_path",
+                "ext_resource uid does not match the .uid sidecar Godot assigned to the referenced file",
+                line,
+            );
+        }
+        return;
+    }
+
     const ext_bytes = std.Io.Dir.cwd().readFileAlloc(io, fs_path_owned, allocator, .unlimited) catch return;
     defer allocator.free(ext_bytes);
 
-    const declared = resource_uid.textToId(uid_text);
     const expected = try resource_uid.createIdForPath(allocator, project_name, res_path, ext_bytes);
     if (declared != expected) {
         try report.add(
@@ -312,18 +307,15 @@ pub fn validateDocument(
                 if (validateUidText(uid_text)) |issue| {
                     try report.add(allocator, issue.severity, issue.kind, issue.message, section.line);
                 } else {
-                    if (ctx.project_name) |project_name| {
-                        if (ctx.file_bytes) |file_bytes| {
-                            if (ctx.resource_path) |resource_path| {
-                                try checkStaleUidForPath(
-                                    &report,
-                                    allocator,
-                                    uid_text,
-                                    project_name,
-                                    resource_path,
-                                    file_bytes,
-                                    section.line,
-                                );
+                    // The header uid is assigned when the scene is first saved
+                    // and kept through every edit, so it is checked against the
+                    // project's uid cache rather than recomputed from bytes.
+                    if (ctx.cache) |c| {
+                        if (ctx.resource_path) |resource_path| {
+                            if (c.idForPath(resource_path)) |cached| {
+                                if (cached != resource_uid.textToId(uid_text)) {
+                                    try report.add(allocator, .warning, "stale_uid_for_path", "scene uid does not match the project's uid_cache.bin entry for this path", section.line);
+                                }
                             }
                         }
                     }
@@ -495,7 +487,10 @@ test "detect duplicate scene ids" {
     try std.testing.expect(report.issues.items.len >= 1);
 }
 
-test "detect stale uid for path" {
+test "an edited scene keeps its uid: no stale warning without a cache entry" {
+    // The header uid is assigned once by Godot and survives edits. Recomputing
+    // it from the current bytes, as this check once did, flagged every edited
+    // scene as stale.
     const allocator = std.testing.allocator;
     const file_bytes =
         \\[gd_scene format=3 uid="uid://a"]
@@ -503,9 +498,7 @@ test "detect stale uid for path" {
         \\[node name="Root" type="Node"]
         \\
     ;
-    const source = file_bytes;
-
-    var doc = try document.parseBytes(allocator, source);
+    var doc = try document.parseBytes(allocator, file_bytes);
     defer doc.deinit(allocator);
 
     const ctx: ValidateContext = .{
@@ -516,11 +509,9 @@ test "detect stale uid for path" {
     var report = try validateDocument(allocator, &doc, ctx);
     defer report.deinit(allocator);
 
-    var found_stale = false;
     for (report.issues.items) |issue| {
-        if (std.mem.eql(u8, issue.kind, "stale_uid_for_path")) found_stale = true;
+        try std.testing.expect(!std.mem.eql(u8, issue.kind, "stale_uid_for_path"));
     }
-    try std.testing.expect(found_stale);
 }
 
 test "detect duplicate node unique_id" {

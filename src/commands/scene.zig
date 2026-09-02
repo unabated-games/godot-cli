@@ -156,6 +156,14 @@ fn prepareSaveOptions(cli: *const app_mod.App, inv: *const spec.Invocation, outp
 }
 
 fn writeWithPrepare(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8, doc: *text_format.document.Document) !void {
+    // With a project root the ext_resource uids can be checked against what
+    // the project actually has, which repairs a component copied in from
+    // another project.
+    if (!inv.flag("no-prepare-save")) {
+        if (projectRootFrom(inv)) |root| {
+            _ = resource_uid_lookup.refreshExtResourceUids(cli.allocator, cli.io, root, doc) catch 0;
+        }
+    }
     var prepare = try prepareSaveOptions(cli, inv, output_path);
     defer prepare.deinit(cli.allocator);
     try text_format.writer.writeFile(cli.allocator, output_path, doc, prepare.options);
@@ -638,8 +646,12 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     var added = try scene_edit.addNode(cli.allocator, &doc, parent_path, node_name, node_type);
     defer added.deinit(cli.allocator);
 
-    if (inv.getOption("property")) |property_name| {
-        const property_value = inv.getOption("value") orelse return error.Usage;
+    const property_names = try inv.getOptionAll(cli.allocator, "property");
+    defer cli.allocator.free(property_names);
+    const property_values = try inv.getOptionAll(cli.allocator, "value");
+    defer cli.allocator.free(property_values);
+    if (property_names.len != property_values.len) return error.Usage;
+    for (property_names, property_values) |property_name, property_value| {
         const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
         defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, property_name, written_value);
@@ -948,32 +960,27 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     const seed_path = try saveSeedPath(cli, inv, output_path);
     defer cli.allocator.free(seed_path);
 
-    var properties: [1]scene_resources.PropertyInput = undefined;
-    var property_count: usize = 0;
-
-    // The normalized value has to outlive this block: addSubResource below
-    // copies it into the document. Freeing it at the end of the `if` wrote
-    // freed memory into the scene file.
-    var normalized_value: ?[]u8 = null;
-    defer if (normalized_value) |value| cli.allocator.free(value);
-
-    if (inv.getOption("property")) |property_name| {
-        const property_value = inv.getOption("value") orelse return error.Usage;
-
-        var written_value: []const u8 = property_value;
-        if (!inv.flag("raw-value")) {
-            try scene_patch.rejectRawVariantText(cli.allocator, property_name, property_value);
-            var parsed = try variant.parse.parsePropertyValue(cli.allocator, property_value);
-            defer parsed.deinit(cli.allocator);
-            normalized_value = try parsed.formatForWrite(cli.allocator);
-            written_value = normalized_value.?;
-        }
-
-        properties[0] = .{ .name = property_name, .value = written_value };
-        property_count = 1;
+    // Normalized values have to outlive the loop: addSubResource below copies
+    // them into the document. Freeing one early once wrote freed memory into
+    // the scene file.
+    var properties: std.ArrayList(scene_resources.PropertyInput) = .empty;
+    defer {
+        for (properties.items) |input| cli.allocator.free(input.value);
+        properties.deinit(cli.allocator);
     }
 
-    var added = try scene_resources.addSubResource(cli.allocator, &doc, seed_path, res_type, properties[0..property_count]);
+    const property_names = try inv.getOptionAll(cli.allocator, "property");
+    defer cli.allocator.free(property_names);
+    const property_values = try inv.getOptionAll(cli.allocator, "value");
+    defer cli.allocator.free(property_values);
+    if (property_names.len != property_values.len) return error.Usage;
+    for (property_names, property_values) |property_name, property_value| {
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+        errdefer cli.allocator.free(written_value);
+        try properties.append(cli.allocator, .{ .name = property_name, .value = written_value });
+    }
+
+    var added = try scene_resources.addSubResource(cli.allocator, &doc, seed_path, res_type, properties.items);
     defer added.deinit(cli.allocator);
 
     if (!inv.flag("dry-run")) {
@@ -1797,8 +1804,8 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)" },
         .{ .long = "name", .kind = .string, .description = "Node name" },
         .{ .long = "type", .kind = .string, .description = "Godot node class name (e.g. CharacterBody2D)" },
-        .{ .long = "property", .kind = .string, .description = "Optional property to set on the new node" },
-        .{ .long = "value", .kind = .string, .description = "Property value (Variant text)" },
+        .{ .long = "property", .kind = .string, .description = "Property to set on the new node; repeat with --value for several", .repeatable = true },
+        .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
     } ++ save_options;
@@ -1875,8 +1882,8 @@ pub fn sceneCommands() spec.CommandSpec {
     } ++ save_options;
     const sub_add_options = [_]spec.OptionSpec{
         .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. RectangleShape2D)" },
-        .{ .long = "property", .kind = .string, .description = "Optional sub_resource property to set" },
-        .{ .long = "value", .kind = .string, .description = "Property value (Variant text)" },
+        .{ .long = "property", .kind = .string, .description = "Property to set on the new resource; repeat with --value for several", .repeatable = true },
+        .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
     } ++ save_options;
     const resource_remove_options = save_options;

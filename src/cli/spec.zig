@@ -12,7 +12,13 @@ pub const OptionSpec = struct {
     kind: ValueKind = .flag,
     description: []const u8,
     default_value: ?[]const u8 = null,
+    /// May be given more than once; read with `Invocation.getOptionAll`.
+    repeatable: bool = false,
 };
+
+/// Separator between repeated values in the options map. NUL cannot appear in
+/// an argv string, so it cannot collide with a value.
+pub const repeat_separator: u8 = 0;
 
 /// A global option, accepted before or after the command path.
 ///
@@ -86,6 +92,17 @@ pub const Invocation = struct {
 
     pub fn flag(self: *const Invocation, long: []const u8) bool {
         return self.options.contains(long);
+    }
+
+    /// Every value given for a repeatable option, in argv order. Caller frees
+    /// the slice; the strings point into the invocation.
+    pub fn getOptionAll(self: *const Invocation, allocator: std.mem.Allocator, long: []const u8) ![]const []const u8 {
+        const joined = self.options.get(long) orelse return try allocator.alloc([]const u8, 0);
+        var out: std.ArrayList([]const u8) = .empty;
+        errdefer out.deinit(allocator);
+        var it = std.mem.splitScalar(u8, joined, repeat_separator);
+        while (it.next()) |part| try out.append(allocator, part);
+        return try out.toOwnedSlice(allocator);
     }
 };
 

@@ -58,9 +58,10 @@ Validation checks the file, not the picture. The line to keep in the rules is th
 ```markdown
 Finish every change with:
   godot-cli scene validate <scene> --project-root . --json
+  mkdir -p capture && touch capture/.gdignore
   godot --headless --path . --import --quit
-  godot --path . --resolution 640x360 --write-movie shot.png --quit-after 5 --log-file godot.log --no-header
-Look at the highest-numbered shot*.png and read godot.log before reporting done.
+  godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log --no-header
+Look at the highest-numbered capture/shot*.png and read capture/godot.log before reporting done.
 ```
 
 An agent that can see images checks its own layout. One that cannot still gets the log, and a person gets a frame to look at instead of opening the editor.

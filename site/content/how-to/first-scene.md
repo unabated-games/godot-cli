@@ -34,7 +34,7 @@ godot-cli scene set-property scenes/main.tscn --node-name Player \
 
 Property values go through the Variant parser, so a float lands as `16.0` on a property and as `2` inside `Vector2(2, 1.5)`, which is what the editor writes for each. Pass `--raw-value` when you have already formatted the text yourself.
 
-`scene node add` also takes `--property` and `--value` directly, which saves a second command when the value is known at creation time.
+`scene node add` also takes `--property` and `--value` directly, repeated as many times as needed, so a Control's full set of anchors goes on in the same command that creates it.
 
 ## Sub-resources
 

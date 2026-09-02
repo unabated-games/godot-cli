@@ -155,6 +155,14 @@ fn parseCommandOption(
     for (command.options) |opt| {
         if (matchesOption(opt, arg)) {
             const value = try readOptionValue(allocator, opt, arg, argv, index);
+            if (opt.repeatable) {
+                if (inv.options.get(opt.long)) |existing| {
+                    const joined = try std.mem.join(allocator, &.{spec.repeat_separator}, &.{ existing, value });
+                    allocator.free(value);
+                    if (try inv.options.fetchPut(allocator, opt.long, joined)) |old| allocator.free(old.value);
+                    return;
+                }
+            }
             if (try inv.options.fetchPut(allocator, opt.long, value)) |old| allocator.free(old.value);
             return;
         }
@@ -307,4 +315,21 @@ test "every documented global option is recognised" {
         const outcome = try parseGlobalOrRootOption(allocator, &commands.root, arg, &.{arg}, &index, &inv);
         try std.testing.expect(outcome != .unknown);
     }
+}
+
+test "repeatable options accumulate in argv order" {
+    const commands = @import("../commands.zig");
+    const allocator = std.testing.allocator;
+    var inv = try parseArgv(allocator, &commands.root, &.{
+        "scene",      "node",         "add",     "a.tscn", "--parent",   "/root/Main",    "--name",  "N",   "--type", "Control",
+        "--property", "anchor_right", "--value", "1.0",    "--property", "anchor_bottom", "--value", "1.0",
+    });
+    defer inv.deinit(allocator);
+    const names = try inv.getOptionAll(allocator, "property");
+    defer allocator.free(names);
+    const values = try inv.getOptionAll(allocator, "value");
+    defer allocator.free(values);
+    try std.testing.expectEqual(@as(usize, 2), names.len);
+    try std.testing.expectEqualStrings("anchor_bottom", names[1]);
+    try std.testing.expectEqualStrings("1.0", values[1]);
 }

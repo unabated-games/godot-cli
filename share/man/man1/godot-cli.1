@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-02" "godot-cli 0.4.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-02" "godot-cli 0.4.1" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -253,10 +253,11 @@ Inserts before node sections and assigns a Godot\-style id
 Godot resource class (e.g. RectangleShape2D)
 .TP
 \fB\-\-property\fR \fIvalue\fR
-Optional sub_resource property to set
+Property to set on the new resource; repeat with \-\-value
+for several
 .TP
 \fB\-\-value\fR \fIvalue\fR
-Property value (Variant text)
+Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -378,10 +379,11 @@ Node name
 Godot node class name (e.g. CharacterBody2D)
 .TP
 \fB\-\-property\fR \fIvalue\fR
-Optional property to set on the new node
+Property to set on the new node; repeat with \-\-value for
+several
 .TP
 \fB\-\-value\fR \fIvalue\fR
-Property value (Variant text)
+Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -466,10 +468,11 @@ Node name
 Godot node class name (e.g. CharacterBody2D)
 .TP
 \fB\-\-property\fR \fIvalue\fR
-Optional property to set on the new node
+Property to set on the new node; repeat with \-\-value for
+several
 .TP
 \fB\-\-value\fR \fIvalue\fR
-Property value (Variant text)
+Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -518,10 +521,11 @@ Node name
 Godot node class name (e.g. CharacterBody2D)
 .TP
 \fB\-\-property\fR \fIvalue\fR
-Optional property to set on the new node
+Property to set on the new node; repeat with \-\-value for
+several
 .TP
 \fB\-\-value\fR \fIvalue\fR
-Property value (Variant text)
+Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim

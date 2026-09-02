@@ -9,16 +9,24 @@ description: One Godot command that writes a PNG of the running scene and a log 
 
 ## The command
 
+Frames written inside the project get imported as textures on the next run, along with a `shot.wav` Godot writes beside them, and the project fills with `.import` files. So the output goes in a folder Godot is told to skip:
+
 ```bash
-godot --path . --resolution 640x360 --write-movie shot.png --quit-after 5 --log-file godot.log --no-header
+mkdir -p capture && touch capture/.gdignore
 ```
 
-That launches the project's main scene, writes one PNG per frame as `shot00000000.png`, `shot00000001.png`, and so on, quits after five frames, and writes everything the game printed to `godot.log`. Use the highest-numbered frame; the first one or two can be captured before the scene has drawn.
+A `.gdignore` file makes Godot ignore that folder entirely. Then:
+
+```bash
+godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log --no-header
+```
+
+That launches the project's main scene, writes one PNG per frame as `capture/shot00000000.png`, `capture/shot00000001.png`, and so on, quits after five frames, and writes everything the game printed to `godot.log`. Use the highest-numbered frame; the first one or two can be captured before the scene has drawn.
 
 To run a specific scene, put its path after `--path .`:
 
 ```bash
-godot --path . scenes/main.tscn --write-movie shot.png --quit-after 5 --log-file godot.log
+godot --path . scenes/main.tscn --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log
 ```
 
 `--write-movie` needs a display. On a machine without one, drop it and keep `--headless` for the log alone.
@@ -61,9 +69,10 @@ The rules file is the place to put this, next to the validate step:
 
 ```markdown
 After a scene change, run the game and check the result:
+  mkdir -p capture && touch capture/.gdignore
   godot --headless --path . --import --quit
-  godot --path . --resolution 640x360 --write-movie shot.png --quit-after 5 --log-file godot.log --no-header
-Read the highest-numbered shot*.png and godot.log. Any ERROR or SCRIPT ERROR
+  godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log --no-header
+Read the highest-numbered capture/shot*.png and capture/godot.log. Any ERROR or SCRIPT ERROR
 line means the change is not done.
 ```
 

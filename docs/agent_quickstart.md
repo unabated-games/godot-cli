@@ -51,6 +51,17 @@ godot-cli scene connection add <scene> --from /root/Main/Menu/Resume --signal pr
 
 That writes the `[connection]` section the editor's Node dock writes. Do not connect static UI signals in `_ready()`; the method still lives in the receiving node's script.
 
+## Several properties in one command
+
+`--property`/`--value` repeat on `scene node add` and `scene sub add`:
+
+```bash
+godot-cli scene node add <scene> --parent /root/Main --name HUD --type Control \
+  --property anchors_preset --value 15 --property anchor_right --value 1.0 \
+  --property anchor_bottom --value 1.0 --property grow_horizontal --value 2 \
+  --property grow_vertical --value 2 --project-root .
+```
+
 ## Godot project and scene basics
 
 Things Godot assumes that an agent often does not know:
@@ -69,11 +80,12 @@ Things Godot assumes that an agent often does not know:
 After a scene change, `scene validate` proves the file is well formed. To see the result, run the game from the terminal; Godot writes a frame and a log with no extra tooling:
 
 ```bash
+mkdir -p capture && touch capture/.gdignore          # Godot skips this folder, so frames are not imported
 godot --headless --path . --import --quit          # once after adding files, so Godot assigns UIDs
-godot --path . --resolution 640x360 --write-movie shot.png --quit-after 5 --log-file godot.log --no-header
+godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log --no-header
 ```
 
-Read the highest-numbered `shot*.png` and `godot.log`. The log holds every `print()`, `push_warning`, `push_error`, and script error with a backtrace; any `ERROR` or `SCRIPT ERROR` line means the change is not done. Without a display, drop `--write-movie` and add `--headless` to get the log alone.
+Read the highest-numbered `capture/shot*.png` and `capture/godot.log`. The log holds every `print()`, `push_warning`, `push_error`, and script error with a backtrace; any `ERROR` or `SCRIPT ERROR` line means the change is not done. Without a display, drop `--write-movie` and add `--headless` to get the log alone.
 
 ## Standard workflow
 

@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.4.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.4.1";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
@@ -772,6 +772,31 @@ pub fn build(b: *std.Build) void {
     connections_smoke.setCwd(b.path("."));
     connections_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&connections_smoke.step);
+
+    // A script's UID lives in its .uid sidecar once Godot has imported it, and
+    // stays put when the script is edited. validate must trust the sidecar, and
+    // a save with a project root must repair a uid= that disagrees with it (a
+    // component copied in from another project). Also: repeated --property.
+    const uid_sidecar_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\printf 'config_version=5\n\n[application]\n\nconfig/name="Uid"\n' > "$tmp/project.godot" &&
+        \\printf 'extends Node\n' > "$tmp/thing.gd" &&
+        \\printf 'uid://bqpgupk3krulf\n' > "$tmp/thing.gd.uid" &&
+        \\printf '[gd_scene format=3 load_steps=2]\n\n[ext_resource type="Script" path="res://thing.gd" id="1_a1b2c" uid="uid://d0ldlsj0t7bwh"]\n\n[node name="Main" type="Node" unique_id=1]\nscript = ExtResource("1_a1b2c")\n' > "$tmp/a.tscn" &&
+        \\./zig-out/bin/godot-cli scene validate "$tmp/a.tscn" --project-root "$tmp" --json | grep -q stale_uid_for_path &&
+        \\./zig-out/bin/godot-cli scene normalize "$tmp/a.tscn" --output "$tmp/a.tscn" --project-root "$tmp" --resource-path res://a.tscn >/dev/null &&
+        \\grep -q 'uid="uid://bqpgupk3krulf"' "$tmp/a.tscn" &&
+        \\! ./zig-out/bin/godot-cli scene validate "$tmp/a.tscn" --project-root "$tmp" --json | grep -q stale_uid_for_path &&
+        \\printf 'extends Node\nfunc _ready() -> void:\n\tpass\n' > "$tmp/thing.gd" &&
+        \\! ./zig-out/bin/godot-cli scene validate "$tmp/a.tscn" --project-root "$tmp" --json | grep -q stale_uid_for_path &&
+        \\./zig-out/bin/godot-cli scene node add "$tmp/a.tscn" --parent /root/Main --name HUD --type Control --property anchor_right --value 1.0 --property anchor_bottom --value 1.0 --project-root "$tmp" --json | grep -q '"ok":true' &&
+        \\grep -q '^anchor_right = 1.0$' "$tmp/a.tscn" && grep -q '^anchor_bottom = 1.0$' "$tmp/a.tscn"
+    });
+    uid_sidecar_smoke.setCwd(b.path("."));
+    uid_sidecar_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&uid_sidecar_smoke.step);
 
     // Generated CLI surface: the Markdown command reference, the man page, and
     // the shell completions all come from the CommandSpec tree, so they are

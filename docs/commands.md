@@ -483,8 +483,8 @@ godot-cli scene sub add [options] [args...]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--type` | `<value>` | Godot resource class (e.g. RectangleShape2D) | — |
-| `--property` | `<value>` | Optional sub_resource property to set | — |
-| `--value` | `<value>` | Property value (Variant text) | — |
+| `--property` | `<value>` | Property to set on the new resource; repeat with --value for several | — |
+| `--value` | `<value>` | Property value (Variant text), one per --property | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
@@ -607,8 +607,8 @@ godot-cli scene node add [options] [args...]
 | `--parent` | `<value>` | Viewport parent path (e.g. /root/Main) | — |
 | `--name` | `<value>` | Node name | — |
 | `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) | — |
-| `--property` | `<value>` | Optional property to set on the new node | — |
-| `--value` | `<value>` | Property value (Variant text) | — |
+| `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
+| `--value` | `<value>` | Property value (Variant text), one per --property | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
@@ -661,8 +661,8 @@ godot-cli scene node rename [options] [args...]
 | `--parent` | `<value>` | Viewport parent path (e.g. /root/Main) | — |
 | `--name` | `<value>` | Node name | — |
 | `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) | — |
-| `--property` | `<value>` | Optional property to set on the new node | — |
-| `--value` | `<value>` | Property value (Variant text) | — |
+| `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
+| `--value` | `<value>` | Property value (Variant text), one per --property | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
@@ -690,8 +690,8 @@ godot-cli scene node reparent [options] [args...]
 | `--parent` | `<value>` | Viewport parent path (e.g. /root/Main) | — |
 | `--name` | `<value>` | Node name | — |
 | `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) | — |
-| `--property` | `<value>` | Optional property to set on the new node | — |
-| `--value` | `<value>` | Property value (Variant text) | — |
+| `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
+| `--value` | `<value>` | Property value (Variant text), one per --property | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |

@@ -26,6 +26,9 @@ pub fn resolveExtResourceUid(
     const fs_path = try project_config.resPathToFilesystem(allocator, root, res_path) orelse return null;
     defer allocator.free(fs_path);
 
+    // Godot 4.4+ keeps a script's UID in a `.uid` sidecar, assigned once and
+    // never recomputed, so it outranks anything derived from the file.
+    if (readSidecarUid(allocator, io, fs_path)) |uid| return uid;
     if (readImportFileUid(allocator, io, fs_path)) |uid| return uid;
 
     const cache_path = uid_cache.defaultCachePath(allocator, root) catch return null;
@@ -46,6 +49,41 @@ pub fn resolveExtResourceUid(
 
     const id = try resource_uid.createIdForPath(allocator, project_name, res_path, file_bytes);
     return try resource_uid.idToText(allocator, id);
+}
+
+/// `<file>.uid`, holding one `uid://...` line.
+pub fn readSidecarUid(allocator: std.mem.Allocator, io: std.Io, fs_path: []const u8) ?[]const u8 {
+    const sidecar_path = std.fmt.allocPrint(allocator, "{s}.uid", .{fs_path}) catch return null;
+    defer allocator.free(sidecar_path);
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, sidecar_path, allocator, .unlimited) catch return null;
+    defer allocator.free(bytes);
+    const trimmed = std.mem.trim(u8, bytes, &std.ascii.whitespace);
+    if (!std.mem.startsWith(u8, trimmed, "uid://")) return null;
+    return allocator.dupe(u8, trimmed) catch null;
+}
+
+/// Rewrite `uid=` on every ext_resource that has one, when the project knows a
+/// different value. A component copied between projects carries the old
+/// project's UIDs, and Godot warns on every load until they are corrected.
+/// Returns how many were changed.
+pub fn refreshExtResourceUids(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    doc: *@import("text_format/document.zig").Document,
+) Error!usize {
+    var changed: usize = 0;
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const declared = section.header.getString("uid") orelse continue;
+        const res_path = section.header.getString("path") orelse continue;
+        const current = (try resolveExtResourceUid(allocator, io, project_root, res_path)) orelse continue;
+        defer allocator.free(current);
+        if (std.mem.eql(u8, declared, current)) continue;
+        section.header.setStringField(allocator, "uid", current) catch return error.OutOfMemory;
+        changed += 1;
+    }
+    return changed;
 }
 
 fn readImportFileUid(allocator: std.mem.Allocator, io: std.Io, fs_path: []const u8) ?[]const u8 {

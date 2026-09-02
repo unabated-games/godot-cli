@@ -15,9 +15,19 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-09-02
+
 ### Added
 
+- `scene node add` and `scene sub add` take `--property`/`--value` more than once, so a Control's anchors go on in one command instead of five. Options declared `repeatable` accumulate in argv order; `Invocation.getOptionAll` reads them.
+- Saving with `--project-root` repairs an `ext_resource` `uid=` that disagrees with the project, the situation after copying a component folder in from another project, where Godot warned `invalid UID` on every load until the editor re-saved the scene.
+
 - "Godot project and scene basics" in the agent quickstart and the skill: what a project folder is and why a scene outside it cannot resolve `res://`, one root node per scene, that `anchors_preset` is an editor label and runtime layout needs `anchor_*` and `grow_*` (with the full-rect, centred, and top-left recipes), which containers stack children and which hold one, and the import pass after adding files. Written after two agent trials made the same layout mistake.
+
+### Fixed
+
+- **`scene validate` reported `stale_uid_for_path` after any edit to a script or scene.** It recomputed the UID from the file's current bytes, but Godot assigns a UID once (into a `.gd.uid` sidecar for scripts, into the header for scenes) and keeps it through edits. Scripts are now checked against the sidecar when one exists, scenes against the project's `uid_cache.bin`, and the recomputation is used only for a file Godot has not imported yet. UID lookup for `ext add` and `assign_ext` reads the sidecar first for the same reason.
+- The capture recipe wrote frames into the project root, where Godot imported every PNG as a texture on the next run and left a `shot.wav` and a pile of `.import` files behind. The guide, the quickstart, the skill, and the rules text now write into a `capture/` folder holding a `.gdignore`, which Godot skips.
 
 ## [0.4.0] — 2026-09-02
 
