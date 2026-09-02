@@ -13,6 +13,7 @@ command the binary does not have.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import pathlib
 import re
@@ -156,6 +157,17 @@ def main() -> int:
     base_template = (TEMPLATES / "base.html").read_text()
     landing_template = (TEMPLATES / "landing.html").read_text()
 
+    # GitHub Pages serves assets with a ten-minute cache and browsers hold them
+    # longer, so a deploy that changes the stylesheet can leave readers with the
+    # old one under the new HTML. Stamping asset URLs with a content hash makes
+    # every deploy fetch fresh.
+    asset_hash = hashlib.sha256(
+        b"".join(sorted(path.read_bytes() for path in STATIC.iterdir()))
+    ).hexdigest()[:10]
+    for name in ("style.css", "highlight.css", "site.js", "favicon.svg"):
+        base_template = base_template.replace(f"/assets/{name}", f"/assets/{name}?v={asset_hash}")
+        landing_template = landing_template.replace(f"/assets/{name}", f"/assets/{name}?v={asset_hash}")
+
     sources = sorted(CONTENT.rglob("*.md"))
     if not sources:
         sys.exit(f"No content found in {CONTENT}")
@@ -226,7 +238,7 @@ def check_links(out_root: pathlib.Path, base_url: str) -> list[str]:
         for href in re.findall(r'href="([^"]+)"', page.read_text()):
             if href.startswith(("http://", "https://", "mailto:", "#")):
                 continue
-            target = href.split("#")[0]
+            target = href.split("#")[0].split("?")[0]
             if base_url and target.startswith(base_url):
                 target = target[len(base_url) :]
             candidate = out_root / target.lstrip("/")
