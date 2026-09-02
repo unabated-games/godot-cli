@@ -70,6 +70,11 @@ pub fn textToId(text: []const u8) i64 {
 /// Deterministic UID for a resource path, matching `ResourceUID::create_id_for_path`.
 /// `resource_path` is the Godot path (e.g. `res://foo.tscn`). `file_bytes` must be the
 /// on-disk file contents used for MD5 (Godot reads the file at that path).
+/// Port of `ResourceUID::create_id_for_path` (core/io/resource_uid.cpp:127):
+/// a PCG seeded with the project name, the lowercased path, and the MD5 of the
+/// file's bytes at the time the id is assigned. Godot stores the result (a
+/// `.uid` sidecar for scripts, the header for scenes) and never recomputes it,
+/// so this is the right answer only for a file Godot has not imported yet.
 pub fn createIdForPath(
     allocator: std.mem.Allocator,
     project_name: []const u8,
