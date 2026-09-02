@@ -23,7 +23,7 @@ godot-cli scene instance add scenes/main.tscn --parent /root/Main \
 
 Either way the file gets both halves:
 
-```ini
+```text
 [gd_scene format=3 load_steps=2]
 
 [ext_resource type="PackedScene" path="res://ui/health_bar/health_bar.tscn" id="1_gpo7l"]

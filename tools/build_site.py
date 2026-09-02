@@ -89,9 +89,17 @@ def render_markdown(body: str) -> tuple[str, list[tuple[int, str, str]]]:
         },
     )
     rendered = converter.convert(body)
-    headings = [
-        (item["level"], item["id"], item["name"]) for item in converter.toc_tokens
-    ]
+    # toc_tokens nests h2s under the page's h1; the page contents list wants
+    # the h2s themselves.
+    headings = []
+
+    def walk(tokens):
+        for item in tokens:
+            if item["level"] == 2:
+                headings.append((item["level"], item["id"], item["name"]))
+            walk(item.get("children", []))
+
+    walk(converter.toc_tokens)
     return rendered, headings
 
 

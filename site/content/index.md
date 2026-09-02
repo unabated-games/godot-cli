@@ -4,7 +4,7 @@ description: Build Godot scenes from the command line. Files that match the edit
 layout: landing
 ---
 
-# Godot scenes, written the way the editor writes them
+# Edit Godot scenes safely, without opening the editor
 
 godot-cli edits `.tscn`, `.tres`, and `project.godot` from a terminal. The files it produces match Godot's own saves byte for byte, and every command speaks JSON, which makes it usable by a shell script, a CI job, or a coding agent that has never opened the editor.
 {: .lede }
@@ -43,7 +43,7 @@ godot-cli scene instance add hud.tscn --parent /root/HUD --name PlayerHealth \
 
 The scene file gets what dragging the scene into the tree would have produced, ids and all:
 
-```ini
+```text
 [ext_resource type="PackedScene" path="res://ui/health_bar/health_bar.tscn" id="1_gpo7l"]
 
 [node name="PlayerHealth" parent="." instance=ExtResource("1_gpo7l") unique_id=1278869255]

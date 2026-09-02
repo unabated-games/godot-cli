@@ -65,7 +65,7 @@ applied 4 input action(s) (4 added, 0 replaced)
 
 What lands in the file is the full serialized event Godot expects:
 
-```ini
+```text
 [input]
 move_left={
 "deadzone": 0.5,
@@ -86,7 +86,7 @@ godot-cli project autoload apply --project-root . --intent autoload.json --json
 godot-cli project autoload validate --project-root . --json
 ```
 
-```ini
+```text
 [autoload]
 GameState="*res://scripts/game_state.gd"
 ```

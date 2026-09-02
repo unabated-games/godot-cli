@@ -203,7 +203,7 @@ godot-cli scene instance add hud.tscn --parent /root/HUD --name PlayerHealth \
 
 The scene file now holds what the editor would have written if you had dragged the scene in:
 
-```ini
+```text
 [gd_scene format=3 load_steps=2]
 
 [ext_resource type="PackedScene" path="res://ui/health_bar/health_bar.tscn" id="1_gpo7l"]
@@ -236,7 +236,7 @@ Instanced scenes take per-instance values, which is how one health bar serves th
 godot-cli scene apply hud.tscn --patch override.json --project-root . --json
 ```
 
-```ini
+```text
 [node name="PlayerHealth" parent="." instance=ExtResource("1_gpo7l") unique_id=1278869255]
 max_health = 150
 label_text = "Player"

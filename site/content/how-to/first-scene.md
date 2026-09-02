@@ -94,7 +94,7 @@ godot-cli scene node reparent scenes/main.tscn /root/Main/Hero --parent /root/Ma
 
 After both commands the descendants have followed:
 
-```ini
+```text
 [node name="Playfield" type="Node2D" parent="." unique_id=248520651]
 
 [node name="Hero" type="CharacterBody2D" parent="Playfield" unique_id=1278869255]

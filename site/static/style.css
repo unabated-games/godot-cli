@@ -91,12 +91,8 @@ a:hover { text-decoration: underline; }
   font-size: 1.05rem;
 }
 
-.brand-mark {
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 6px;
-  background: linear-gradient(140deg, #478cbf, #2f6f9f);
-}
+.brand-mark { display: inline-flex; line-height: 0; }
+.brand-mark svg { display: block; }
 
 .header-nav {
   display: flex;
@@ -107,24 +103,40 @@ a:hover { text-decoration: underline; }
 .header-nav a { color: var(--text-soft); }
 .header-nav a:hover { color: var(--text); text-decoration: none; }
 
+.menu-toggle {
+  display: none;
+  margin-left: auto;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
 .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg-soft);
+  color: var(--text-soft);
   cursor: pointer;
-  position: relative;
+  padding: 0;
 }
-.theme-toggle::after {
-  content: "";
-  position: absolute;
-  inset: 0.45rem;
-  border-radius: 50%;
-  background: var(--text-soft);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+.theme-toggle:hover { color: var(--text); }
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
 }
-:root[data-theme="dark"] .theme-toggle::after { clip-path: circle(50% at 65% 35%); }
 
 /* Layout ------------------------------------------------------------- */
 
@@ -230,7 +242,9 @@ pre {
   padding: 1rem 1.15rem;
   overflow-x: auto;
   margin: 0 0 1.2rem;
-  border: 1px solid var(--border);
+  /* The block is dark in both themes, so its border is too; the light theme
+     border was showing as pale corners around it. */
+  border: 1px solid #2a313b;
 }
 pre code { color: #e6edf3; }
 .codehilite { margin: 0 0 1.2rem; }
@@ -345,7 +359,11 @@ th { font-weight: 620; background: var(--bg-soft); }
 
 @media (max-width: 52rem) {
   .layout { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; padding-top: 1.5rem; }
-  .sidebar { position: static; max-height: none; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
+  .sidebar { display: none; position: static; max-height: none; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
+  .sidebar.open { display: block; }
   .header-nav { display: none; }
+  .menu-toggle { display: inline-flex; }
+  .landing .theme-toggle { margin-left: auto; }
   .landing-content { padding-top: 2.5rem; }
+  .landing-content h1 { font-size: 2.1rem; }
 }
