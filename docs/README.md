@@ -13,6 +13,7 @@
 | Doc | What it covers |
 |-----|----------------|
 | [Agent quickstart](agent_quickstart.md) | One page: rules, workflow, cheat sheet |
+| [Open asks](BACKLOG.md) | What the agent trials and maintainers have asked for that is not yet built |
 | [Godot basics for agents](agent_godot_basics.md) | Projects, scenes, Control layout, running the game |
 | [Agent scene authoring](agent_scene_authoring.md) | Recipes, patch and intent formats, UI authoring |
 | [Agent batch commands](agent_batch_commands.md) | Multi-step workflows in one invocation |
