@@ -109,7 +109,10 @@ fn applyOneOp(
     options: ApplyOptions,
 ) Error![]const u8 {
     if (op_value.* != .object) return error.InvalidPatch;
-    const op_name = try requiredString(op_value.object, "op");
+    const op_name_given = try requiredString(op_value.object, "op");
+    // Recipe names are accepted as ops too; trial 18 wrote instance_catalog
+    // in a patch and got UnknownPatchOp.
+    const op_name = opAlias(op_name_given);
     error_details.setCurrentOp(op_name);
 
     if (std.mem.eql(u8, op_name, "node_add")) {
@@ -200,7 +203,10 @@ fn applyOneOp(
         defer allocator.free(old_parent);
         try scene_edit.reparentNode(allocator, doc, path, parent);
         if (options.undo) |recorder| {
-            try scene_undo.recordNodeReparentUndo(recorder, path, old_parent);
+            // The undo must address the node where it now lives.
+            const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent, target.name });
+            defer allocator.free(new_path);
+            try scene_undo.recordNodeReparentUndo(recorder, new_path, old_parent);
         }
         return std.fmt.allocPrint(allocator, "reparented {s} under {s}", .{ path, parent });
     }
@@ -451,7 +457,21 @@ fn applyOneOp(
         return std.fmt.allocPrint(allocator, "overrode {s} on instance {s}", .{ property, path });
     }
 
+    error_details.record(.{ .field = "op", .value = op_name_given, .hint = "ops: node_add, node_remove, node_rename, node_reparent, node_set, instance_add, instance_override, ext_add, ext_remove, sub_add, sub_remove, assign_ext, connection_add, connection_remove; recipe names add_node, connect, instance_catalog, instance_scene, instance_set are accepted as aliases" });
     return error.UnknownPatchOp;
+}
+
+fn opAlias(name: []const u8) []const u8 {
+    const aliases = [_][2][]const u8{
+        .{ "add_node", "node_add" },
+        .{ "connect", "connection_add" },
+        .{ "instance_catalog", "instance_add" },
+        .{ "instance_scene", "instance_add" },
+        .{ "instance_set", "instance_override" },
+        .{ "set", "node_set" },
+    };
+    for (aliases) |pair| if (std.mem.eql(u8, pair[0], name)) return pair[1];
+    return name;
 }
 
 fn resolveScenePath(allocator: std.mem.Allocator, op_object: std.json.ObjectMap, options: ApplyOptions) Error![]const u8 {

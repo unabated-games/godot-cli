@@ -266,7 +266,7 @@ _godot_cli_options() {
             echo "--project-root --godot"
             ;;
         'project run')
-            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click"
+            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click --frame-at"
             ;;
         'project show')
             echo "--project-root"

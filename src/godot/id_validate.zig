@@ -484,7 +484,38 @@ pub fn validateDocument(
         try report.add(allocator, .err, "connection_node_missing", msg, endpoint.section_line);
     }
 
+    try warnControlsUnderNode2D(allocator, doc, &report);
     return report;
+}
+
+/// A Control whose parent is a Node2D has no rect to anchor to, so full-rect
+/// anchors give it zero size. Trials 17 and 18 each lost a run to it. Only
+/// nodes whose type is a known Control class are checked; instanced nodes
+/// have no type here.
+fn warnControlsUnderNode2D(allocator: std.mem.Allocator, doc: *const document.Document, report: *Report) !void {
+    const node_tree = @import("node_tree.zig");
+    var list = node_tree.collectNodes(allocator, doc) catch return;
+    defer list.deinit(allocator);
+    for (list.nodes) |*node| {
+        if (!isControlClass(node.node_type)) continue;
+        if (node.parent.len == 0) continue;
+        const last = std.mem.lastIndexOfScalar(u8, node.path, '/') orelse continue;
+        const parent = node_tree.findByPath(&list, node.path[0..last]) orelse continue;
+        if (!isNode2DClass(parent.node_type)) continue;
+        try report.add(allocator, .warning, "control_under_node2d", "a Control under a Node2D has no parent rect, so anchors give it no size and it may draw nothing; put UI under a CanvasLayer or another Control", node.section_line);
+    }
+}
+
+fn isControlClass(name: []const u8) bool {
+    const classes = [_][]const u8{ "Control", "Label", "Button", "CheckButton", "CheckBox", "OptionButton", "MenuButton", "LinkButton", "TextureButton", "Panel", "PanelContainer", "MarginContainer", "VBoxContainer", "HBoxContainer", "GridContainer", "CenterContainer", "BoxContainer", "AspectRatioContainer", "ScrollContainer", "TabContainer", "SplitContainer", "HSplitContainer", "VSplitContainer", "FlowContainer", "HFlowContainer", "VFlowContainer", "ColorRect", "TextureRect", "NinePatchRect", "ProgressBar", "TextureProgressBar", "LineEdit", "TextEdit", "CodeEdit", "RichTextLabel", "ItemList", "Tree", "HSlider", "VSlider", "SpinBox", "HSeparator", "VSeparator", "TabBar", "Window", "SubViewportContainer", "VideoStreamPlayer", "ColorPicker", "ColorPickerButton", "GraphEdit", "MenuBar" };
+    for (classes) |c| if (std.mem.eql(u8, c, name)) return true;
+    return false;
+}
+
+fn isNode2DClass(name: []const u8) bool {
+    const classes = [_][]const u8{ "Node2D", "Sprite2D", "CharacterBody2D", "StaticBody2D", "RigidBody2D", "Area2D", "AnimatedSprite2D", "Camera2D", "CollisionShape2D", "Polygon2D", "Line2D", "Path2D", "PathFollow2D", "TileMapLayer", "TileMap", "Marker2D", "Parallax2D", "ParallaxBackground", "Bone2D", "Skeleton2D", "Light2D", "PointLight2D", "DirectionalLight2D", "CanvasModulate", "CPUParticles2D", "GPUParticles2D", "RayCast2D", "ShapeCast2D" };
+    for (classes) |c| if (std.mem.eql(u8, c, name)) return true;
+    return false;
 }
 
 test "detect duplicate scene ids" {

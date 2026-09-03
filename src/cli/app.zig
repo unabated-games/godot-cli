@@ -222,6 +222,18 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
             failure.details = .{ .object = details };
         }
     }
+    const mapped = [_]struct { err: []const u8, kind: []const u8, message: []const u8 }{
+        .{ .err = "InvalidIntent", .kind = "invalid_intent", .message = "intent step is malformed" },
+        .{ .err = "InvalidPatch", .kind = "invalid_patch", .message = "patch op is malformed" },
+        .{ .err = "UnknownPatchOp", .kind = "unknown_patch_op", .message = "no patch op with that name" },
+        .{ .err = "ManifestNotFound", .kind = "catalog_manifest", .message = "no catalog manifest to update; run catalog add without --update" },
+        .{ .err = "ManifestExists", .kind = "catalog_manifest", .message = "a catalog manifest already exists; pass --update to change it" },
+    };
+    for (mapped) |entry| if (std.mem.eql(u8, name, entry.err)) {
+        failure.kind = entry.kind;
+        failure.message = entry.message;
+        if (error_details.takeJson(allocator) catch null) |details| failure.details = .{ .object = details };
+    };
     if (std.mem.eql(u8, name, "UnknownRecipe")) {
         failure.kind = "unknown_recipe";
         failure.message = "no intent recipe with that name";

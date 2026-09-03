@@ -2112,6 +2112,7 @@ godot-cli project run [options]
 | `--user-arg` | `<value>` | Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable | — |
 | `--press` | `<value>` | Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it | — |
 | `--click` | `<value>` | Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this | — |
+| `--frame-at` | `<n>` | Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open | — |
 
 ### `godot-cli project show`
 

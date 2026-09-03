@@ -19,6 +19,11 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 - **`scene extract <scene> <node> --output <new.tscn>`**: the editor's Save Branch as Scene. The subtree moves with its properties, unique ids, the resources it uses, and the connections inside it, rewritten relative to the new root; the source gets an instance in its place; `--catalog-id` registers the new scene. Connections that cross the boundary are dropped and listed. Trial 17 rebuilt a HUD by hand from inspected JSON, transcribing 23 properties, because nothing did this.
 - `scene node get` returns the node's parsed properties; the trial had to inspect the whole file to learn what was on one node.
+- `scene extract --catalog-id` registers the entry after both scenes are written and reports a catalog problem in messages rather than failing a command that did its work (trial 18 hit `ManifestNotFound` after the writes). It also lists the lines of scripts that reach into the moved subtree by path, and reports `written`.
+- Patch ops accept the recipe names as aliases (`add_node`, `connect`, `instance_catalog`, `instance_scene`, `instance_set`), and an unknown op names itself and lists the ops. `node_set` and `instance_override` steps take a JSON number or boolean as `value`. `invalid_intent`, `invalid_patch`, `unknown_patch_op`, and `catalog_manifest` failures carry details.
+- `scene validate` warns `control_under_node2d` when a known Control class sits directly under a Node2D, the "runs fine, draws nothing" case both existing-project trials lost a run to.
+- `project run --frame-at N` keeps that frame as well as the last, for a mid-run state such as a menu open.
+- The undo op for `node_reparent` addresses the node at its new path; an automatic snapshot is removed when the apply is rejected before writing.
 
 ### Fixed
 

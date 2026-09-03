@@ -36,6 +36,8 @@ pub const Options = struct {
     main_scene: ?[]const u8 = null,
     /// Mouse clicks on a node, by viewport path, on a physics frame.
     clicks: []const Click = &.{},
+    /// Also keep this frame (as Godot numbers them, from 0), for a mid-run state.
+    frame_at: ?u32 = null,
 };
 
 pub const Click = struct {
@@ -94,6 +96,8 @@ pub const Result = struct {
     duration_ms: i64,
     /// Path of the generated press script, when one was used.
     driver_script: ?[]const u8 = null,
+    /// The frame kept for `frame_at`, when it was written.
+    frame_at_path: ?[]const u8 = null,
 };
 
 pub const Error = error{
@@ -373,8 +377,15 @@ fn collectFrames(allocator: std.mem.Allocator, io: std.Io, options: Options, res
     };
     result.frame = std.fs.path.join(allocator, &.{ dir_path, last }) catch return error.OutOfMemory;
 
+    var keep_named: ?[]const u8 = null;
+    if (options.frame_at) |wanted| {
+        keep_named = std.fmt.allocPrint(allocator, "shot{d:0>8}.png", .{wanted}) catch return error.OutOfMemory;
+        for (frames.items) |name| if (std.mem.eql(u8, name, keep_named.?)) {
+            result.frame_at_path = std.fs.path.join(allocator, &.{ dir_path, name }) catch return error.OutOfMemory;
+        };
+    }
     if (!options.keep_frames) {
-        for (frames.items) |name| if (!std.mem.eql(u8, name, last)) {
+        for (frames.items) |name| if (!std.mem.eql(u8, name, last) and (keep_named == null or !std.mem.eql(u8, name, keep_named.?))) {
             dir.deleteFile(io, name) catch {};
         };
         for (wavs.items) |name| dir.deleteFile(io, name) catch {};

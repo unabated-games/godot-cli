@@ -162,6 +162,7 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .presses = presses.items,
         .clicks = clicks.items,
         .main_scene = main_scene,
+        .frame_at = if (inv.getOption("frame-at")) |text| (std.fmt.parseInt(u32, text, 10) catch return error.InvalidValue) else null,
     });
 
     var data: std.json.ObjectMap = .{};
@@ -173,6 +174,7 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "presses", .{ .integer = @intCast(presses.items.len) });
     try data.put(cli.allocator, "clicks", .{ .integer = @intCast(clicks.items.len) });
     if (run.driver_script) |script| try data.put(cli.allocator, "driver_script", .{ .string = script });
+    if (run.frame_at_path) |path| try data.put(cli.allocator, "frame_at", .{ .string = path });
     if (run.log_tail.len != 0) try data.put(cli.allocator, "log_tail", .{ .string = run.log_tail });
 
     const clean_exit = run.exit != null and run.exit.? == 0;
@@ -1127,6 +1129,7 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
     .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
     .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this", .repeatable = true },
+    .{ .long = "frame-at", .kind = .integer, .description = "Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open" },
 };
 
 pub fn commands() spec.CommandSpec {

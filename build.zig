@@ -203,6 +203,13 @@ pub fn build(b: *std.Build) void {
         \\./zig-out/bin/godot-cli scene node get "$t/ui/hud.tscn" /root/HUD/Score --json | grep -q '"properties"' &&
         \\out=$(./zig-out/bin/godot-cli scene apply "$t/main.tscn" --patch-json '{"ops":[{"op":"node_remove","path":"/root/Main/HUD","recursive":true}]}' --write-undo-patch "$t/undo.json" --project-root "$t" --json) &&
         \\echo "$out" | grep -q '"ok":true' && grep -q '"instance_add"' "$t/undo.json" && grep -q '"scene": "res://ui/hud.tscn"' "$t/undo.json" &&
+        \\./zig-out/bin/godot-cli scene apply "$t/main.tscn" --patch-json '{"ops":[{"op":"add_node","parent":"/root/Main","name":"Menu","type":"Control"},{"op":"teleport"}]}' --project-root "$t" --json | grep -q '"kind":"unknown_patch_op"' &&
+        \\./zig-out/bin/godot-cli scene apply "$t/main.tscn" --patch-json '{"ops":[{"op":"add_node","parent":"/root/Main","name":"Menu","type":"Control"}]}' --project-root "$t" --json | grep -q '"ok":true' &&
+        \\./zig-out/bin/godot-cli scene validate "$t/main.tscn" --project-root "$t" --json | grep -q 'control_under_node2d' &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"node_set","path":"/root/Main/Menu","property":"offset_left","value":15}]}' --json | grep -q '15.0' &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"node_set","path":"/root/Main/Menu","property":"visible","value":[1]}]}' --json | grep -q '"kind":"invalid_intent"' &&
+        \\out=$(./zig-out/bin/godot-cli scene extract "$t/main.tscn" /root/Main/Menu --output ui/menu.tscn --catalog-id ui/menu --project-root "$t" --json) &&
+        \\echo "$out" | grep -q '"catalog_registered":true' && test -f "$t/ui/menu.manifest.json" &&
         \\! ./zig-out/bin/godot-cli project new --project-root "$t/n" --name N --width abc --json >/dev/null 2>&1 &&
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"instance_catalog","parent":"/root/Root","name":"Btn","catalog_id":"ui/button","properties":{"visible":false}}]}' --project-root test_fixtures/project --json | grep -q 'visible' &&
         \\./zig-out/bin/godot-cli scene instance add "$t/main.tscn" --parent /root/Main --name Btn --scene res://main.tscn --properties '{"visible":false}' --project-root "$t" --json | grep -q '"ok":true' &&

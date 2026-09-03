@@ -1501,6 +1501,33 @@ fn sceneRecipesHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     return .{ .data = .{ .object = data } };
 }
 
+/// Lines in the scripts this scene still references that name a path inside
+/// `node_path`, as `$HUD/Label`, `get_node("HUD/Label")`, or `%Name`.
+fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    const root_prefix_end = (std.mem.indexOfScalarPos(u8, node_path, "/root/".len, '/') orelse return out.items) + 1;
+    const rel = node_path[root_prefix_end..];
+    const dollar = try std.fmt.allocPrint(cli.allocator, "${s}", .{rel});
+    const quoted = try std.fmt.allocPrint(cli.allocator, "\"{s}", .{rel});
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const kind = section.header.getString("type") orelse continue;
+        if (!std.mem.eql(u8, kind, "Script")) continue;
+        const res_path = section.header.getString("path") orelse continue;
+        const fs_path = (project_config.resPathToFilesystem(cli.allocator, root, res_path) catch null) orelse continue;
+        const text = std.Io.Dir.cwd().readFileAlloc(cli.io, fs_path, cli.allocator, .limited(4 * 1024 * 1024)) catch continue;
+        var line_no: usize = 0;
+        var lines = std.mem.splitScalar(u8, text, '\n');
+        while (lines.next()) |line| {
+            line_no += 1;
+            if (std.mem.indexOf(u8, line, dollar) != null or std.mem.indexOf(u8, line, quoted) != null) {
+                try out.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ res_path, line_no, std.mem.trim(u8, line, " \t") }));
+            }
+        }
+    }
+    return out.items;
+}
+
 fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (inv.positionals.len < 2) return error.Usage;
     const cli = appFrom(ctx);
@@ -1543,18 +1570,40 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     }
     try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{scene_res_path}));
 
+    // Scripts left in the source that reach into the moved subtree by path
+    // now cross an instance boundary; list them so the follow-up is a
+    // checklist rather than a hunt.
+    if (projectRootFrom(inv)) |root| {
+        const refs = try scriptReferencesInto(cli, root, &doc, node_path);
+        for (refs) |ref| try messages.append(cli.allocator, ref);
+    }
+
+    var catalog_registered = false;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_fs, &extracted.new_doc);
         try writeWithPrepare(cli, inv, input_path, &doc);
         if (inv.getOption("catalog-id")) |id| {
+            // Both scenes are written by now, so a catalog problem is reported
+            // in messages rather than failing a command that did its work.
             const root = projectRootFrom(inv) orelse return error.Usage;
-            var manifest = try catalog_add.addManifest(cli.allocator, cli.io, root, .{
-                .scene = scene_res_path,
-                .id = id,
-                .summary = inv.getOption("summary"),
-                .update = true,
-            });
-            manifest.deinit(cli.allocator);
+            const options = catalog_add.Options{ .scene = scene_res_path, .id = id, .summary = inv.getOption("summary") };
+            if (catalog_add.addManifest(cli.allocator, cli.io, root, options)) |manifest_const| {
+                var manifest = manifest_const;
+                manifest.deinit(cli.allocator);
+                catalog_registered = true;
+            } else |first_err| {
+                if (first_err == error.ManifestExists) {
+                    var with_update = options;
+                    with_update.update = true;
+                    if (catalog_add.addManifest(cli.allocator, cli.io, root, with_update)) |manifest_const| {
+                        var manifest = manifest_const;
+                        manifest.deinit(cli.allocator);
+                        catalog_registered = true;
+                    } else |err| try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "both scenes were written but the catalog entry {s} could not be updated ({s}); run catalog add --update", .{ id, @errorName(err) }));
+                } else {
+                    try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "both scenes were written but the catalog entry {s} could not be created ({s}); run catalog add", .{ id, @errorName(first_err) }));
+                }
+            }
         }
     }
 
@@ -1572,6 +1621,13 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     try data.put(cli.allocator, "moved_connections", .{ .integer = @intCast(extracted.moved_connections) });
     try data.put(cli.allocator, "dropped_connections", .{ .array = dropped_json });
     if (inv.getOption("catalog-id")) |id| try data.put(cli.allocator, "catalog_id", .{ .string = id });
+    try data.put(cli.allocator, "catalog_registered", .{ .bool = catalog_registered });
+    var written: std.json.Array = .init(cli.allocator);
+    if (!inv.flag("dry-run")) {
+        try written.append(.{ .string = try cli.allocator.dupe(u8, output_fs) });
+        try written.append(.{ .string = try cli.allocator.dupe(u8, input_path) });
+    }
+    try data.put(cli.allocator, "written", .{ .array = written });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "moved {d} node(s) from {s} into {s} and instanced it at {s}", .{ extracted.moved_nodes, node_path, output_path, added.path }) });
     return .{ .data = .{ .object = data }, .messages = try messages.toOwnedSlice(cli.allocator) };
@@ -1719,13 +1775,17 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     };
 
     const strict = !inv.flag("no-strict");
-    var applied = try scene_patch.applyPatchJson(cli.allocator, &doc, patch_bytes, .{
+    var applied = scene_patch.applyPatchJson(cli.allocator, &doc, patch_bytes, .{
         .seed_path = seed_path,
         .project_root = projectRootFrom(inv),
         .io = cli.io,
         .strict = strict,
         .undo = if (undo_recorder_storage) |*recorder| recorder else null,
-    });
+    }) catch |err| {
+        // Nothing was written, so an automatic snapshot has nothing to restore.
+        if (snapshot_path_owned) |auto_path| std.Io.Dir.cwd().deleteFile(cli.io, auto_path) catch {};
+        return err;
+    };
     defer applied.deinit(cli.allocator);
 
     if (!inv.flag("dry-run")) {

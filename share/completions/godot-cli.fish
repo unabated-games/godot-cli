@@ -631,6 +631,7 @@ complete -c godot-cli -n '__godot_cli_at "project run"' -l headless -d 'No windo
 complete -c godot-cli -n '__godot_cli_at "project run"' -l user-arg -r -d 'Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable'
 complete -c godot-cli -n '__godot_cli_at "project run"' -l press -r -d 'Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it'
 complete -c godot-cli -n '__godot_cli_at "project run"' -l click -r -d 'Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button'\''s pressed signal fires from this'
+complete -c godot-cli -n '__godot_cli_at "project run"' -l frame-at -r -d 'Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open'
 complete -c godot-cli -n '__godot_cli_at "project show"' -l project-root -r -d 'Godot project root (directory containing project.godot)'
 complete -c godot-cli -n '__godot_cli_at "project move"' -l from -r -d 'Current path (res://scripts/player.gd or scripts/player.gd)'
 complete -c godot-cli -n '__godot_cli_at "project move"' -l to -r -d 'New path'

@@ -50,7 +50,10 @@ pub fn planFromInput(
     doc: ?*document.Document,
     options: PlanOptions,
 ) Error!PlanResult {
-    var parsed = std.json.parseFromSlice(std.json.Value, allocator, input_json, .{}) catch return error.InvalidIntent;
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, input_json, .{}) catch {
+        error_details.record(.{ .field = "intent", .hint = "the document is not valid JSON" });
+        return error.InvalidIntent;
+    };
     defer parsed.deinit();
 
     var ops_arena = std.heap.ArenaAllocator.init(allocator);
@@ -229,11 +232,12 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     }
 
     if (std.mem.eql(u8, recipe, "node_set")) {
+        const property = try requiredString(step, "property");
         try ops.append(try makeOpObject(ops_alloc, &[_]Field{
             .{ "op", "node_set" },
             .{ "path", try requiredString(step, "path") },
-            .{ "property", try requiredString(step, "property") },
-            .{ "value", try requiredString(step, "value") },
+            .{ "property", property },
+            .{ "value", try scalarText(ops_alloc, step, "value", property) },
         }));
         return;
     }
@@ -273,7 +277,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             .{ "op", "instance_override" },
             .{ "path", try requiredString(step, "path") },
             .{ "property", try requiredString(step, "property") },
-            .{ "value", try requiredString(step, "value") },
+            .{ "value", try scalarText(ops_alloc, step, "value", try requiredString(step, "property")) },
         }));
         const last = &ops.items[ops.items.len - 1];
         if (step.get("child")) |child_value| {
@@ -877,6 +881,25 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
         return std.fmt.allocPrint(allocator, "assign_ext {s}.{s} ({d} ops)", .{ path.string, property.string, op_count });
     }
     return std.fmt.allocPrint(allocator, "{s} ({d} ops)", .{ recipe, op_count });
+}
+
+/// A value field that may be a JSON string of Variant text, or a number or
+/// boolean, formatted the way a `properties` object formats them.
+fn scalarText(allocator: std.mem.Allocator, map: std.json.ObjectMap, key: []const u8, property: []const u8) Error![]const u8 {
+    const value = map.get(key) orelse {
+        error_details.record(.{ .field = key, .hint = "this recipe needs the field; scene recipes lists every recipe's fields" });
+        return error.MissingIntentField;
+    };
+    return switch (value) {
+        .string => |s| s,
+        .integer => |i| if (scene_patch.isFloatProperty(property)) try std.fmt.allocPrint(allocator, "{d}.0", .{i}) else try std.fmt.allocPrint(allocator, "{d}", .{i}),
+        .float => |f| try std.fmt.allocPrint(allocator, "{d}", .{f}),
+        .bool => |b| if (b) "true" else "false",
+        else => {
+            error_details.record(.{ .field = key, .hint = "a string of Variant text (strings carry their own quotes), a number, or a boolean" });
+            return error.InvalidIntent;
+        },
+    };
 }
 
 fn requiredString(map: std.json.ObjectMap, key: []const u8) Error![]const u8 {
