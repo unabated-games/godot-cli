@@ -20,19 +20,19 @@ fn uidEncodeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const text = try resource_uid.idToText(cli.allocator, id);
     return .{
         .data = .{ .string = text },
-        .messages = &.{text},
+        .messages = try cli.allocator.dupe([]const u8, &.{text}),
     };
 }
 
 fn uidDecodeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
-    _ = ctx;
+    const cli = appFrom(ctx);
     if (inv.positionals.len == 0) return error.Usage;
     const text = inv.positionals[0];
     const id = resource_uid.textToId(text);
     if (id == resource_uid.invalid_id) return error.Usage;
     return .{
         .data = .{ .integer = id },
-        .messages = &.{text},
+        .messages = try cli.allocator.dupe([]const u8, &.{text}),
     };
 }
 
@@ -53,7 +53,7 @@ fn uidCreateForPathHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
 
     return .{
         .data = .{ .object = map },
-        .messages = &.{text},
+        .messages = try cli.allocator.dupe([]const u8, &.{text}),
     };
 }
 

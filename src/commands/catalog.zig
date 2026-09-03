@@ -122,7 +122,7 @@ fn scanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{summary},
+        .messages = try cli.allocator.dupe([]const u8, &.{summary}),
     };
 }
 
@@ -317,7 +317,7 @@ fn relinkHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{summary},
+        .messages = try cli.allocator.dupe([]const u8, &.{summary}),
         // Anything still pointing at a missing scene keeps this failing, so a
         // relink step in CI does not go green on a half-repair.
         .exit_code = if (result.hasUnrepaired()) .failure else null,
@@ -355,7 +355,7 @@ fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     return .{
         .data = .{ .object = root },
-        .messages = &.{summary},
+        .messages = try cli.allocator.dupe([]const u8, &.{summary}),
     };
 }
 
@@ -404,13 +404,13 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (error_count > 0) {
         return .{
             .data = .{ .object = data },
-            .messages = &.{summary},
+            .messages = try cli.allocator.dupe([]const u8, &.{summary}),
             .exit_code = .failure,
         };
     }
     return .{
         .data = .{ .object = data },
-        .messages = &.{summary},
+        .messages = try cli.allocator.dupe([]const u8, &.{summary}),
     };
 }
 
@@ -469,7 +469,7 @@ fn exportHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{summary},
+        .messages = try cli.allocator.dupe([]const u8, &.{summary}),
     };
 }
 
@@ -516,7 +516,7 @@ fn searchHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{summary},
+        .messages = try cli.allocator.dupe([]const u8, &.{summary}),
     };
 }
 
@@ -554,7 +554,7 @@ fn listHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{summary},
+        .messages = try cli.allocator.dupe([]const u8, &.{summary}),
     };
 }
 

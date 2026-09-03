@@ -22,6 +22,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 - **`godot-cli mcp`: a native Model Context Protocol server over stdio.** Every runnable command is a tool, named as `docs/mcp_tools.json` names them, with an input schema generated from the command's options and positional arguments. A call runs in-process and returns the `--json` envelope as text and as structured content, so a failure still carries its details. `--project-root` pins the server to one project: the option is injected into every call, removed from the schemas, and any path argument that resolves outside the project is refused before the command runs. The agent docs and example intents ship inside the binary as `godot-cli://docs/...` and `godot-cli://examples/...` resources, `godot-cli://catalog` is the pinned project's live catalog, and the `godot-scene-session` prompt opens a session with the skill's rules. The server answers both the `initialize` handshake current clients send and the stateless 2026-07-28 revision. A pipe smoke test in `zig build test` exercises both openings.
 - Commands declare their positional arguments. `--help` lists them under "Arguments", the man page and the Markdown reference render them, and `reference --format json` carries `positionals` (and now marks `repeatable` options). Before this, the reference knew about options only and an agent had to guess that `scene node remove` takes a file and a node path.
 
+### Fixed
+
+- Seventeen handlers returned their message list as a pointer to a stack temporary (`&.{text}`), which the CLI path survived by luck and the MCP server's Linux build did not. The lists are allocated now.
+
 ### Changed
 
 - The mapping from a handler error to a failure envelope, with the duplicate-id, missing-file, node, and patch-field details, is one function shared by the CLI, `batch`, and the MCP server, so every entry point reports the same thing.

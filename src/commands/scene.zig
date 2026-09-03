@@ -367,7 +367,7 @@ fn uidCacheListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     const msg = try std.fmt.allocPrint(cli.allocator, "{d} uid cache entries", .{cache.entries.items.len});
     return .{
         .data = .{ .array = arr },
-        .messages = &.{msg},
+        .messages = try cli.allocator.dupe([]const u8, &.{msg}),
     };
 }
 
@@ -388,7 +388,7 @@ fn uidCacheLookupHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
         const path = cache.pathForId(id) orelse return error.Usage;
         return .{
             .data = .{ .string = path },
-            .messages = &.{path},
+            .messages = try cli.allocator.dupe([]const u8, &.{path}),
         };
     }
 
@@ -396,7 +396,7 @@ fn uidCacheLookupHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
         const uid_text = try resource_uid.idToText(cli.allocator, id);
         return .{
             .data = .{ .string = uid_text },
-            .messages = &.{uid_text},
+            .messages = try cli.allocator.dupe([]const u8, &.{uid_text}),
         };
     }
 
@@ -990,7 +990,7 @@ fn sceneExtRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
             try data.put(cli.allocator, "summary", .{ .string = summary });
             return .{
                 .data = .{ .object = data },
-                .messages = &.{summary},
+                .messages = try cli.allocator.dupe([]const u8, &.{summary}),
                 .exit_code = .failure,
             };
         }
@@ -1085,7 +1085,7 @@ fn sceneSubRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
             try data.put(cli.allocator, "summary", .{ .string = summary });
             return .{
                 .data = .{ .object = data },
-                .messages = &.{summary},
+                .messages = try cli.allocator.dupe([]const u8, &.{summary}),
                 .exit_code = .failure,
             };
         }
