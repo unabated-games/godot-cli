@@ -117,13 +117,30 @@ const ExistingProse = struct {
     }
 };
 
+fn normalizeScenePath(allocator: std.mem.Allocator, project_root: []const u8, scene: []const u8) Error![]const u8 {
+    if (std.mem.startsWith(u8, scene, "res://")) return try allocator.dupe(u8, scene);
+    if (std.fs.path.isAbsolute(scene)) return error.InvalidScenePath;
+    var rel: []const u8 = scene;
+    if (std.mem.startsWith(u8, rel, project_root)) rel = rel[project_root.len..];
+    while (std.mem.startsWith(u8, rel, "./")) rel = rel[2..];
+    while (std.mem.startsWith(u8, rel, "/")) rel = rel[1..];
+    if (rel.len == 0 or std.mem.startsWith(u8, rel, "..")) return error.InvalidScenePath;
+    return try std.fmt.allocPrint(allocator, "res://{s}", .{rel});
+}
+
 pub fn addManifest(
     allocator: std.mem.Allocator,
     io: std.Io,
     project_root: []const u8,
-    options: Options,
+    options_in: Options,
 ) Error!Result {
-    if (!std.mem.startsWith(u8, options.scene, "res://")) return error.InvalidScenePath;
+    // Every other command takes a project-relative path; so does this one,
+    // converted to res:// here. Absolute paths and paths outside the project
+    // are still rejected.
+    const scene_res = try normalizeScenePath(allocator, project_root, options_in.scene);
+    defer allocator.free(scene_res);
+    var options = options_in;
+    options.scene = scene_res;
 
     const scene_fs_maybe = project_config.resPathToFilesystem(allocator, project_root, options.scene) catch
         return error.InvalidScenePath;

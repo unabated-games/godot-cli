@@ -263,7 +263,7 @@ Manifests go stale in three ways, and each has a command.
 
 A component's script changes, so the signals list is wrong. Rerun `catalog add --update` and your prose survives.
 
-A scene moves. `scene` in the manifest is a plain path string and Godot does not rewrite it on a move, because its dependency tracking follows `uid://` references rather than arbitrary string properties. `catalog relink --project-root .` resolves the manifest's `scene_uid` through `.godot/uid_cache.bin` and rewrites the path. It works from the manifest outward, so it also repairs a manifest that did not travel with its scene. If the cache is stale, a `git mv` with the editor closed, it reports `unresolved` and exits 1 rather than guessing.
+A scene moves. `scene` in the manifest is a plain path string and Godot does not rewrite it on a move. `catalog relink --project-root .` repairs it two ways: through the manifest's `scene_uid` and `.godot/uid_cache.bin` when the scene has a uid, and otherwise by the scene sitting beside its manifest with the same name, which is what a folder move looks like. It also rewrites the paths of scripts and textures inside the relinked scene that moved with it. A manifest it cannot place is reported `unresolved` with exit 1 rather than guessed at.
 
 The digest drifts from the manifests. Add both to CI:
 

@@ -157,7 +157,7 @@ pub fn runBatch(
                         .argv = argv_summary,
                         .ok = false,
                         .error_name = try app.allocator.dupe(u8, "command_failed"),
-                        .data = result.data,
+                        .data = cloneJson(app.allocator, result.data) catch .null,
                     };
                 }
             }
@@ -166,7 +166,7 @@ pub fn runBatch(
                 .index = index,
                 .argv = argv_summary,
                 .ok = true,
-                .data = result.data,
+                .data = cloneJson(app.allocator, result.data) catch .null,
             };
         };
 
@@ -280,4 +280,29 @@ test "batch stop mode stops on first failure" {
     try std.testing.expectEqual(@as(usize, 2), result.step_count);
     try std.testing.expectEqual(@as(usize, 1), result.succeeded_count);
     try std.testing.expectEqual(@as(usize, 1), result.failed_count);
+}
+
+/// Handlers may return strings that point into the step's argv or options,
+/// which are freed when the step ends; the batch result outlives them, so
+/// every string is copied. `scene validate` inside a batch used to report its
+/// path as sixteen bytes of freed memory.
+fn cloneJson(allocator: std.mem.Allocator, value: std.json.Value) std.mem.Allocator.Error!std.json.Value {
+    return switch (value) {
+        .null, .bool, .integer, .float => value,
+        .number_string => |s| .{ .number_string = try allocator.dupe(u8, s) },
+        .string => |s| .{ .string = try allocator.dupe(u8, s) },
+        .array => |arr| blk: {
+            var out = std.json.Array.init(allocator);
+            for (arr.items) |item| try out.append(try cloneJson(allocator, item));
+            break :blk .{ .array = out };
+        },
+        .object => |obj| blk: {
+            var out: std.json.ObjectMap = .{};
+            var it = obj.iterator();
+            while (it.next()) |entry| {
+                try out.put(allocator, try allocator.dupe(u8, entry.key_ptr.*), try cloneJson(allocator, entry.value_ptr.*));
+            }
+            break :blk .{ .object = out };
+        },
+    };
 }

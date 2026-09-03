@@ -625,7 +625,7 @@ Property diffs (with `--properties`): `property_added`, `property_removed`, `pro
       "op": "node_set",
       "path": "/root/Main/Player",
       "property": "script",
-      "value": "ExtResource(\"1_script\")"
+      "value": "ExtResource(\"Script_script\")"
     },
     {
       "op": "instance_add",

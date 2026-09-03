@@ -268,7 +268,11 @@ const KeyCodes = struct {
 
 fn resolveKey(name: []const u8, physical: bool) Error!KeyCodes {
     if (std.mem.eql(u8, name, "SPACE") or std.mem.eql(u8, name, "Space")) {
-        return .{ .keycode = 32, .physical_keycode = 32, .unicode = 32 };
+        // Godot writes a physical binding as keycode 0 plus physical_keycode,
+        // for Space as for letters; both set at once is what the editor
+        // writes for a *non*-physical binding of a key that has no label.
+        if (physical) return .{ .keycode = 0, .physical_keycode = 32, .unicode = 32 };
+        return .{ .keycode = 32, .physical_keycode = 0, .unicode = 32 };
     }
     if (std.mem.startsWith(u8, name, "KEY_")) {
         const letter = name["KEY_".len..];
@@ -285,10 +289,10 @@ fn resolveKey(name: []const u8, physical: bool) Error!KeyCodes {
         if (physical) return .{ .keycode = 0, .physical_keycode = code, .unicode = @intCast(std.ascii.toLower(upper)) };
         return .{ .keycode = code, .physical_keycode = 0, .unicode = @intCast(std.ascii.toLower(upper)) };
     }
-    if (std.mem.eql(u8, name, "UP") or std.mem.eql(u8, name, "ArrowUp")) return .{ .keycode = 4194320, .physical_keycode = 4194320, .unicode = 0 };
-    if (std.mem.eql(u8, name, "DOWN") or std.mem.eql(u8, name, "ArrowDown")) return .{ .keycode = 4194322, .physical_keycode = 4194322, .unicode = 0 };
-    if (std.mem.eql(u8, name, "LEFT") or std.mem.eql(u8, name, "ArrowLeft")) return .{ .keycode = 4194319, .physical_keycode = 4194319, .unicode = 0 };
-    if (std.mem.eql(u8, name, "RIGHT") or std.mem.eql(u8, name, "ArrowRight")) return .{ .keycode = 4194321, .physical_keycode = 4194321, .unicode = 0 };
+    if (std.mem.eql(u8, name, "UP") or std.mem.eql(u8, name, "ArrowUp")) return if (physical) .{ .keycode = 0, .physical_keycode = 4194320, .unicode = 0 } else .{ .keycode = 4194320, .physical_keycode = 0, .unicode = 0 };
+    if (std.mem.eql(u8, name, "DOWN") or std.mem.eql(u8, name, "ArrowDown")) return if (physical) .{ .keycode = 0, .physical_keycode = 4194322, .unicode = 0 } else .{ .keycode = 4194322, .physical_keycode = 0, .unicode = 0 };
+    if (std.mem.eql(u8, name, "LEFT") or std.mem.eql(u8, name, "ArrowLeft")) return if (physical) .{ .keycode = 0, .physical_keycode = 4194319, .unicode = 0 } else .{ .keycode = 4194319, .physical_keycode = 0, .unicode = 0 };
+    if (std.mem.eql(u8, name, "RIGHT") or std.mem.eql(u8, name, "ArrowRight")) return if (physical) .{ .keycode = 0, .physical_keycode = 4194321, .unicode = 0 } else .{ .keycode = 4194321, .physical_keycode = 0, .unicode = 0 };
     return error.UnknownKey;
 }
 

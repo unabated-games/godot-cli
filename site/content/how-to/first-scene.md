@@ -20,7 +20,7 @@ godot-cli scene template list --json
 godot-cli scene template copy 2d/top_down_player --output scenes/player.tscn --project-root .
 ```
 
-The templates are `2d/character_body`, `2d/top_down_player`, `2d/camera_rig`, `3d/static_body`, and `ui/control_root`. `scene template show <id>` prints the node tree before you copy, and `--rename-node Player:Hero` renames as it copies.
+The templates are `2d/character_body`, `2d/top_down_player`, `2d/camera_rig`, `3d/static_body`, and `ui/control_root`, each with its collision shape or mesh already in place. `scene template show <id>` prints the node tree before you copy, and `--rename-node Player:Hero` renames as it copies.
 
 ## Add nodes and set properties
 

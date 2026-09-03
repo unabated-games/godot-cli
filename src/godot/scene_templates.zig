@@ -262,18 +262,20 @@ pub fn buildShowData(allocator: std.mem.Allocator, doc: *const document.Document
         var fields: std.json.ObjectMap = .{};
         var it = section.header.fields.iterator();
         while (it.next()) |entry| {
+            // The document is freed before this JSON is emitted, so every
+            // string is copied; borrowing them serialised freed memory.
             const value_json: std.json.Value = switch (entry.value_ptr.*) {
-                .string, .raw => |s| .{ .string = s },
+                .string, .raw => |s| .{ .string = try allocator.dupe(u8, s) },
                 .integer => |n| .{ .integer = n },
                 .float => |f| .{ .float = f },
                 .bool => |b| .{ .bool = b },
             };
-            try fields.put(allocator, entry.key_ptr.*, value_json);
+            try fields.put(allocator, try allocator.dupe(u8, entry.key_ptr.*), value_json);
         }
 
         var row: std.json.ObjectMap = .{};
         try row.put(allocator, "line", .{ .integer = @intCast(section.line) });
-        try row.put(allocator, "name", .{ .string = section.header.name });
+        try row.put(allocator, "name", .{ .string = try allocator.dupe(u8, section.header.name) });
         try row.put(allocator, "fields", .{ .object = fields });
         try row.put(allocator, "property_count", .{ .integer = @intCast(section.properties.items.len) });
         if (parse_properties) {

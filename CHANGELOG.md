@@ -15,6 +15,25 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-03
+
+### Added
+
+- `catalog relink` finds a moved scene beside its manifest when there is no `scene_uid` to resolve, which is every scene godot-cli created and Godot has not re-saved, and rewrites the `ext_resource` paths inside the relinked scene that moved with it. A folder move is now one `catalog relink`. Found by the catalog trial, where the documented command could not repair a move at all.
+- `catalog export` keeps whatever is in the output file outside the digest: the digest sits between `<!-- godot-cli catalog: begin -->` and `end` markers, replaced in place, so the hand-written rules above it in `AGENTS.md` survive a re-export. A file from before the markers is replaced from its `# Component Catalog` heading.
+- `catalog add` takes a project-relative scene path as well as `res://`.
+- Templates worth copying: `3d/static_body` ships a `BoxShape3D` and `BoxMesh`, `2d/character_body` a `CapsuleShape2D`, instead of empty collision and mesh nodes.
+- Quickstart lists the common `project.godot` keys and the `project apply` sections.
+
+### Fixed
+
+- **`scene validate` inside `batch` reported its path as sixteen bytes of freed memory.** Handlers may return strings borrowed from the step's argv, which the batch runner frees when the step ends; step results are now deep-copied.
+- **`scene template show --json` serialised freed memory** for section names and fields, the same class of bug.
+- `project input apply` bound a physical Space (and the arrow keys) with both `keycode` and `physical_keycode` set; Godot writes `keycode=0` for a physical binding, and now so does godot-cli.
+- `project.godot` sections are written in name order, as `ProjectSettings::_save_settings_text` iterates them, so a section added by `project apply` no longer moves on the editor's next save.
+- The `validate` message for `uid_path_mismatch` says the uid cache is stale after a move and how to refresh it.
+- The `assign_ext` example in the agent guide showed an id shape the op never produces.
+
 ## [0.5.0] — 2026-09-03
 
 ### Added

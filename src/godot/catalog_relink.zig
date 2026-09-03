@@ -16,6 +16,10 @@
 //! cache stale until Godot next scans.
 
 const std = @import("std");
+const io_util = @import("../io_util.zig");
+const resource_uid_lookup = @import("resource_uid_lookup.zig");
+const writer = @import("text_format/writer.zig");
+const document = @import("text_format/document.zig");
 const catalog_add = @import("catalog_add.zig");
 const catalog_scan = @import("catalog_scan.zig");
 const project_config = @import("project_config.zig");
@@ -109,13 +113,14 @@ pub fn relinkProject(
             continue;
         }
 
-        const resolved = try resolveByUid(allocator, io, project_root, cache, entry.scene_uid);
-        const new_scene = resolved orelse {
+        const by_uid = try resolveByUid(allocator, io, project_root, cache, entry.scene_uid);
+        const by_sibling = if (by_uid == null) try resolveBesideManifest(allocator, io, project_root, entry.manifest_path, entry.scene) else null;
+        const new_scene = by_uid orelse by_sibling orelse {
             unresolved += 1;
             const reason = if (entry.scene_uid.len == 0)
-                "manifest has no scene_uid to resolve"
+                "manifest has no scene_uid, and no scene with the same name sits beside it"
             else
-                "scene_uid is not in the uid cache, or resolves to a file that does not exist (open the project in Godot to refresh .godot/uid_cache.bin)";
+                "scene_uid is not in the uid cache, or resolves to a file that does not exist (open the project in Godot to refresh .godot/uid_cache.bin), and no scene with the same name sits beside the manifest";
             try entries.append(allocator, .{
                 .id = try allocator.dupe(u8, entry.id),
                 .manifest_path = try allocator.dupe(u8, entry.manifest_path),
@@ -127,6 +132,11 @@ pub fn relinkProject(
             continue;
         };
         defer allocator.free(new_scene);
+
+        // A moved folder takes the scene's own scripts and textures with it,
+        // and their ext_resource paths inside the scene still say the old
+        // folder. Rewrite those that now exist at the new location.
+        if (!dry_run) try retargetMovedExtResources(allocator, io, project_root, entry.scene, new_scene);
 
         // Reuse the update path so prose, id, and signal rows are handled the
         // same way `catalog add --update` handles them.
@@ -174,6 +184,78 @@ fn sceneMissing(
 }
 
 /// `uid://…` to the `res://` path it currently points at, if that file exists.
+/// A manifest that moved with its scene: the scene's basename next to the
+/// manifest. This is what a folder move looks like, and it needs no uid, so
+/// it also covers scenes godot-cli created that Godot has never re-saved.
+fn resolveBesideManifest(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    manifest_path: []const u8,
+    old_scene: []const u8,
+) Error!?[]const u8 {
+    const basename = std.fs.path.basename(old_scene);
+    const manifest_dir = std.fs.path.dirname(manifest_path) orelse ".";
+    const candidate_fs = try std.fs.path.join(allocator, &.{ manifest_dir, basename });
+    defer allocator.free(candidate_fs);
+    std.Io.Dir.cwd().access(io, candidate_fs, .{}) catch return null;
+
+    // Filesystem path back to res://, relative to the project root.
+    var rel: []const u8 = candidate_fs;
+    if (std.mem.startsWith(u8, rel, project_root)) {
+        rel = rel[project_root.len..];
+    }
+    while (std.mem.startsWith(u8, rel, "./")) rel = rel[2..];
+    while (std.mem.startsWith(u8, rel, "/")) rel = rel[1..];
+    const res_path = try std.fmt.allocPrint(allocator, "res://{s}", .{rel});
+    if (std.mem.eql(u8, res_path, old_scene)) {
+        allocator.free(res_path);
+        return null;
+    }
+    return res_path;
+}
+
+/// After `old_scene` moved to `new_scene`, rewrite ext_resource paths inside
+/// the scene that pointed into the old folder and now resolve in the new one.
+fn retargetMovedExtResources(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    old_scene: []const u8,
+    new_scene: []const u8,
+) Error!void {
+    const old_dir = std.fs.path.dirname(old_scene) orelse return;
+    const new_dir = std.fs.path.dirname(new_scene) orelse return;
+    if (std.mem.eql(u8, old_dir, new_dir)) return;
+
+    const scene_fs = (project_config.resPathToFilesystem(allocator, project_root, new_scene) catch return) orelse return;
+    defer allocator.free(scene_fs);
+    var doc = document.parseFile(allocator, io, scene_fs) catch return;
+    defer doc.deinit(allocator);
+
+    var changed = false;
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const path = section.header.getString("path") orelse continue;
+        if (path.len <= old_dir.len + 1 or !std.mem.startsWith(u8, path, old_dir) or path[old_dir.len] != '/') continue;
+        const candidate = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ new_dir, path[old_dir.len + 1 ..] });
+        defer allocator.free(candidate);
+        const candidate_fs = (project_config.resPathToFilesystem(allocator, project_root, candidate) catch continue) orelse continue;
+        defer allocator.free(candidate_fs);
+        std.Io.Dir.cwd().access(io, candidate_fs, .{}) catch continue;
+        section.header.setStringField(allocator, "path", candidate) catch return error.OutOfMemory;
+        if (resource_uid_lookup.resolveExtResourceUid(allocator, io, project_root, candidate) catch null) |uid| {
+            defer allocator.free(uid);
+            section.header.setStringField(allocator, "uid", uid) catch return error.OutOfMemory;
+        }
+        changed = true;
+    }
+    if (!changed) return;
+    const bytes = writer.writeDocument(allocator, &doc) catch return error.OutOfMemory;
+    defer allocator.free(bytes);
+    io_util.writeFileAtomic(io, scene_fs, bytes) catch return error.Io;
+}
+
 fn resolveByUid(
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -262,7 +344,6 @@ fn writeTempProject(
     manifest_scene: []const u8,
     uid: []const u8,
 ) ![]const u8 {
-    const io_util = @import("../io_util.zig");
     const root = try std.fmt.allocPrint(allocator, "zig-out/test-relink-{s}", .{name});
     errdefer allocator.free(root);
 

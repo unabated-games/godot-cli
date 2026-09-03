@@ -34,6 +34,8 @@ Work from the **Godot project root** (folder containing `project.godot`). Pass `
 | `scene validate`, `scene inspect`, `scene refs` | **Pass** — enables UID cache and `res://` resolution checks |
 | `project input *` | **Pass** — reads/writes `project.godot` under the project root |
 | `project settings *`, `project autoload *` | **Pass** — main scene, display, layer names, autoloads |
+
+Common `project.godot` keys: `application` → `run/main_scene`, `config/name`; `display` → `window/size/viewport_width`, `window/size/viewport_height`, `window/stretch/mode`; `rendering` and `physics` take the aliases in `project rendering apply` / `project physics apply`. `project apply` takes one intent with `settings`, `input`, `autoload`, `plugins`, `rendering`, and `physics` sections (`$GODOT_CLI_HOME/examples/intents/project_bootstrap.json`).
 | `scene node list`, `scene node get`, `scene diff` | **Optional** — accepted for uniformity; ignored (file-only reads) |
 
 Agents may pass `--project-root .` on all scene commands when working inside a Godot project; it is only *required* for writes, catalog, and validation that touches project paths.

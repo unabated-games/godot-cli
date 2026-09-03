@@ -238,7 +238,20 @@ pub fn render(allocator: std.mem.Allocator, doc: *const Document) Error![]u8 {
         try out.append(allocator, '\n');
     }
 
-    for (doc.sections.items, 0..) |section, section_index| {
+    // Godot iterates a sorted map when it saves, so sections come out in name
+    // order; a section appended by `project apply` would otherwise sit at the
+    // end until the editor's next save moved it.
+    const order = try allocator.alloc(usize, doc.sections.items.len);
+    defer allocator.free(order);
+    for (order, 0..) |*slot, i| slot.* = i;
+    std.mem.sort(usize, order, doc, struct {
+        fn less(d: *const Document, a: usize, b: usize) bool {
+            return std.mem.lessThan(u8, d.sections.items[a].name, d.sections.items[b].name);
+        }
+    }.less);
+
+    for (order, 0..) |section_idx, section_index| {
+        const section = doc.sections.items[section_idx];
         if (section_index > 0 or doc.preamble.len > 0) try out.append(allocator, '\n');
         try appendFmt(allocator, &out, "[{s}]\n\n", .{section.name});
 

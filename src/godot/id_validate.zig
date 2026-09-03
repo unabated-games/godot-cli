@@ -397,7 +397,7 @@ pub fn validateDocument(
                                     allocator,
                                     .err,
                                     "uid_path_mismatch",
-                                    "ext_resource uid does not match uid_cache path for the declared path",
+                                    "ext_resource uid maps to a different path in uid_cache.bin; after moving files the cache is stale until Godot imports again (godot --headless --path . --import --quit)",
                                     section.line,
                                 );
                             }

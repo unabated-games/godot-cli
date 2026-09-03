@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.5.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.6.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
@@ -606,9 +606,9 @@ pub fn build(b: *std.Build) void {
         \\mkdir -p "$tmp/widgets" && mv "$tmp/ui/button" "$tmp/widgets/button" &&
         \\if ./zig-out/bin/godot-cli catalog validate --project-root "$tmp" >/dev/null 2>&1; then exit 1; fi &&
         \\out=$(./zig-out/bin/godot-cli catalog relink --project-root "$tmp" --json 2>/dev/null || true) &&
-        \\echo "$out" | grep -q '"unresolved":1' &&
-        \\echo "$out" | grep -q 'uid_cache.bin' &&
-        \\grep -q 'res://ui/button/button.tscn' "$tmp/widgets/button/button.manifest.json" &&
+        \\echo "$out" | grep -q '"relinked":1' &&
+        \\grep -q 'res://widgets/button/button.tscn' "$tmp/widgets/button/button.manifest.json" &&
+        \\./zig-out/bin/godot-cli catalog validate --project-root "$tmp" >/dev/null 2>&1 &&
         \\rm -rf "$tmp"
     });
     catalog_relink_smoke.setCwd(b.path("."));
@@ -841,6 +841,35 @@ pub fn build(b: *std.Build) void {
     project_godot_smoke.setCwd(b.path("."));
     project_godot_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&project_godot_smoke.step);
+
+    // The catalog after a folder move, as the relink trial did it: a scene
+    // godot-cli created (so no scene_uid), its manifest, and its script move
+    // together; relink must find the scene beside the manifest, repoint the
+    // manifest, and rewrite the script path inside the scene. Also: export
+    // keeps the rules above the digest, and catalog add takes a relative path.
+    const relink_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\printf 'config_version=5\n\n[application]\n\nconfig/name="Relink"\n' > "$tmp/project.godot" &&
+        \\mkdir -p "$tmp/ui/button" && printf 'extends Button\nsignal tapped\n' > "$tmp/ui/button/button.gd" &&
+        \\./zig-out/bin/godot-cli scene new --output "$tmp/ui/button/button.tscn" --root-name B --root-type Button --project-root "$tmp" >/dev/null &&
+        \\printf '{ "ops": [ { "op": "assign_ext", "path": "/root/B", "property": "script", "type": "Script", "res_path": "res://ui/button/button.gd" } ] }' > "$tmp/p.json" &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp/ui/button/button.tscn" --patch "$tmp/p.json" --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli catalog add ui/button/button.tscn --id ui/button --summary "A button" --project-root "$tmp" --json | grep -q '"ok":true' &&
+        \\printf '# Rules\n\nKeep me.\n' > "$tmp/AGENTS.md" &&
+        \\./zig-out/bin/godot-cli catalog export --project-root "$tmp" --output AGENTS.md >/dev/null &&
+        \\./zig-out/bin/godot-cli catalog export --project-root "$tmp" --output AGENTS.md >/dev/null &&
+        \\grep -q 'Keep me' "$tmp/AGENTS.md" && [ "$(grep -c '^# Component Catalog' "$tmp/AGENTS.md")" = 1 ] &&
+        \\mkdir -p "$tmp/components" && mv "$tmp/ui/button" "$tmp/components/button" && rmdir "$tmp/ui" &&
+        \\./zig-out/bin/godot-cli catalog relink --project-root "$tmp" --json | grep -q '"status":"relinked"' &&
+        \\grep -q 'res://components/button/button.tscn' "$tmp/components/button/button.manifest.json" &&
+        \\grep -q 'path="res://components/button/button.gd"' "$tmp/components/button/button.tscn" &&
+        \\./zig-out/bin/godot-cli catalog validate --project-root "$tmp" --json | grep -q '"valid":true'
+    });
+    relink_smoke.setCwd(b.path("."));
+    relink_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&relink_smoke.step);
 
     // Generated CLI surface: the Markdown command reference, the man page, and
     // the shell completions all come from the CommandSpec tree, so they are
