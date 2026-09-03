@@ -1467,6 +1467,15 @@ fn collectPropertyPairs(cli: *const app_mod.App, inv: *const spec.Invocation) ![
     return out.toOwnedSlice(cli.allocator);
 }
 
+fn sceneRecipesHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    _ = inv;
+    const cli = appFrom(ctx);
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "recipes", try scene_plan.recipesJson(cli.allocator));
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "{d} recipes", .{scene_plan.recipes.len}) });
+    return .{ .data = .{ .object = data } };
+}
+
 fn scenePlanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
     const source = try readPatchOrIntent(cli, inv);
@@ -1877,15 +1886,15 @@ pub fn sceneCommands() spec.CommandSpec {
         .description = "Godot project root for uid_cache lookup and res:// seed path",
     };
     const id_session_options = [_]spec.OptionSpec{
-        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
-        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
-        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
-        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format" },
+        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON", .advanced = true },
+        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache", .advanced = true },
+        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties", .advanced = true },
+        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format", .advanced = true },
     };
     const save_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
-        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
-        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides the project root)", .advanced = true },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)", .advanced = true },
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
     } ++ id_session_options;
@@ -1906,8 +1915,8 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "from", .kind = .string, .description = "Current ext_resource path (res://…)" },
         .{ .long = "to", .kind = .string, .description = "New ext_resource path (res://…)" },
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
-        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding" },
-        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding", .advanced = true },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write", .advanced = true },
         .{ .long = "output", .kind = .path, .description = "Output path when processing a single file" },
         .{ .long = "dry-run", .kind = .flag, .description = "Report changes without writing" },
     } ++ id_session_options;
@@ -1986,14 +1995,14 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "rename-node", .kind = .string, .description = "Rename node(s) after copy: Old:New pairs, comma-separated" },
         .{ .long = "set-property", .kind = .string, .description = "Set properties after copy: path/prop=value or path|prop|value, comma-separated" },
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
-        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
-        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides the project root)", .advanced = true },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)", .advanced = true },
         .{ .long = "output", .kind = .path, .description = "Output path (required)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Report copy without writing" },
-        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
-        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
-        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
-        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format" },
+        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON", .advanced = true },
+        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache", .advanced = true },
+        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties", .advanced = true },
+        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format", .advanced = true },
     };
     const diff_options = [_]spec.OptionSpec{
         .{ .long = "properties", .kind = .flag, .description = "Include node property diffs (added/removed/changed)" },
@@ -2008,7 +2017,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)" },
         .{ .long = "name", .kind = .string, .description = "Node name for the new instance" },
         .{ .long = "scene", .kind = .string, .description = "PackedScene res:// path to instance" },
-        .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves scene path; requires --project-root)" },
+        .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves the scene path; needs the project root)" },
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the instance root (%Name from owner scripts)" },
         .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value to set on the instance root (anchors, offsets, overrides)" },
@@ -2068,7 +2077,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "refs",
                 .summary = "List ext_resource references in a scene",
-                .description = "With --project-root, resolves res:// paths to filesystem paths and reports whether each file exists.",
+                .description = "With a project root, resolves res:// paths to filesystem paths and reports whether each file exists.",
                 .options = &refs_options,
                 .handler = sceneRefsHandler,
                 .positionals = &pos.scene_file,
@@ -2120,7 +2129,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "inspect",
                 .summary = "Parse a .tscn file and report structure and ID issues",
-                .description = "Reads section headers, parsed properties (with --json), and runs ID validation. Pass --project-root to check uids against uid_cache.bin.",
+                .description = "Reads section headers, parsed properties (with --json), and runs ID validation. With a project root, uids are checked against uid_cache.bin.",
                 .options = &inspect_options,
                 .handler = sceneInspectHandler,
                 .positionals = &pos.file,
@@ -2249,12 +2258,18 @@ pub fn sceneCommands() spec.CommandSpec {
                 },
             },
             .{
+                .name = "recipes",
+                .summary = "List the intent recipes and the fields each takes",
+                .description = "The same table scene plan and scene apply expand from, as JSON: name, summary, required and optional fields. Served over MCP as the resource godot-cli://docs/recipes.",
+                .handler = sceneRecipesHandler,
+            },
+            .{
                 .name = "plan",
                 .summary = "Expand intent JSON to a patch and preview (no write)",
                 .description =
                 \\Expands an intent into patch ops and previews them; with a scene path, dry-runs the patch against that scene. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json).
                 \\
-                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name"; add_node takes "type" and an optional "properties" object; instance_catalog takes "catalog_id"; connect takes "from", "signal", "to", "method".
+                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name" except node_set, assign_ext, instance_override, and connect, which address existing nodes by "path" (or "from"/"to"). The fields of each recipe: scene recipes (MCP resource godot-cli://docs/recipes).
                 \\
                 \\A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object, numbers and booleans are JSON and a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
                 ,
@@ -2268,7 +2283,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description =
                 \\Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run.
                 \\
-                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
+                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
                 ,
                 .options = &apply_options,
                 .handler = sceneApplyHandler,
@@ -2307,7 +2322,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "set-property",
                 .summary = "Set a property on a node section and save the scene",
-                .description = "Target a node with --node (viewport path) or --node-name, or a section with --section-line. Value is written verbatim after =.",
+                .description = "Target a node with --node (viewport path) or --node-name, or a section with --section-line. The value is Variant text, normalised the way the editor writes it unless --raw-value.",
                 .options = &set_property_options,
                 .handler = sceneSetPropertyHandler,
                 .positionals = &pos.file,
@@ -2353,15 +2368,15 @@ pub fn resourceCommands() spec.CommandSpec {
         .description = "Godot project root for uid_cache lookup and res:// seed path",
     };
     const id_session_options = [_]spec.OptionSpec{
-        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON" },
-        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache" },
-        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties" },
-        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format" },
+        .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON", .advanced = true },
+        .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache", .advanced = true },
+        .{ .long = "godot-save-format", .kind = .flag, .description = "Strip Godot-omitted header fields and default sub_resource properties", .advanced = true },
+        .{ .long = "normalize-properties", .kind = .flag, .description = "Rewrite property values through Variant parse/format", .advanced = true },
     };
     const save_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
-        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides --project-root)" },
-        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides the project root)", .advanced = true },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)", .advanced = true },
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
     } ++ id_session_options;
@@ -2398,8 +2413,8 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "from", .kind = .string, .description = "Current ext_resource path (res://…)" },
         .{ .long = "to", .kind = .string, .description = "New ext_resource path (res://…)" },
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
-        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding" },
-        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write" },
+        .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding", .advanced = true },
+        .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write", .advanced = true },
         .{ .long = "output", .kind = .path, .description = "Output path when processing a single file" },
         .{ .long = "dry-run", .kind = .flag, .description = "Report changes without writing" },
     } ++ id_session_options;

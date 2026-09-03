@@ -84,6 +84,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "doc_scene_authoring", .path = "docs/agent_scene_authoring.md" },
         .{ .name = "doc_batch_commands", .path = "docs/agent_batch_commands.md" },
         .{ .name = "doc_commands", .path = "docs/commands.md" },
+        .{ .name = "doc_mcp_tools", .path = "docs/mcp_tools.json" },
+        .{ .name = "default_project_icon", .path = "share/default_project_icon.svg" },
         .{ .name = "example_assign_sprite_texture", .path = "share/examples/intents/assign_sprite_texture.json" },
         .{ .name = "example_autoload_game_state", .path = "share/examples/intents/autoload_game_state.json" },
         .{ .name = "example_catalog_button", .path = "share/examples/intents/catalog_button.json" },
@@ -193,6 +195,11 @@ pub fn build(b: *std.Build) void {
         \\./zig-out/bin/godot-cli scene instance add "$t/main.tscn" --parent /root/Main --name Btn --scene res://main.tscn --properties '{"visible":false}' --project-root "$t" --json | grep -q '"ok":true' &&
         \\grep -q 'visible = false' "$t/main.tscn" &&
         \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Bad --type Label --properties '{"text":"bare"}' --dry-run --json | grep -q '"field":"text"' &&
+        \\./zig-out/bin/godot-cli scene node list "$t/main.tscn" --json | grep -q '"type":"PackedScene"' &&
+        \\./zig-out/bin/godot-cli scene recipes --json | grep -q '"name":"static_body_2d"' &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"static_body_2d","parent":"/root/Main","name":"Floor","size":"Vector2(200, 20)","color":"Color(0.3, 0.5, 0.8, 1)"}]}' --json | grep -q 'PackedVector2Array(-100, -10, 100, -10, 100, 10, -100, 10)' &&
+        \\test -s "$t/icon.svg" &&
+        \\./zig-out/bin/godot-cli project show --project-root "$t" --json | grep -q '"viewport_width":"640"' &&
         \\rm -rf "$t"
     });
     batch_fixes_smoke.setCwd(b.path("."));

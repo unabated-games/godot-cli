@@ -61,6 +61,7 @@ godot-cli scene instance add scenes/main.tscn --parent /root/Main --name Btn --c
 godot-cli scene connection add scenes/main.tscn --from /root/Main/Btn --signal pressed --to /root/Main --method _on_btn_pressed --project-root .
 godot-cli scene apply scenes/main.tscn --intent intents/hud.json --project-root . --json        # recipes: player_2d, static_body_2d, camera_2d, ui_panel, connect, ...
 godot-cli scene apply scenes/main.tscn --intent-json '{"steps":[...]}' --project-root . --json           # the same, inline; --patch-json for a patch
+godot-cli scene recipes --json                                                                 # every recipe and its fields
 godot-cli scene node add scenes/main.tscn --parent /root/Main --name Box --type Node2D --properties '{"visible":false,"z_index":3}' --project-root .
 godot-cli scene apply scenes/main.tscn --patch patch.json --dry-run --project-root . --json     # preview; --write-undo-patch undo.json to record the reverse
 

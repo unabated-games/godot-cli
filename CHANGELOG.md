@@ -27,6 +27,12 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 - Options that take a whole number (`project new --width` and `--height`, `scene connection add --unbinds`, `set-property --section-line`) are declared as integers: the parser rejects anything else and the MCP schema says `integer`.
 - `invalid_property_value` names the property that failed rather than `value`, so a multi-property object points at the right entry.
 - The quickstart's "Read next" table gives each document's MCP resource URI.
+- **`scene recipes`** lists every intent recipe with its required and optional fields, from the same table the expander uses; the MCP server serves it as `godot-cli://docs/recipes`, under 2 KB. Trial 12 read the 37 KB guide for exactly this.
+- **`static_body_2d` takes `color`** and adds a filled `Polygon2D` the size of the collision box. Trial 12's walls were collision-only, and with the camera under the player, movement was invisible; the basics doc now says why.
+- `project new` writes Godot's default `icon.svg` beside `project.godot` unless one exists (`--no-icon` skips it), since the examples reference `res://icon.svg`.
+- `project show` reports the window size and stretch settings.
+- The MCP tool schemas leave out the save-preparation and id-session plumbing (`id-session`, `no-id-session`, `godot-save-format`, `normalize-properties`, `no-prepare-save`, `resource-path`) unless the server is started with `--all-options`; the CLI still accepts them everywhere.
+- Each `project <section> apply` describes its own intent shape instead of the shared one; `docs/mcp_tools.json` is served as `godot-cli://docs/mcp-tools`; `scene node list` reports instanced nodes as `PackedScene` rather than an empty type; `catalog add` says when `scene_uid` is empty and what to run; the five tool descriptions that still said `--project-root` no longer do; and `set-property` no longer contradicts itself about normalisation.
 
 ## [0.9.0] — 2026-09-03
 

@@ -17,6 +17,10 @@ const builtin = @import("builtin");
 /// with the exclusion set in `tools/check_mcp_tools.sh`.
 pub const excluded = [_][]const u8{ "help", "ping", "completions", "man", "reference", "mcp" };
 
+/// Set from `godot-cli mcp --all-options`; otherwise advanced options are
+/// left out of the schemas and rejected as unknown.
+pub var include_advanced: bool = false;
+
 pub const Tool = struct {
     name: []const u8,
     path: []const []const u8,
@@ -101,6 +105,7 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
 
     for (tool.command.options) |opt| {
         if (pinned and std.mem.eql(u8, opt.long, "project-root")) continue;
+        if (opt.advanced and !include_advanced) continue;
         var prop: std.json.ObjectMap = .{};
         if (opt.repeatable) {
             try prop.put(allocator, "type", .{ .string = "array" });
@@ -202,6 +207,7 @@ pub fn buildArgv(
 
     for (tool.command.options) |opt| {
         if (pinned and std.mem.eql(u8, opt.long, "project-root")) continue;
+        if (opt.advanced and !include_advanced) continue;
         const value = args.get(opt.long) orelse continue;
         switch (opt.kind) {
             .flag => switch (value) {
@@ -259,6 +265,7 @@ fn isKnownArgument(tool: *const Tool, key: []const u8, pinned: bool) bool {
     for (tool.command.positionals) |arg| if (std.mem.eql(u8, arg.name, key)) return true;
     for (tool.command.options) |opt| {
         if (pinned and std.mem.eql(u8, opt.long, "project-root")) continue;
+        if (opt.advanced and !include_advanced) continue;
         if (std.mem.eql(u8, opt.long, key)) return true;
     }
     return false;
@@ -361,7 +368,7 @@ test "every runnable command outside the exclusion set is a tool with a valid na
         const schema = json.object.get("inputSchema").?.object;
         try std.testing.expectEqualStrings("object", schema.get("type").?.string);
         const properties = schema.get("properties").?.object;
-        for (tool.command.options) |opt| try std.testing.expect(properties.contains(opt.long));
+        for (tool.command.options) |opt| try std.testing.expect(properties.contains(opt.long) or opt.advanced);
         for (tool.command.positionals) |arg| try std.testing.expect(properties.contains(arg.name));
     }
 }

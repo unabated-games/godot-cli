@@ -405,6 +405,27 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             const sprite_path = try std.fmt.allocPrint(ops_alloc, "{s}/Sprite", .{body_path});
             try appendAssignExt(ops_alloc, ops, sprite_path, "texture", "Texture2D", tex.string, try defaultExtHint(ops_alloc, tex.string, "texture"));
         }
+        // A filled polygon the size of the collision rectangle, so a wall or
+        // floor is visible without a texture. Trial 12's walls were
+        // collision-only, and with a following camera the player looked stuck.
+        if (step.get("color")) |color_value| {
+            if (color_value != .string) return error.InvalidIntent;
+            const inner = std.mem.trim(u8, size[(std.mem.indexOfScalar(u8, size, '(') orelse return error.InvalidIntent) + 1 .. size.len - 1], " ");
+            const comma = std.mem.indexOfScalar(u8, inner, ',') orelse return error.InvalidIntent;
+            const w = std.fmt.parseFloat(f64, std.mem.trim(u8, inner[0..comma], " ")) catch return error.InvalidIntent;
+            const h = std.fmt.parseFloat(f64, std.mem.trim(u8, inner[comma + 1 ..], " ")) catch return error.InvalidIntent;
+            var fill_props: std.json.ObjectMap = .{};
+            try fill_props.put(ops_alloc, "polygon", .{ .string = try std.fmt.allocPrint(ops_alloc, "PackedVector2Array({d}, {d}, {d}, {d}, {d}, {d}, {d}, {d})", .{ -w / 2, -h / 2, w / 2, -h / 2, w / 2, h / 2, -w / 2, h / 2 }) });
+            try fill_props.put(ops_alloc, "color", .{ .string = try ops_alloc.dupe(u8, color_value.string) });
+            var fill_op = try makeOpObject(ops_alloc, &[_]Field{
+                .{ "op", "node_add" },
+                .{ "parent", body_path },
+                .{ "name", "Fill" },
+                .{ "type", "Polygon2D" },
+            });
+            try fill_op.object.put(ops_alloc, "properties", .{ .object = fill_props });
+            try ops.append(fill_op);
+        }
         return;
     }
 
@@ -661,6 +682,72 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         .hint = "unknown recipe; known: " ++ recipe_names_text,
     });
     return error.UnknownRecipe;
+}
+
+pub const Recipe = struct {
+    name: []const u8,
+    summary: []const u8,
+    required: []const []const u8,
+    optional: []const []const u8,
+};
+
+/// What each recipe takes. `scene recipes` prints this as JSON and the MCP
+/// server serves it as godot-cli://docs/recipes; a test checks the names
+/// against `recipe_names` and the expander.
+pub const recipes = [_]Recipe{
+    .{ .name = "add_node", .summary = "One node of any type under a parent, with optional properties", .required = &.{ "parent", "name", "type" }, .optional = &.{ "properties", "unique_name" } },
+    .{ .name = "node_set", .summary = "Set one property on an existing node", .required = &.{ "path", "property", "value" }, .optional = &.{} },
+    .{ .name = "assign_ext", .summary = "Register an external file (script, texture, .tres) and point a node property at it", .required = &.{ "path", "property" }, .optional = &.{ "res_path", "ext_type", "id_hint" } },
+    .{ .name = "connect", .summary = "A [connection] section: signal from one node to a method on another", .required = &.{ "from", "signal", "to", "method" }, .optional = &.{} },
+    .{ .name = "instance_catalog", .summary = "Instance a project catalog entry by id", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "properties", "editable" } },
+    .{ .name = "instance_scene", .summary = "Instance a scene by res:// path", .required = &.{ "parent", "name", "scene" }, .optional = &.{ "properties", "editable" } },
+    .{ .name = "instance_override", .summary = "Override a property on an instanced scene's root, or on a child with editable children", .required = &.{ "path", "property", "value" }, .optional = &.{ "child", "editable" } },
+    .{ .name = "catalog_button", .summary = "Instance a catalog button and set its label", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "label", "editable" } },
+    .{ .name = "player_2d", .summary = "CharacterBody2D with capsule collision, optional sprite, script, and position", .required = &.{ "parent", "name" }, .optional = &.{ "position", "radius", "texture", "script", "modulate", "sprite" } },
+    .{ .name = "static_body_2d", .summary = "StaticBody2D with a rectangle collision; texture tiles a sprite, color draws a filled polygon so the body is visible", .required = &.{ "parent", "name" }, .optional = &.{ "position", "size", "texture", "color" } },
+    .{ .name = "camera_2d", .summary = "Camera2D; under the player it follows, under the root it stays put", .required = &.{ "parent", "name" }, .optional = &.{ "zoom", "enabled" } },
+    .{ .name = "ui_panel", .summary = "Panel with an optional title label", .required = &.{ "parent", "name" }, .optional = &.{ "title", "full_rect" } },
+    .{ .name = "tilemap_layer", .summary = "TileMapLayer with an optional tileset", .required = &.{ "parent", "name" }, .optional = &.{ "tileset", "with_tilemap", "tilemap_name" } },
+    .{ .name = "audio_player", .summary = "AudioStreamPlayer (or 2D with spatial) with optional stream", .required = &.{ "parent", "name" }, .optional = &.{ "stream", "autoplay", "volume_db", "spatial" } },
+};
+
+/// A short reference for agents: one line per recipe.
+pub fn recipesReference(allocator: std.mem.Allocator) ![]u8 {
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    const w = &out.writer;
+    try w.writeAll("# Intent recipes\n\nAn intent is {\"steps\": [{\"recipe\": \"<name>\", ...fields}]}. Property values inside a properties object: numbers and booleans are JSON, a string carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a JSON number is written as given (8 stays 8; write 8.0 for a float property).\n\n");
+    for (recipes) |recipe| {
+        try w.print("- `{s}`: {s}. Required: ", .{ recipe.name, recipe.summary });
+        for (recipe.required, 0..) |field, i| try w.print("{s}`{s}`", .{ if (i == 0) "" else ", ", field });
+        if (recipe.optional.len != 0) {
+            try w.writeAll(". Optional: ");
+            for (recipe.optional, 0..) |field, i| try w.print("{s}`{s}`", .{ if (i == 0) "" else ", ", field });
+        }
+        try w.writeAll("\n");
+    }
+    return out.toOwnedSlice();
+}
+
+pub fn recipesJson(allocator: std.mem.Allocator) !std.json.Value {
+    var list: std.json.Array = .init(allocator);
+    for (recipes) |recipe| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(allocator, "name", .{ .string = recipe.name });
+        try row.put(allocator, "summary", .{ .string = recipe.summary });
+        var req: std.json.Array = .init(allocator);
+        for (recipe.required) |f| try req.append(.{ .string = f });
+        try row.put(allocator, "required", .{ .array = req });
+        var opt: std.json.Array = .init(allocator);
+        for (recipe.optional) |f| try opt.append(.{ .string = f });
+        try row.put(allocator, "optional", .{ .array = opt });
+        try list.append(.{ .object = row });
+    }
+    return .{ .array = list };
+}
+
+test "the recipe table and the name list agree" {
+    try std.testing.expectEqual(recipe_names.len, recipes.len);
+    for (recipes, recipe_names) |recipe, name| try std.testing.expectEqualStrings(name, recipe.name);
 }
 
 /// Every recipe `expandRecipe` accepts, in the order the docs list them. The

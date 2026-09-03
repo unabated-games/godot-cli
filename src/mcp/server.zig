@@ -24,11 +24,14 @@ const version = @import("../version.zig");
 const tools = @import("tools.zig");
 const resources = @import("resources.zig");
 const prompts = @import("prompts.zig");
+const scene_plan = @import("../godot/scene_plan.zig");
 
 pub const Options = struct {
     /// Change into this directory, inject `--project-root .` into every call
     /// that accepts it, and refuse path arguments that resolve outside it.
     project_root: ?[]const u8 = null,
+    /// Expose the save-preparation and id-session plumbing options too.
+    include_advanced: bool = false,
 };
 
 pub const modern_versions = [_][]const u8{ "2026-07-28", "2025-11-25" };
@@ -45,6 +48,7 @@ const instructions =
 
 const catalog_uri = "godot-cli://catalog";
 const session_uri = "godot-cli://prompts/session";
+const recipes_uri = "godot-cli://docs/recipes";
 
 const State = struct {
     gpa: std.mem.Allocator,
@@ -67,6 +71,7 @@ pub fn serve(
     environ: std.process.Environ,
     options: Options,
 ) !void {
+    tools.include_advanced = options.include_advanced;
     var root_buf: [std.fs.max_path_bytes]u8 = undefined;
     var confinement: tools.Confinement = .{};
     if (options.project_root) |dir_path| {
@@ -351,6 +356,15 @@ fn listResources(state: *State, arena: std.mem.Allocator) !Outcome {
         try list.append(.{ .object = row });
     }
     {
+        var row: std.json.ObjectMap = .{};
+        try row.put(arena, "uri", .{ .string = recipes_uri });
+        try row.put(arena, "name", .{ .string = "recipes" });
+        try row.put(arena, "title", .{ .string = "Intent recipes" });
+        try row.put(arena, "description", .{ .string = "Every intent recipe with its required and optional fields, one line each. Read this instead of the full scene-authoring guide when writing an intent." });
+        try row.put(arena, "mimeType", .{ .string = "text/markdown" });
+        try list.append(.{ .object = row });
+    }
+    {
         // Many clients hide prompts; the session opener is a resource as well.
         var row: std.json.ObjectMap = .{};
         try row.put(arena, "uri", .{ .string = session_uri });
@@ -389,6 +403,9 @@ fn readResource(state: *State, arena: std.mem.Allocator, params: ?std.json.Objec
     } else if (std.mem.eql(u8, uri, session_uri)) {
         mime = "text/markdown";
         text = prompts.rules;
+    } else if (std.mem.eql(u8, uri, recipes_uri)) {
+        mime = "text/markdown";
+        text = try scene_plan.recipesReference(arena);
     } else if (state.pinned() and std.mem.eql(u8, uri, catalog_uri)) {
         const tool = tools.find(state.tool_list, "catalog_list").?;
         const argv = switch (try tools.buildArgv(arena, tool, null, state.confinement)) {
@@ -572,7 +589,7 @@ test "resources and the prompt are listed and readable" {
     var state = try testState(arena);
 
     const listed = try dispatch(&state, arena, "resources/list", null);
-    try std.testing.expect(listed.result.object.get("resources").?.array.items.len == resources.docs.len + 1);
+    try std.testing.expect(listed.result.object.get("resources").?.array.items.len == resources.docs.len + 2);
 
     var params: std.json.ObjectMap = .{};
     try params.put(arena, "uri", .{ .string = resources.quickstart_uri });

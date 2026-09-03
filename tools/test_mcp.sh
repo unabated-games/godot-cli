@@ -25,6 +25,7 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"uri":"godot-cli://catalog"}}' \
   '{"jsonrpc":"2.0","id":8,"method":"resources/read","params":{"uri":"godot-cli://prompts/session"}}' \
   '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"project_show","arguments":{}}}' \
+  '{"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":"godot-cli://docs/recipes"}}' \
   | "$binary" mcp --project-root test_fixtures/project >"$legacy_out"
 
 printf '%s\n' \
@@ -42,7 +43,7 @@ def lines(path):
         return [json.loads(line) for line in handle if line.strip()]
 
 legacy = lines(sys.argv[1])
-assert len(legacy) == 9, f"expected 9 legacy responses, got {len(legacy)}"
+assert len(legacy) == 10, f"expected 10 legacy responses, got {len(legacy)}"
 by_id = {r["id"]: r for r in legacy}
 
 init = by_id[1]["result"]
@@ -83,6 +84,10 @@ session = by_id[8]["result"]["contents"][0]
 assert "project_move" in session["text"], session
 shown = by_id[9]["result"]["structuredContent"]
 assert shown["ok"] and shown["data"]["project_root"].startswith("/"), shown
+recipes = by_id[10]["result"]["contents"][0]["text"]
+assert "`static_body_2d`" in recipes and "`color`" in recipes, recipes[:200]
+node_add_schema = next(t for t in tools if t["name"] == "scene_node_add")["inputSchema"]["properties"]
+assert "id-session" not in node_add_schema and "dry-run" in node_add_schema, list(node_add_schema)
 new_schema = next(t for t in tools if t["name"] == "project_new")["inputSchema"]["properties"]
 assert new_schema["width"]["type"] == "integer", new_schema["width"]
 

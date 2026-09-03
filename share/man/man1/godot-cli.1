@@ -153,7 +153,7 @@ Scene root node type (default: Node)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -176,8 +176,8 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene refs
 List ext_resource references in a scene
 .PP
-With \-\-project\-root, resolves res:// paths to filesystem
-paths and reports whether each file exists.
+With a project root, resolves res:// paths to filesystem paths
+and reports whether each file exists.
 .TP
 \fIfile\fR
 Scene file (.tscn)
@@ -205,7 +205,7 @@ Godot res:// path for the external resource
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -245,7 +245,7 @@ Resource id as written in the file, e.g. CapsuleShape2D_abc12
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -300,7 +300,7 @@ Write property value verbatim
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -340,7 +340,7 @@ Resource id as written in the file, e.g. CapsuleShape2D_abc12
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -367,7 +367,7 @@ Rewrite property values through Variant parse/format
 Parse a .tscn file and report structure and ID issues
 .PP
 Reads section headers, parsed properties (with \-\-json), and
-runs ID validation. Pass \-\-project\-root to check uids against
+runs ID validation. With a project root, uids are checked against
 uid_cache.bin.
 .TP
 \fIfile\fR
@@ -455,7 +455,7 @@ Name / %Name)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -497,7 +497,7 @@ Remove descendant nodes as well
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -540,7 +540,7 @@ New node name
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -583,7 +583,7 @@ New parent, viewport path (e.g. /root/Main)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -655,7 +655,7 @@ Number of trailing signal arguments to drop
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -701,7 +701,7 @@ between the two nodes
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -745,7 +745,8 @@ Node name for the new instance
 PackedScene res:// path to instance
 .TP
 \fB\-\-catalog\-id\fR \fIvalue\fR
-Project catalog id (resolves scene path; requires \-\-project\-root)
+Project catalog id (resolves the scene path; needs the project
+root)
 .TP
 \fB\-\-editable\fR
 Mark the instance editable in the parent scene ([editable path=...])
@@ -762,7 +763,7 @@ root (anchors, offsets, overrides)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -841,7 +842,7 @@ comma\-separated
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -864,6 +865,12 @@ properties
 .TP
 \fB\-\-normalize\-properties\fR
 Rewrite property values through Variant parse/format
+.SS godot\-cli scene recipes
+List the intent recipes and the fields each takes
+.PP
+The same table scene plan and scene apply expand from, as JSON:
+name, summary, required and optional fields. Served over MCP
+as the resource godot\-cli://docs/recipes.
 .SS godot\-cli scene plan
 Expand intent JSON to a patch and preview (no write)
 .PP
@@ -877,9 +884,9 @@ An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main",
 connect, instance_catalog, instance_scene, instance_override,
 catalog_button, player_2d, static_body_2d, camera_2d, ui_panel,
 tilemap_layer, audio_player. Every recipe takes "parent" and
-"name"; add_node takes "type" and an optional "properties"
-object; instance_catalog takes "catalog_id"; connect takes
-"from", "signal", "to", "method".
+"name" except node_set, assign_ext, instance_override, and
+connect, which address existing nodes by "path" (or "from"/"to").
+The fields of each recipe: scene recipes (MCP resource godot\-cli://docs/recipes).
 
 A patch is {"ops": [{"op": "node_add", "parent": "/root/Main",
 "name": "HUD", "type": "CanvasLayer", "properties": {"visible":
@@ -920,11 +927,13 @@ An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main",
 "name": "Player"}]}. Recipes: add_node, node_set, assign_ext,
 connect, instance_catalog, instance_scene, instance_override,
 catalog_button, player_2d, static_body_2d, camera_2d, ui_panel,
-tilemap_layer, audio_player. A patch is {"ops": [{"op": "node_add",
-"parent": "/root/Main", "name": "HUD", "type": "CanvasLayer",
-"properties": {"visible": false}}]}. In a properties object
-a string carries its own quotes: "text": "\e"Score\e"". Full
-reference: agent_scene_authoring.md, served over MCP as godot\-cli://docs/scene\-authoring.
+tilemap_layer, audio_player; their fields: scene recipes (MCP
+resource godot\-cli://docs/recipes). A patch is {"ops": [{"op":
+"node_add", "parent": "/root/Main", "name": "HUD", "type":
+"CanvasLayer", "properties": {"visible": false}}]}. In a properties
+object a string carries its own quotes: "text": "\e"Score\e"".
+Full reference: agent_scene_authoring.md, served over MCP as
+godot\-cli://docs/scene\-authoring.
 .TP
 \fIfile\fR
 Scene file (.tscn)
@@ -964,7 +973,7 @@ With \-\-dry\-run, include property\-level changes in preview_diff
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1041,8 +1050,8 @@ Godot project root for uid_cache lookup and res:// seed path
 Set a property on a node section and save the scene
 .PP
 Target a node with \-\-node (viewport path) or \-\-node\-name,
-or a section with \-\-section\-line. Value is written verbatim
-after =.
+or a section with \-\-section\-line. The value is Variant text,
+normalised the way the editor writes it unless \-\-raw\-value.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -1075,7 +1084,7 @@ Target section by tag name (e.g. resource)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1111,7 +1120,7 @@ Scene or resource file (.tscn or .tres)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1232,7 +1241,7 @@ Write property values verbatim
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1281,7 +1290,7 @@ Write property values verbatim
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1320,7 +1329,7 @@ Resource id as written in the file, e.g. CapsuleShape2D_abc12
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1361,7 +1370,7 @@ res:// path of the external file
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1400,7 +1409,7 @@ Resource id as written in the file, e.g. CapsuleShape2D_abc12
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1485,7 +1494,7 @@ Target section by tag name (default: resource)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1519,7 +1528,7 @@ Scene or resource file (.tscn or .tres)
 Godot project root for res:// seed path and id session cache
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
-Godot res:// path for ID seeding (overrides \-\-project\-root)
+Godot res:// path for ID seeding (overrides the project root)
 .TP
 \fB\-\-no\-prepare\-save\fR
 Skip Godot save preparation (ID repair/sort)
@@ -1774,6 +1783,9 @@ Viewport height in pixels (display/window/size/viewport_height)
 .TP
 \fB\-\-dry\-run\fR
 Report what would be written without creating the file
+.TP
+\fB\-\-no\-icon\fR
+Do not write the default icon.svg beside project.godot
 .SS godot\-cli project show
 Summarize key project.godot configuration
 .TP
@@ -1843,11 +1855,10 @@ Apply input map intent JSON (merge/replace per action)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file: settings {"<section>": {"<key>": value}},
-input {"actions": [{"name", "events": [{"type": "key", "keycode":
-"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
-"path", "singleton"}]}, plugins, rendering, physics; see the
-examples
+Intent JSON file: {"actions": [{"name": "move_left", "events":
+[{"type": "key", "keycode": "A", "physical": true}, {"type":
+"joypad_motion", "axis": "left_x", "axis_value": \-1.0}]}]};
+each action replaces one of the same name
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -1911,11 +1922,9 @@ Apply settings intent JSON (per\-key merge)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file: settings {"<section>": {"<key>": value}},
-input {"actions": [{"name", "events": [{"type": "key", "keycode":
-"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
-"path", "singleton"}]}, plugins, rendering, physics; see the
-examples
+Intent JSON file: {"<section>": {"<key>": value}}, e.g. {"application":
+{"run/main_scene": "res://scenes/main.tscn"}, "display": {"window/size/viewport_width":
+640}}; keys merge into the existing file
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -1947,11 +1956,9 @@ Apply autoload intent JSON (merge by name; optional replace_all)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file: settings {"<section>": {"<key>": value}},
-input {"actions": [{"name", "events": [{"type": "key", "keycode":
-"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
-"path", "singleton"}]}, plugins, rendering, physics; see the
-examples
+Intent JSON file: {"autoloads": [{"name": "GameState", "path":
+"res://scripts/game_state.gd", "singleton": true}], "replace_all":
+false}
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -2008,11 +2015,8 @@ Apply plugin intent JSON (enable/disable lists)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file: settings {"<section>": {"<key>": value}},
-input {"actions": [{"name", "events": [{"type": "key", "keycode":
-"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
-"path", "singleton"}]}, plugins, rendering, physics; see the
-examples
+Intent JSON file: {"enable": ["my_addon"], "disable": []};
+names are folders under addons/
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -2041,11 +2045,9 @@ Apply rendering intent JSON (friendly aliases)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file: settings {"<section>": {"<key>": value}},
-input {"actions": [{"name", "events": [{"type": "key", "keycode":
-"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
-"path", "singleton"}]}, plugins, rendering, physics; see the
-examples
+Intent JSON file: {"method": "forward_plus" | "mobile" | "gl_compatibility",
+"driver": "vulkan" | "d3d12" | "metal" | "opengl3"}, or raw
+rendering/ keys
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -2074,11 +2076,8 @@ Apply physics intent JSON (friendly aliases)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file: settings {"<section>": {"<key>": value}},
-input {"actions": [{"name", "events": [{"type": "key", "keycode":
-"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
-"path", "singleton"}]}, plugins, rendering, physics; see the
-examples
+Intent JSON file: {"engine_3d": "Jolt Physics", "gravity_3d":
+980, "engine_2d": "GodotPhysics2D", "gravity_2d": 980}
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -2148,6 +2147,10 @@ leave it.
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project to serve; injected into every call and enforced
 on path arguments
+.TP
+\fB\-\-all\-options\fR
+Also expose the save\-preparation and id\-session options in
+the tool schemas
 .SH EXIT STATUS
 .TP
 .B 0

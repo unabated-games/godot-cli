@@ -69,6 +69,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli scene template list`](#godot-cli-scene-template-list) | List built-in scene templates |
 | [`godot-cli scene template show`](#godot-cli-scene-template-show) | Show template metadata, node tree, and sections |
 | [`godot-cli scene template copy`](#godot-cli-scene-template-copy) | Copy a template to a new scene file |
+| [`godot-cli scene recipes`](#godot-cli-scene-recipes) | List the intent recipes and the fields each takes |
 | [`godot-cli scene plan`](#godot-cli-scene-plan) | Expand intent JSON to a patch and preview (no write) |
 | [`godot-cli scene apply`](#godot-cli-scene-apply) | Apply a declarative JSON patch to a scene |
 | [`godot-cli scene diff`](#godot-cli-scene-diff) | Compare node trees between two scenes |
@@ -374,6 +375,7 @@ godot-cli scene [options]
 | [`connection`](#godot-cli-scene-connection) | Signal connections stored in the scene ([connection] sections) |
 | [`instance`](#godot-cli-scene-instance) | Add instanced PackedScene nodes |
 | [`template`](#godot-cli-scene-template) | Built-in scene templates for scaffolding |
+| [`recipes`](#godot-cli-scene-recipes) | List the intent recipes and the fields each takes |
 | [`plan`](#godot-cli-scene-plan) | Expand intent JSON to a patch and preview (no write) |
 | [`apply`](#godot-cli-scene-apply) | Apply a declarative JSON patch to a scene |
 | [`diff`](#godot-cli-scene-diff) | Compare node trees between two scenes |
@@ -404,7 +406,7 @@ godot-cli scene new [options]
 | `--root-name` | `<value>` | Scene root node name (default: Root) | — |
 | `--root-type` | `<value>` | Scene root node type (default: Node) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
@@ -416,7 +418,7 @@ godot-cli scene new [options]
 
 List ext_resource references in a scene
 
-With --project-root, resolves res:// paths to filesystem paths and reports whether each file exists.
+With a project root, resolves res:// paths to filesystem paths and reports whether each file exists.
 
 ```
 godot-cli scene refs [options] <file>
@@ -472,7 +474,7 @@ godot-cli scene ext add [options] <file>
 | `--type` | `<value>` | Godot resource type (e.g. Script, PackedScene) | — |
 | `--path` | `<value>` | Godot res:// path for the external resource | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -503,7 +505,7 @@ godot-cli scene ext remove [options] <file> <id>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -553,7 +555,7 @@ godot-cli scene sub add [options] <file>
 | `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -584,7 +586,7 @@ godot-cli scene sub remove [options] <file> <id>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -597,7 +599,7 @@ godot-cli scene sub remove [options] <file> <id>
 
 Parse a .tscn file and report structure and ID issues
 
-Reads section headers, parsed properties (with --json), and runs ID validation. Pass --project-root to check uids against uid_cache.bin.
+Reads section headers, parsed properties (with --json), and runs ID validation. With a project root, uids are checked against uid_cache.bin.
 
 ```
 godot-cli scene inspect [options] <file>
@@ -711,7 +713,7 @@ godot-cli scene node add [options] <file>
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -743,7 +745,7 @@ godot-cli scene node remove [options] <file> <node>
 |--------|-------|-------------|---------|
 | `--recursive` | — | Remove descendant nodes as well | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -775,7 +777,7 @@ godot-cli scene node rename [options] <file> <node>
 |--------|-------|-------------|---------|
 | `--name` | `<value>` | New node name | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -807,7 +809,7 @@ godot-cli scene node reparent [options] <file> <node>
 |--------|-------|-------------|---------|
 | `--parent` | `<value>` | New parent, viewport path (e.g. /root/Main) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -877,7 +879,7 @@ godot-cli scene connection add [options] <file>
 | `--binds` | `<value>` | Extra arguments as Godot array text, e.g. '["quit"]' | — |
 | `--unbinds` | `<n>` | Number of trailing signal arguments to drop | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -909,7 +911,7 @@ godot-cli scene connection remove [options] <file>
 | `--to` | `<value>` | Receiving node, viewport path | — |
 | `--method` | `<value>` | Method name; omit to remove every connection of that signal between the two nodes | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -955,12 +957,12 @@ godot-cli scene instance add [options] <file>
 | `--parent` | `<value>` | Viewport parent path (e.g. /root/Main) | — |
 | `--name` | `<value>` | Node name for the new instance | — |
 | `--scene` | `<value>` | PackedScene res:// path to instance | — |
-| `--catalog-id` | `<value>` | Project catalog id (resolves scene path; requires --project-root) | — |
+| `--catalog-id` | `<value>` | Project catalog id (resolves the scene path; needs the project root) | — |
 | `--editable` | — | Mark the instance editable in the parent scene ([editable path=...]) | — |
 | `--unique-name` | — | Set unique_name_in_owner on the instance root (%Name from owner scripts) | — |
 | `--properties` | `<value>` | JSON object of property name to value to set on the instance root (anchors, offsets, overrides) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1049,7 +1051,7 @@ godot-cli scene template copy [options] <template>
 | `--rename-node` | `<value>` | Rename node(s) after copy: Old:New pairs, comma-separated | — |
 | `--set-property` | `<value>` | Set properties after copy: path/prop=value or path\|prop\|value, comma-separated | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (required) | — |
 | `--dry-run` | — | Report copy without writing | — |
@@ -1058,13 +1060,23 @@ godot-cli scene template copy [options] <template>
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
 | `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
 
+### `godot-cli scene recipes`
+
+List the intent recipes and the fields each takes
+
+The same table scene plan and scene apply expand from, as JSON: name, summary, required and optional fields. Served over MCP as the resource godot-cli://docs/recipes.
+
+```
+godot-cli scene recipes
+```
+
 ### `godot-cli scene plan`
 
 Expand intent JSON to a patch and preview (no write)
 
 Expands an intent into patch ops and previews them; with a scene path, dry-runs the patch against that scene. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json).
 
-An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name"; add_node takes "type" and an optional "properties" object; instance_catalog takes "catalog_id"; connect takes "from", "signal", "to", "method".
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name" except node_set, assign_ext, instance_override, and connect, which address existing nodes by "path" (or "from"/"to"). The fields of each recipe: scene recipes (MCP resource godot-cli://docs/recipes).
 
 A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object, numbers and booleans are JSON and a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
 
@@ -1095,7 +1107,7 @@ Apply a declarative JSON patch to a scene
 
 Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run.
 
-An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
 
 ```
 godot-cli scene apply [options] <file>
@@ -1122,7 +1134,7 @@ godot-cli scene apply [options] <file>
 | `--no-strict` | — | Continue applying ops after a failure (default: stop on first error) | — |
 | `--preview-properties` | — | With --dry-run, include property-level changes in preview_diff | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1223,7 +1235,7 @@ godot-cli scene validate-batch [options] <files>...
 
 Set a property on a node section and save the scene
 
-Target a node with --node (viewport path) or --node-name, or a section with --section-line. Value is written verbatim after =.
+Target a node with --node (viewport path) or --node-name, or a section with --section-line. The value is Variant text, normalised the way the editor writes it unless --raw-value.
 
 ```
 godot-cli scene set-property [options] <file>
@@ -1248,7 +1260,7 @@ godot-cli scene set-property [options] <file>
 | `--section-line` | `<n>` | Target section by header line number | — |
 | `--section` | `<value>` | Target section by tag name (e.g. resource) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1278,7 +1290,7 @@ godot-cli scene normalize [options] <file>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1406,7 +1418,7 @@ godot-cli resource new [options]
 | `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
@@ -1453,7 +1465,7 @@ godot-cli resource sub add [options] <file>
 | `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1484,7 +1496,7 @@ godot-cli resource sub remove [options] <file> <id>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1529,7 +1541,7 @@ godot-cli resource ext add [options] <file>
 | `--type` | `<value>` | Resource type of the external file (e.g. Texture2D, Script) | — |
 | `--path` | `<value>` | res:// path of the external file | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1560,7 +1572,7 @@ godot-cli resource ext remove [options] <file> <id>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1658,7 +1670,7 @@ godot-cli resource set-property [options] <file>
 | `--section-line` | `<n>` | Target section by header line number | — |
 | `--section` | `<value>` | Target section by tag name (default: resource) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -1686,7 +1698,7 @@ godot-cli resource normalize [options] <file>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
-| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
@@ -2013,6 +2025,7 @@ godot-cli project new [options]
 | `--width` | `<n>` | Viewport width in pixels (display/window/size/viewport_width) | — |
 | `--height` | `<n>` | Viewport height in pixels (display/window/size/viewport_height) | — |
 | `--dry-run` | — | Report what would be written without creating the file | — |
+| `--no-icon` | — | Do not write the default icon.svg beside project.godot | — |
 
 ### `godot-cli project show`
 
@@ -2110,7 +2123,7 @@ godot-cli project input apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
+| `--intent` | `<path>` | Intent JSON file: {"actions": [{"name": "move_left", "events": [{"type": "key", "keycode": "A", "physical": true}, {"type": "joypad_motion", "axis": "left_x", "axis_value": -1.0}]}]}; each action replaces one of the same name | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2210,7 +2223,7 @@ godot-cli project settings apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
+| `--intent` | `<path>` | Intent JSON file: {"&lt;section&gt;": {"&lt;key&gt;": value}}, e.g. {"application": {"run/main_scene": "res://scenes/main.tscn"}, "display": {"window/size/viewport_width": 640}}; keys merge into the existing file | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2273,7 +2286,7 @@ godot-cli project autoload apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
+| `--intent` | `<path>` | Intent JSON file: {"autoloads": [{"name": "GameState", "path": "res://scripts/game_state.gd", "singleton": true}], "replace_all": false} | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2371,7 +2384,7 @@ godot-cli project plugins apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
+| `--intent` | `<path>` | Intent JSON file: {"enable": ["my_addon"], "disable": []}; names are folders under addons/ | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2433,7 +2446,7 @@ godot-cli project rendering apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
+| `--intent` | `<path>` | Intent JSON file: {"method": "forward_plus" \| "mobile" \| "gl_compatibility", "driver": "vulkan" \| "d3d12" \| "metal" \| "opengl3"}, or raw rendering/ keys | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2495,7 +2508,7 @@ godot-cli project physics apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
+| `--intent` | `<path>` | Intent JSON file: {"engine_3d": "Jolt Physics", "gravity_3d": 980, "engine_2d": "GodotPhysics2D", "gravity_2d": 980} | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2592,6 +2605,7 @@ godot-cli mcp [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project to serve; injected into every call and enforced on path arguments | — |
+| `--all-options` | — | Also expose the save-preparation and id-session options in the tool schemas | — |
 
 ## Exit codes
 

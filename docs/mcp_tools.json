@@ -829,6 +829,21 @@
       }
     },
     {
+      "name": "scene_recipes",
+      "argv": [
+        "scene",
+        "recipes"
+      ],
+      "description": "List every intent recipe with its required and optional fields.",
+      "json_request": {
+        "argv": [
+          "scene",
+          "recipes",
+          "--json"
+        ]
+      }
+    },
+    {
       "name": "scene_plan",
       "argv": [
         "scene",

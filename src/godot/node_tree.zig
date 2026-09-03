@@ -165,7 +165,10 @@ pub fn findByName(
 pub fn nodeToJson(allocator: std.mem.Allocator, node: *const NodeInfo) !std.json.Value {
     var row: std.json.ObjectMap = .{};
     try row.put(allocator, "name", .{ .string = try allocator.dupe(u8, node.name) });
-    try row.put(allocator, "type", .{ .string = try allocator.dupe(u8, node.node_type) });
+    // An instanced node has no type attribute of its own; say so rather than
+    // hand back an empty string that reads as a bug.
+    const shown_type = if (node.node_type.len == 0 and (node.instance != null or node.instance_path != null)) "PackedScene" else node.node_type;
+    try row.put(allocator, "type", .{ .string = try allocator.dupe(u8, shown_type) });
     if (node.parent.len > 0) {
         try row.put(allocator, "parent", .{ .string = try allocator.dupe(u8, node.parent) });
     }

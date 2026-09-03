@@ -17,6 +17,10 @@ pub const OptionSpec = struct {
     default_value: ?[]const u8 = null,
     /// May be given more than once; read with `Invocation.getOptionAll`.
     repeatable: bool = false,
+    /// Save-preparation and id-session plumbing. Still accepted everywhere;
+    /// the MCP server leaves it out of tool schemas unless started with
+    /// --all-options, so 85 tools do not each carry the same six flags.
+    advanced: bool = false,
 };
 
 /// Separator between repeated values in the options map. NUL cannot appear in

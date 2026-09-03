@@ -21,7 +21,7 @@ _godot_cli_children() {
             echo "import"
             ;;
         'scene')
-            echo "new refs ext sub inspect node connection instance template plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
+            echo "new refs ext sub inspect node connection instance template recipes plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
             ;;
         'scene ext')
             echo "add remove"
@@ -257,7 +257,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'project new')
-            echo "--project-root --name --main-scene --width --height --dry-run"
+            echo "--project-root --name --main-scene --width --height --dry-run --no-icon"
             ;;
         'project show')
             echo "--project-root"
@@ -344,7 +344,7 @@ _godot_cli_options() {
             echo "--output --format"
             ;;
         'mcp')
-            echo "--project-root"
+            echo "--project-root --all-options"
             ;;
         *)
             echo ""
@@ -382,6 +382,7 @@ _godot_cli_takes_args() {
         'scene template list') return 0 ;;
         'scene template show') return 0 ;;
         'scene template copy') return 0 ;;
+        'scene recipes') return 0 ;;
         'scene plan') return 0 ;;
         'scene apply') return 0 ;;
         'scene diff') return 0 ;;

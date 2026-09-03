@@ -3,6 +3,7 @@ const spec = @import("../cli/spec.zig");
 const app_mod = @import("../cli/app.zig");
 const project_godot = @import("../godot/project_godot.zig");
 const error_details = @import("../godot/error_details.zig");
+const io_util = @import("../io_util.zig");
 const project_input = @import("../godot/project_input.zig");
 const project_settings = @import("../godot/project_settings.zig");
 const project_autoload = @import("../godot/project_autoload.zig");
@@ -127,17 +128,28 @@ fn newHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     var doc = try project_godot.parseBytes(cli.allocator, text.written());
     defer doc.deinit(cli.allocator);
 
+    var wrote_icon = false;
     if (!inv.flag("dry-run")) {
         std.Io.Dir.cwd().createDirPath(cli.io, root) catch {};
         try project_godot.writeFile(cli.allocator, cli.io, path, &doc);
+        // The project manager drops icon.svg beside project.godot, and the
+        // examples reference res://icon.svg; write it unless one exists.
+        if (!inv.flag("no-icon")) {
+            const icon_path = try std.fs.path.join(cli.allocator, &.{ root, "icon.svg" });
+            if (std.Io.Dir.cwd().access(cli.io, icon_path, .{})) |_| {} else |_| {
+                io_util.writeFileAtomic(cli.io, icon_path, default_icon_svg) catch return error.Io;
+                wrote_icon = true;
+            }
+        }
     }
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = path });
     try data.put(cli.allocator, "name", .{ .string = name });
     if (inv.getOption("main-scene")) |main_scene| try data.put(cli.allocator, "main_scene", .{ .string = main_scene });
+    try data.put(cli.allocator, "icon_written", .{ .bool = wrote_icon });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "created {s}", .{path}) });
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "created {s}{s}", .{ path, if (wrote_icon) " and icon.svg" else "" }) });
     return .{ .data = .{ .object = data } };
 }
 
@@ -796,6 +808,18 @@ fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     } else |_| {}
     if (summary.project_name) |name| try data.put(cli.allocator, "project_name", .{ .string = try cli.allocator.dupe(u8, name) });
     if (summary.main_scene) |scene| try data.put(cli.allocator, "main_scene", .{ .string = try cli.allocator.dupe(u8, scene) });
+    if (loaded.doc.sectionMut("display")) |display| {
+        var window: std.json.ObjectMap = .{};
+        const keys = [_][]const u8{ "window/size/viewport_width", "window/size/viewport_height", "window/stretch/mode", "window/stretch/aspect" };
+        for (keys) |key| {
+            if (display.getEntry(key)) |value| {
+                const short = key[std.mem.lastIndexOfScalar(u8, key, '/').? + 1 ..];
+                const unquoted = project_godot.unquoteValue(value) orelse value;
+                try window.put(cli.allocator, try cli.allocator.dupe(u8, short), .{ .string = try cli.allocator.dupe(u8, unquoted) });
+            }
+        }
+        if (window.count() != 0) try data.put(cli.allocator, "window", .{ .object = window });
+    }
     try data.put(cli.allocator, "input_action_count", .{ .integer = @intCast(summary.input_action_count) });
     try data.put(cli.allocator, "autoload_count", .{ .integer = @intCast(summary.autoload_count) });
     try data.put(cli.allocator, "enabled_plugin_count", .{ .integer = @intCast(summary.enabled_plugin_count) });
@@ -947,20 +971,36 @@ const new_options = [_]spec.OptionSpec{
     .{ .long = "width", .kind = .integer, .description = "Viewport width in pixels (display/window/size/viewport_width)" },
     .{ .long = "height", .kind = .integer, .description = "Viewport height in pixels (display/window/size/viewport_height)" },
     .{ .long = "dry-run", .kind = .flag, .description = "Report what would be written without creating the file" },
+    .{ .long = "no-icon", .kind = .flag, .description = "Do not write the default icon.svg beside project.godot" },
 };
+
+/// Godot's own default project icon (editor/icons/DefaultProjectIcon.svg).
+const default_icon_svg = @embedFile("default_project_icon");
+
+/// The intent options every `project * apply` takes, with the section's own
+/// description of the document shape.
+fn intentOptions(comptime intent_description: []const u8) [5]spec.OptionSpec {
+    return .{
+        .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
+        .{ .long = "intent", .kind = .path, .description = intent_description },
+        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of a file" },
+        .{ .long = "file", .kind = .path, .description = "Alias for --intent" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
+    };
+}
 
 pub fn commands() spec.CommandSpec {
     const project_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
     };
 
-    const intent_apply_options = [_]spec.OptionSpec{
-        .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
-        .{ .long = "intent", .kind = .path, .description = "Intent JSON file: settings {\"<section>\": {\"<key>\": value}}, input {\"actions\": [{\"name\", \"events\": [{\"type\": \"key\", \"keycode\": \"A\", \"physical\": true}]}]}, autoload {\"autoloads\": [{\"name\", \"path\", \"singleton\"}]}, plugins, rendering, physics; see the examples" },
-        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of a file" },
-        .{ .long = "file", .kind = .path, .description = "Alias for --intent" },
-        .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
-    };
+    const intent_apply_options = intentOptions("Intent JSON file: settings {\"<section>\": {\"<key>\": value}}, input {\"actions\": [{\"name\", \"events\": [{\"type\": \"key\", \"keycode\": \"A\", \"physical\": true}]}]}, autoload {\"autoloads\": [{\"name\", \"path\", \"singleton\"}]}, plugins, rendering, physics; see the examples");
+    const input_intent_options = intentOptions("Intent JSON file: {\"actions\": [{\"name\": \"move_left\", \"events\": [{\"type\": \"key\", \"keycode\": \"A\", \"physical\": true}, {\"type\": \"joypad_motion\", \"axis\": \"left_x\", \"axis_value\": -1.0}]}]}; each action replaces one of the same name");
+    const settings_intent_options = intentOptions("Intent JSON file: {\"<section>\": {\"<key>\": value}}, e.g. {\"application\": {\"run/main_scene\": \"res://scenes/main.tscn\"}, \"display\": {\"window/size/viewport_width\": 640}}; keys merge into the existing file");
+    const autoload_intent_options = intentOptions("Intent JSON file: {\"autoloads\": [{\"name\": \"GameState\", \"path\": \"res://scripts/game_state.gd\", \"singleton\": true}], \"replace_all\": false}");
+    const plugins_intent_options = intentOptions("Intent JSON file: {\"enable\": [\"my_addon\"], \"disable\": []}; names are folders under addons/");
+    const rendering_intent_options = intentOptions("Intent JSON file: {\"method\": \"forward_plus\" | \"mobile\" | \"gl_compatibility\", \"driver\": \"vulkan\" | \"d3d12\" | \"metal\" | \"opengl3\"}, or raw rendering/ keys");
+    const physics_intent_options = intentOptions("Intent JSON file: {\"engine_3d\": \"Jolt Physics\", \"gravity_3d\": 980, \"engine_2d\": \"GodotPhysics2D\", \"gravity_2d\": 980}");
 
     const settings_list_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
@@ -1035,7 +1075,7 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Input Map actions in project.godot",
                 .children = &.{
                     .{ .name = "list", .summary = "List input actions", .options = &project_options, .handler = inputListHandler },
-                    .{ .name = "apply", .summary = "Apply input map intent JSON (merge/replace per action)", .options = &intent_apply_options, .handler = inputApplyHandler },
+                    .{ .name = "apply", .summary = "Apply input map intent JSON (merge/replace per action)", .options = &input_intent_options, .handler = inputApplyHandler },
                     .{ .name = "validate", .summary = "Validate [input] section event objects", .options = &project_options, .handler = inputValidateHandler },
                 },
             },
@@ -1046,7 +1086,7 @@ pub fn commands() spec.CommandSpec {
                     .{ .name = "list", .summary = "List settings (optional --section filter)", .options = &settings_list_options, .handler = settingsListHandler },
                     .{ .name = "get", .summary = "Get one setting value", .options = &settings_get_options, .handler = settingsGetHandler },
                     .{ .name = "set", .summary = "Set one setting value", .options = &settings_set_options, .handler = settingsSetHandler },
-                    .{ .name = "apply", .summary = "Apply settings intent JSON (per-key merge)", .options = &intent_apply_options, .handler = settingsApplyHandler },
+                    .{ .name = "apply", .summary = "Apply settings intent JSON (per-key merge)", .options = &settings_intent_options, .handler = settingsApplyHandler },
                     .{ .name = "validate", .summary = "Validate res:// paths in settings", .options = &settings_list_options, .handler = settingsValidateHandler },
                 },
             },
@@ -1055,7 +1095,7 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Autoload singletons in project.godot",
                 .children = &.{
                     .{ .name = "list", .summary = "List autoload entries", .options = &project_options, .handler = autoloadListHandler },
-                    .{ .name = "apply", .summary = "Apply autoload intent JSON (merge by name; optional replace_all)", .options = &intent_apply_options, .handler = autoloadApplyHandler },
+                    .{ .name = "apply", .summary = "Apply autoload intent JSON (merge by name; optional replace_all)", .options = &autoload_intent_options, .handler = autoloadApplyHandler },
                     .{ .name = "validate", .summary = "Validate autoload paths and names", .options = &project_options, .handler = autoloadValidateHandler },
                 },
             },
@@ -1066,7 +1106,7 @@ pub fn commands() spec.CommandSpec {
                     .{ .name = "list", .summary = "List addons and enabled state", .options = &project_options, .handler = pluginsListHandler },
                     .{ .name = "enable", .summary = "Enable one plugin", .options = &plugin_toggle_options, .handler = pluginsEnableHandler },
                     .{ .name = "disable", .summary = "Disable one plugin", .options = &plugin_toggle_options, .handler = pluginsDisableHandler },
-                    .{ .name = "apply", .summary = "Apply plugin intent JSON (enable/disable lists)", .options = &intent_apply_options, .handler = pluginsApplyHandler },
+                    .{ .name = "apply", .summary = "Apply plugin intent JSON (enable/disable lists)", .options = &plugins_intent_options, .handler = pluginsApplyHandler },
                     .{ .name = "validate", .summary = "Validate enabled plugin paths exist", .options = &project_options, .handler = pluginsValidateHandler },
                 },
             },
@@ -1075,7 +1115,7 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Rendering method and graphics driver settings",
                 .children = &.{
                     .{ .name = "list", .summary = "List [rendering] section settings", .options = &project_options, .handler = renderingListHandler },
-                    .{ .name = "apply", .summary = "Apply rendering intent JSON (friendly aliases)", .options = &intent_apply_options, .handler = renderingApplyHandler },
+                    .{ .name = "apply", .summary = "Apply rendering intent JSON (friendly aliases)", .options = &rendering_intent_options, .handler = renderingApplyHandler },
                     .{ .name = "validate", .summary = "Validate known rendering method/driver values", .options = &project_options, .handler = renderingValidateHandler },
                 },
             },
@@ -1084,7 +1124,7 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Physics engine and gravity settings",
                 .children = &.{
                     .{ .name = "list", .summary = "List [physics] section settings", .options = &project_options, .handler = physicsListHandler },
-                    .{ .name = "apply", .summary = "Apply physics intent JSON (friendly aliases)", .options = &intent_apply_options, .handler = physicsApplyHandler },
+                    .{ .name = "apply", .summary = "Apply physics intent JSON (friendly aliases)", .options = &physics_intent_options, .handler = physicsApplyHandler },
                     .{ .name = "validate", .summary = "Validate known physics engine and scalar values", .options = &project_options, .handler = physicsValidateHandler },
                 },
             },

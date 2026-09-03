@@ -238,6 +238,10 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "scene_uid", try jsonString(cli.allocator, result.scene_uid));
     try data.put(cli.allocator, "signals_scaffolded", .{ .integer = @intCast(result.signals_scaffolded) });
     try data.put(cli.allocator, "updated", .{ .bool = result.updated });
+    var messages: std.ArrayList([]const u8) = .empty;
+    if (result.scene_uid.len == 0) {
+        try messages.append(cli.allocator, "scene has no uid header yet; run the Godot import (godot --headless --path . --import --quit) and re-run catalog add --update to fill scene_uid");
+    }
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     if (inv.flag("dry-run")) {
         try data.put(cli.allocator, "manifest", try jsonString(cli.allocator, result.json));
@@ -251,7 +255,7 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     );
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
-    return .{ .data = .{ .object = data }, .messages = &.{} };
+    return .{ .data = .{ .object = data }, .messages = try messages.toOwnedSlice(cli.allocator) };
 }
 
 fn freeStringList(allocator: std.mem.Allocator, items: []const []const u8) void {
