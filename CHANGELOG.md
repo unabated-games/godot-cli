@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Changed
+
+- CI runs the Godot round-trip suite as a matrix: 4.7 and 4.7.2 must pass, and the newest 4.8 prerelease (dev4) is reported without blocking. The site and README stop saying newer versions "may work".
+
 ## [0.7.1] — 2026-09-03
 
 ### Changed

@@ -107,8 +107,11 @@ and agent setup.
 
 Early development, released under [semantic versioning](CHANGELOG.md). The file
 format work — ID generation, UID cache, Variant parsing, save round-trip — is
-verified against **Godot 4.7** in unit tests and in a suite that compares
-godot-cli's output byte-for-byte against files the editor saved.
+verified in unit tests and in a suite that compares godot-cli's output
+byte-for-byte against files the editor saved. CI runs that suite against
+**Godot 4.7 and 4.7.2**, and against the newest 4.8 prerelease as a
+non-blocking check so a format change shows up here before it shows up in
+your diff.
 
 Scene authoring, the component catalog, `project.godot` editing, and batch
 workflows are all implemented; see the
@@ -117,8 +120,8 @@ together.
 
 ## Building
 
-Requires [Zig](https://ziglang.org/) 0.16.0 or later. Godot 4.7 is needed only
-for the round-trip suite.
+Requires [Zig](https://ziglang.org/) 0.16.0 or later. Godot 4.7 or later is needed
+only for the round-trip suite.
 
 ```bash
 zig build                # binary at zig-out/bin/godot-cli

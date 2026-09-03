@@ -114,12 +114,25 @@ jobs:
           tools/check_mcp_tools.sh
 
   test-godot:
-    name: godot round-trip
+    name: godot round-trip (${{ matrix.godot }})
     # Downloads the Godot editor, so keep it off every PR push.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    env:
-      GODOT_VERSION: "4.7"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The version the format rules were ported from and verified against.
+          - godot: 4.7-stable
+            required: true
+          # Latest stable patch release.
+          - godot: 4.7.2-stable
+            required: true
+          # Newest prerelease of the next minor: reported, never blocking, so a
+          # format change lands here first instead of in a user's diff.
+          - godot: 4.8-dev4
+            required: false
+    continue-on-error: ${{ !matrix.required }}
     steps:
       - uses: actions/checkout@v7
 
@@ -133,19 +146,21 @@ jobs:
         uses: actions/cache@v6
         with:
           path: godot-bin
-          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+          key: godot-${{ matrix.godot }}-linux-x86_64
 
+      # godot-builds hosts every build, stable and prerelease, under one URL shape.
       - name: Install Godot
         if: steps.cache-godot.outputs.cache-hit != 'true'
         run: |
           mkdir -p godot-bin
-          asset="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
-          url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${asset}.zip"
+          asset="Godot_v${{ matrix.godot }}_linux.x86_64"
+          url="https://github.com/godotengine/godot-builds/releases/download/${{ matrix.godot }}/${asset}.zip"
           curl -fsSL -o godot.zip "$url"
           unzip -q godot.zip -d godot-bin
           chmod +x "godot-bin/${asset}"
 
       - name: Run Godot round-trip tests
         run: |
-          asset="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          asset="Godot_v${{ matrix.godot }}_linux.x86_64"
+          "godot-bin/${asset}" --version
           zig build test-godot -Dgodot="$PWD/godot-bin/${asset}"

@@ -57,7 +57,7 @@ Being able to write a scene Godot can open is a low bar. The bar we care about i
 
 So we ported the rules instead of guessing at them. `src/godot/hash.zig` is a port of `core/templates/hashfuncs.h` and `core/string/ustring.cpp`. `src/godot/resource_uid.zig` comes from `core/io/resource_uid.cpp`. Variant text (vectors, colors, `Object(...)` bodies, typed arrays, packed byte arrays in base64) follows `core/variant/variant_parser.cpp`, and the parser carries a line map back into that file so you can check any rule against the engine source yourself.
 
-The test that keeps us honest runs on every push. Godot 4.7 saves a fixture scene headless. godot-cli writes the same scene. `cmp` compares the two files. When it fails, the tool is wrong and the editor is right, and we fix the tool.
+The test that keeps us honest runs on every push, against Godot 4.7, 4.7.2, and the newest 4.8 prerelease. Godot saves a fixture scene headless. godot-cli writes the same scene. `cmp` compares the two files. When it fails, the tool is wrong and the editor is right, and we fix the tool.
 
 `project.godot` gets the same treatment. Input actions are brace blocks full of serialized `InputEventKey` objects, and autoloads carry a leading asterisk for singletons. godot-cli parses the file and writes it back, so an input map applied twice replaces the actions by name instead of doubling them.
 
@@ -108,7 +108,7 @@ A single binary with no runtime dependencies, built in Zig, for Linux, macOS, an
 
 ## What it is not
 
-It does not run gameplay, physics, or scripts. It does not read binary `.scn` or `.res`. It will not replace the editor when you are nudging a sprite two pixels to the left by eye. The round-trip suite is verified against Godot 4.7; newer versions may work, and we have not promised that they do.
+It does not run gameplay, physics, or scripts. It does not read binary `.scn` or `.res`. It will not replace the editor when you are nudging a sprite two pixels to the left by eye. The round-trip suite runs against Godot 4.7 and 4.7.2 on every push, and against the newest 4.8 prerelease as a check that does not block; it passes there today, and a 4.8 format change will show up in CI before it shows up in your project.
 
 ## Start here
 

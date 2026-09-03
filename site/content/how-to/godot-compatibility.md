@@ -56,7 +56,7 @@ godot-cli scene compare-godot scenes/main.tscn scenes/main_godot_saved.tscn --js
 
 `scene round-trip <path> --dry-run` is the weaker, faster check: parse the file, write it back, parse again, and confirm the structure survived.
 
-The project runs the strong version in CI. Godot 4.7 saves a fixture scene headless, godot-cli normalizes the same scene, and the two files are compared with `cmp`. That test is why the parser follows Godot's source rather than a description of it: `src/godot/hash.zig` comes from `core/templates/hashfuncs.h` and `core/string/ustring.cpp`, `src/godot/resource_uid.zig` from `core/io/resource_uid.cpp`, and Variant text from `core/variant/variant_parser.cpp`, with a line map in `src/godot/variant/godot_ref.zig` pointing at the functions each rule came from.
+The project runs the strong version in CI, once per Godot version in a matrix. Godot saves a fixture scene headless, godot-cli normalizes the same scene, and the two files are compared with `cmp`. That test is why the parser follows Godot's source rather than a description of it: `src/godot/hash.zig` comes from `core/templates/hashfuncs.h` and `core/string/ustring.cpp`, `src/godot/resource_uid.zig` from `core/io/resource_uid.cpp`, and Variant text from `core/variant/variant_parser.cpp`, with a line map in `src/godot/variant/godot_ref.zig` pointing at the functions each rule came from.
 
 ## Variant values
 
@@ -66,4 +66,4 @@ Anything it cannot parse is preserved verbatim and reported with `parse_error` i
 
 ## Version support
 
-The round-trip suite is verified against Godot 4.7. Text scene format 3 is what Godot 4 writes. Binary `.scn` and `.res` files are not supported.
+The round-trip suite runs against Godot 4.7 and 4.7.2, which must pass, and against the newest 4.8 prerelease, which is reported but does not block a push. It passes on all three today. Text scene format 3 is what Godot 4 writes. Binary `.scn` and `.res` files are not supported.
