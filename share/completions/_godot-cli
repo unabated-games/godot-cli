@@ -54,7 +54,7 @@ _godot_cli_children() {
             _godot_cli_reply=( 'add:Create or update a JSON catalog manifest for a scene' 'relink:Repoint manifests whose scene has moved' 'scan:Scan project for catalog manifests' 'list:List valid catalog entries' 'show:Show merged catalog entry by id' 'validate:Validate catalog manifests in a project' 'search:Search project catalog entries and builtins' 'export:Export agent digest markdown' )
             ;;
         'project')
-            _godot_cli_reply=( 'new:Create a project.godot in a new or empty folder' 'show:Summarize key project.godot configuration' 'move:Move or rename a file and repoint every reference to it' 'apply:Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics)' 'input:Input Map actions in project.godot' 'settings:Scalar project settings (application, display, layer_names, …)' 'autoload:Autoload singletons in project.godot' 'plugins:Editor plugins enable/disable in project.godot' 'rendering:Rendering method and graphics driver settings' 'physics:Physics engine and gravity settings' )
+            _godot_cli_reply=( 'new:Create a project.godot in a new or empty folder' 'import:Run Godot'\''s headless import so new files get UIDs and .import data' 'run:Run the game for a few frames and capture the last frame and the log' 'show:Summarize key project.godot configuration' 'move:Move or rename a file and repoint every reference to it' 'apply:Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics)' 'input:Input Map actions in project.godot' 'settings:Scalar project settings (application, display, layer_names, …)' 'autoload:Autoload singletons in project.godot' 'plugins:Editor plugins enable/disable in project.godot' 'rendering:Rendering method and graphics driver settings' 'physics:Physics engine and gravity settings' )
             ;;
         'project input')
             _godot_cli_reply=( 'list:List input actions' 'apply:Apply input map intent JSON (merge/replace per action)' 'validate:Validate [input] section event objects' )
@@ -258,6 +258,12 @@ _godot_cli_options() {
             ;;
         'project new')
             _godot_cli_reply=( '--project-root:Folder to create the project in (default\: current directory)' '--name:Project name (application/config/name)' '--main-scene:Main scene as a res\:// path (application/run/main_scene)' '--width:Viewport width in pixels (display/window/size/viewport_width)' '--height:Viewport height in pixels (display/window/size/viewport_height)' '--dry-run:Report what would be written without creating the file' '--no-icon:Do not write the default icon.svg beside project.godot' )
+            ;;
+        'project import')
+            _godot_cli_reply=( '--project-root:Godot project root (default\: current directory)' '--godot:Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle' )
+            ;;
+        'project run')
+            _godot_cli_reply=( '--project-root:Godot project root (default\: current directory)' '--godot:Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle' '--scene:Scene to run (res\:// or project-relative); the main scene when omitted' '--frames:Frames to run before quitting; 60 is one second, 5 is enough for a static screen' '--resolution:Window size as WIDTHxHEIGHT' '--capture-dir:Folder under the project for the frame and log; created with a .gdignore' '--no-import:Skip the headless import pass that assigns UIDs to new files' '--keep-frames:Keep every frame and the .wav; the default keeps only the last frame' '--headless:No window and no frames, only the log; for machines without a display' '--user-arg:Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable' )
             ;;
         'project show')
             _godot_cli_reply=( '--project-root:Godot project root (directory containing project.godot)' )

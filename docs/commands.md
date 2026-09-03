@@ -109,6 +109,8 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli batch`](#godot-cli-batch) | Run multiple CLI commands in one invocation |
 | [`godot-cli project`](#godot-cli-project) | Read and write Godot project.godot settings |
 | [`godot-cli project new`](#godot-cli-project-new) | Create a project.godot in a new or empty folder |
+| [`godot-cli project import`](#godot-cli-project-import) | Run Godot's headless import so new files get UIDs and .import data |
+| [`godot-cli project run`](#godot-cli-project-run) | Run the game for a few frames and capture the last frame and the log |
 | [`godot-cli project show`](#godot-cli-project-show) | Summarize key project.godot configuration |
 | [`godot-cli project move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`godot-cli project apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
@@ -1989,6 +1991,8 @@ godot-cli project [options]
 | Subcommand | Summary |
 |------------|---------|
 | [`new`](#godot-cli-project-new) | Create a project.godot in a new or empty folder |
+| [`import`](#godot-cli-project-import) | Run Godot's headless import so new files get UIDs and .import data |
+| [`run`](#godot-cli-project-run) | Run the game for a few frames and capture the last frame and the log |
 | [`show`](#godot-cli-project-show) | Summarize key project.godot configuration |
 | [`move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
@@ -2026,6 +2030,48 @@ godot-cli project new [options]
 | `--height` | `<n>` | Viewport height in pixels (display/window/size/viewport_height) | — |
 | `--dry-run` | — | Report what would be written without creating the file | — |
 | `--no-icon` | — | Do not write the default icon.svg beside project.godot | — |
+
+### `godot-cli project import`
+
+Run Godot's headless import so new files get UIDs and .import data
+
+godot --headless --path . --import --quit, from the project root. Run it once after adding scenes, scripts, or textures, before running the game or filling catalog scene_uid fields.
+
+```
+godot-cli project import [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+| `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
+
+### `godot-cli project run`
+
+Run the game for a few frames and capture the last frame and the log
+
+Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames.
+
+```
+godot-cli project run [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+| `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
+| `--scene` | `<value>` | Scene to run (res:// or project-relative); the main scene when omitted | — |
+| `--frames` | `<n>` | Frames to run before quitting; 60 is one second, 5 is enough for a static screen | `60` |
+| `--resolution` | `<value>` | Window size as WIDTHxHEIGHT | `640x360` |
+| `--capture-dir` | `<path>` | Folder under the project for the frame and log; created with a .gdignore | `capture` |
+| `--no-import` | — | Skip the headless import pass that assigns UIDs to new files | — |
+| `--keep-frames` | — | Keep every frame and the .wav; the default keeps only the last frame | — |
+| `--headless` | — | No window and no frames, only the log; for machines without a display | — |
+| `--user-arg` | `<value>` | Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable | — |
 
 ### `godot-cli project show`
 

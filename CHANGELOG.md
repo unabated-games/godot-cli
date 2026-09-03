@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **`project run`**: the verify loop as one command. It creates the `.gdignore`d capture folder, runs the headless import, runs the main scene or `--scene` for `--frames` frames with `--write-movie`, keeps only the last frame (and drops the `.wav`), and returns the frame path, the log path, and every `ERROR` or `SCRIPT ERROR` line with its backtrace. It exits 1 when Godot did not exit cleanly or the log holds an error. `--headless` gives the log alone, `--user-arg` passes flags to `OS.get_cmdline_user_args()`, and the binary comes from `--godot`, `$GODOT`, `PATH`, or the macOS app bundle. Over MCP it is `project_run`, which is the step an agent without a shell could not do; both MCP trials had to borrow Bash for it. `project import` runs the import pass alone.
+
 ## [0.10.0] — 2026-09-03
 
 ### Added

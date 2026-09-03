@@ -54,7 +54,7 @@ _godot_cli_children() {
             echo "add relink scan list show validate search export"
             ;;
         'project')
-            echo "new show move apply input settings autoload plugins rendering physics"
+            echo "new import run show move apply input settings autoload plugins rendering physics"
             ;;
         'project input')
             echo "list apply validate"
@@ -259,6 +259,12 @@ _godot_cli_options() {
         'project new')
             echo "--project-root --name --main-scene --width --height --dry-run --no-icon"
             ;;
+        'project import')
+            echo "--project-root --godot"
+            ;;
+        'project run')
+            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg"
+            ;;
         'project show')
             echo "--project-root"
             ;;
@@ -417,6 +423,8 @@ _godot_cli_takes_args() {
         'catalog export') return 0 ;;
         'batch') return 0 ;;
         'project new') return 0 ;;
+        'project import') return 0 ;;
+        'project run') return 0 ;;
         'project show') return 0 ;;
         'project move') return 0 ;;
         'project apply') return 0 ;;

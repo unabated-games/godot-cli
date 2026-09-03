@@ -31,14 +31,14 @@ pub const rules =
     \\   anything is written.
     \\6. Move files with project_move, never mv; a plain move leaves every res://
     \\   reference stale.
-    \\7. Validate after every edit with scene_validate, then run the game and read
-    \\   the frame and the log before reporting done.
+    \\7. Validate after every edit with scene_validate, then project_run and read
+    \\   data.frame (the last PNG) and data.errors before reporting done. It fails
+    \\   when the log holds an ERROR or SCRIPT ERROR line.
     \\
     \\Workflow: scene_node_list, catalog_list, edit with one tool call per change
-    \\(or scene_apply with an intent for several), scene_validate, then run Godot
-    \\as the quickstart resource describes and read capture/shot*.png and
-    \\capture/godot.log. Any ERROR or SCRIPT ERROR line means the change is not
-    \\done. Read the godot-cli://docs/quickstart resource before the first edit
+    \\(or scene_apply with an intent for several), scene_validate, then project_run
+    \\and read data.frame and data.errors; project_import alone refreshes UIDs after
+    \\adding files. Read the godot-cli://docs/quickstart resource before the first edit
     \\and godot-cli://docs/godot-basics before the first UI or level.
 ;
 

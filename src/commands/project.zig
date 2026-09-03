@@ -4,6 +4,7 @@ const app_mod = @import("../cli/app.zig");
 const project_godot = @import("../godot/project_godot.zig");
 const error_details = @import("../godot/error_details.zig");
 const io_util = @import("../io_util.zig");
+const godot_run = @import("../godot/godot_run.zig");
 const project_input = @import("../godot/project_input.zig");
 const project_settings = @import("../godot/project_settings.zig");
 const project_autoload = @import("../godot/project_autoload.zig");
@@ -68,6 +69,78 @@ fn readIntentSource(cli: *const app_mod.App, inv: *const spec.Invocation) !Inten
         return error.FileNotFound;
     };
     return .{ .label = path, .bytes = bytes };
+}
+
+fn runDataCommon(cli: *const app_mod.App, data: *std.json.ObjectMap, run: godot_run.Result) !void {
+    try data.put(cli.allocator, "godot", .{ .string = run.godot });
+    if (run.import_exit) |code| try data.put(cli.allocator, "import_exit", .{ .integer = code });
+    if (run.exit) |code| try data.put(cli.allocator, "exit", .{ .integer = code });
+    if (run.signal) |sig| try data.put(cli.allocator, "signal", .{ .string = sig });
+    try data.put(cli.allocator, "log", .{ .string = run.log_path });
+    var errors: std.json.Array = .init(cli.allocator);
+    for (run.errors) |line| try errors.append(.{ .string = line });
+    try data.put(cli.allocator, "error_count", .{ .integer = @intCast(run.errors.len) });
+    try data.put(cli.allocator, "errors", .{ .array = errors });
+    if (run.stderr_tail.len != 0) try data.put(cli.allocator, "stderr_tail", .{ .string = run.stderr_tail });
+    try data.put(cli.allocator, "duration_ms", .{ .integer = run.duration_ms });
+}
+
+fn importHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse ".";
+    const godot = try godot_run.locateGodot(cli.allocator, cli.io, cli.environ, inv.getOption("godot"));
+    const started = std.Io.Clock.Timestamp.now(cli.io, .real);
+    const outcome = try godot_run.runProcess(cli.allocator, cli.environ, root, &.{ godot, "--headless", "--path", ".", "--import", "--quit" });
+    const code: ?u8 = switch (outcome.term) {
+        .exited => |c| c,
+        else => null,
+    };
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "godot", .{ .string = godot });
+    if (code) |c| try data.put(cli.allocator, "exit", .{ .integer = c });
+    try data.put(cli.allocator, "duration_ms", .{ .integer = started.durationTo(.now(cli.io, .real)).raw.toMilliseconds() });
+    const ok = code != null and code.? == 0;
+    try data.put(cli.allocator, "summary", .{ .string = if (ok) "imported project resources" else "godot import exited with an error" });
+    if (!ok) try data.put(cli.allocator, "stderr_tail", .{ .string = outcome.stderr });
+    return .{ .data = .{ .object = data }, .exit_code = if (ok) .success else .failure };
+}
+
+fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse ".";
+    const frames = std.fmt.parseInt(u32, inv.getOption("frames") orelse "60", 10) catch return error.InvalidValue;
+    const user_args = try inv.getOptionAll(cli.allocator, "user-arg");
+
+    const run = try godot_run.run(cli.allocator, cli.io, cli.environ, .{
+        .project_root = root,
+        .godot = inv.getOption("godot"),
+        .scene = inv.getOption("scene"),
+        .frames = frames,
+        .resolution = inv.getOption("resolution") orelse "640x360",
+        .capture_dir = inv.getOption("capture-dir") orelse "capture",
+        .import = !inv.flag("no-import"),
+        .keep_frames = inv.flag("keep-frames"),
+        .headless = inv.flag("headless"),
+        .user_args = user_args,
+    });
+
+    var data: std.json.ObjectMap = .{};
+    try runDataCommon(cli, &data, run);
+    if (inv.getOption("scene")) |scene| try data.put(cli.allocator, "scene", .{ .string = scene });
+    try data.put(cli.allocator, "frames_requested", .{ .integer = frames });
+    try data.put(cli.allocator, "frames_written", .{ .integer = @intCast(run.frames_written) });
+    if (run.frame) |frame| try data.put(cli.allocator, "frame", .{ .string = frame });
+
+    const clean_exit = run.exit != null and run.exit.? == 0;
+    const ok = clean_exit and run.errors.len == 0;
+    const summary = if (ok)
+        try std.fmt.allocPrint(cli.allocator, "ran {d} frame(s) with no errors; read {s}", .{ frames, run.frame orelse run.log_path })
+    else if (!clean_exit)
+        try std.fmt.allocPrint(cli.allocator, "godot did not exit cleanly (exit {?d}); see stderr_tail and {s}", .{ run.exit, run.log_path })
+    else
+        try std.fmt.allocPrint(cli.allocator, "{d} error line(s) in {s}; the change is not done", .{ run.errors.len, run.log_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    return .{ .data = .{ .object = data }, .exit_code = if (ok) .success else .failure };
 }
 
 fn newHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -989,6 +1062,24 @@ fn intentOptions(comptime intent_description: []const u8) [5]spec.OptionSpec {
     };
 }
 
+const godot_option = spec.OptionSpec{ .long = "godot", .kind = .path, .description = "Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle" };
+const import_options = [_]spec.OptionSpec{
+    .{ .long = "project-root", .kind = .path, .description = "Godot project root (default: current directory)" },
+    godot_option,
+};
+const run_options = [_]spec.OptionSpec{
+    .{ .long = "project-root", .kind = .path, .description = "Godot project root (default: current directory)" },
+    godot_option,
+    .{ .long = "scene", .kind = .string, .description = "Scene to run (res:// or project-relative); the main scene when omitted" },
+    .{ .long = "frames", .kind = .integer, .description = "Frames to run before quitting; 60 is one second, 5 is enough for a static screen", .default_value = "60" },
+    .{ .long = "resolution", .kind = .string, .description = "Window size as WIDTHxHEIGHT", .default_value = "640x360" },
+    .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; created with a .gdignore", .default_value = "capture" },
+    .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },
+    .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
+    .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display" },
+    .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
+};
+
 pub fn commands() spec.CommandSpec {
     const project_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
@@ -1047,6 +1138,22 @@ pub fn commands() spec.CommandSpec {
                 .description = "Writes the header the project manager writes, config_version=5, and [application] config/name, plus the main scene and window size when given. Refuses to overwrite an existing project.godot; change that with project settings set or project apply.",
                 .options = &new_options,
                 .handler = newHandler,
+            },
+            .{
+                .name = "import",
+                .summary = "Run Godot's headless import so new files get UIDs and .import data",
+                .description = "godot --headless --path . --import --quit, from the project root. Run it once after adding scenes, scripts, or textures, before running the game or filling catalog scene_uid fields.",
+                .options = &import_options,
+                .handler = importHandler,
+            },
+            .{
+                .name = "run",
+                .summary = "Run the game for a few frames and capture the last frame and the log",
+                .description =
+                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames.
+                ,
+                .options = &run_options,
+                .handler = runHandler,
             },
             .{
                 .name = "show",

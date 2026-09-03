@@ -7,6 +7,12 @@ description: One Godot command that writes a PNG of the running scene and a log 
 
 `scene validate` tells you a file is well formed. It cannot tell you the HUD ended up behind the background, or that a script threw on the first frame. For that you run the game, and Godot can do that from a terminal with no extra tooling.
 
+## One command
+
+`godot-cli project run --project-root . --json` does everything on this page: it creates the ignored capture folder, runs the headless import, runs the main scene (or `--scene`) for `--frames` frames writing a movie, keeps only the last frame, and returns the frame path, the log path, and every error line from the log with its backtrace. It exits 1 when Godot did not exit cleanly or the log holds an error, which is the signal an agent needs to keep going. `--headless` gives the log alone on a machine without a display, and `--user-arg` passes flags a script can read to trigger a test path. Over MCP the same thing is the `project_run` tool, so an agent without a shell can close the loop.
+
+The rest of this page is what that command runs, for when you want to do it by hand or adapt it.
+
 ## The command
 
 Frames written inside the project get imported as textures on the next run, along with a `shot.wav` Godot writes beside them, and the project fills with `.import` files. So the output goes in a folder Godot is told to skip:

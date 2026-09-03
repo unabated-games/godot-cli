@@ -28,3 +28,4 @@ Thumbs.db
 
 # Built documentation site
 site/_build/
+test_fixtures/project/capture/

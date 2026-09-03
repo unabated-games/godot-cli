@@ -46,7 +46,7 @@ Through the MCP server there is no `project-root` argument. A server started wit
 2. catalog list --project-root . --json               what exists to reuse
 3. edit: scene commands, or scene apply --intent      one write per change
 4. scene validate <scene> --project-root . --json     exit 1 on errors
-5. run the game, read capture/shot*.png and capture/godot.log
+5. project run --project-root . --json               read data.frame and data.errors
 ```
 
 ## Cheat sheet
@@ -80,12 +80,16 @@ godot-cli scene diff before.tscn scenes/main.tscn --properties --json
 ## Run the game after a change
 
 ```bash
+godot-cli project run --project-root . --json          # import, run 60 frames, capture the last frame and the log
+```
+
+Read `data.frame` (a PNG) and `data.errors`. The command fails when Godot did not exit cleanly or the log holds an `ERROR` or `SCRIPT ERROR` line, so the change is not done until it passes. `--scene res://ui/menu.tscn` runs one scene, `--frames 5` is enough for a static screen, `--headless` gives the log alone on a machine without a display, and `--user-arg` passes a flag your script can read to trigger a test path. The same loop by hand:
+
+```bash
 mkdir -p capture && touch capture/.gdignore
 godot --headless --path . --import --quit
 godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
 ```
-
-Read the highest-numbered `capture/shot*.png` and `capture/godot.log`. Any `ERROR` or `SCRIPT ERROR` line means the change is not done.
 
 ## Read next
 

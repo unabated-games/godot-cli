@@ -51,9 +51,8 @@ Work from the Godot project root (`project.godot`). Pass `--json` on every comma
 - [ ] catalog list --project-root . --json (when adding UI or level structure)
 - [ ] edit with scene commands, an intent, or a batch, always with --project-root .
 - [ ] scene validate <scene> --project-root . --json
-- [ ] mkdir -p capture && touch capture/.gdignore && godot --headless --path . --import --quit
-- [ ] godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
-- [ ] read the last capture/shot*.png and capture/godot.log
+- [ ] godot-cli project run --project-root . --json (imports, runs 60 frames, fails on any ERROR line)
+- [ ] read data.frame (the last PNG) and data.errors
 ```
 
 ## Command cheat sheet

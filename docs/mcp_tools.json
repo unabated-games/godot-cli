@@ -2067,6 +2067,50 @@
       }
     },
     {
+      "name": "project_import",
+      "argv": [
+        "project",
+        "import",
+        "--project-root",
+        "<dir>"
+      ],
+      "description": "Run Godot's headless import so new files get UIDs.",
+      "json_request": {
+        "argv": [
+          "project",
+          "import",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_run",
+      "argv": [
+        "project",
+        "run",
+        "--project-root",
+        "<dir>",
+        "--frames",
+        "<n>",
+        "--scene",
+        "<res://path>"
+      ],
+      "description": "Import, run the game for a few frames, and return the last frame, the log, and the error lines; fails when the log holds an error.",
+      "json_request": {
+        "argv": [
+          "project",
+          "run",
+          "--project-root",
+          ".",
+          "--frames",
+          "60",
+          "--json"
+        ]
+      }
+    },
+    {
       "name": "project_show",
       "argv": [
         "project",

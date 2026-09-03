@@ -1786,6 +1786,70 @@ Report what would be written without creating the file
 .TP
 \fB\-\-no\-icon\fR
 Do not write the default icon.svg beside project.godot
+.SS godot\-cli project import
+Run Godot's headless import so new files get UIDs and .import
+data
+.PP
+godot \-\-headless \-\-path . \-\-import \-\-quit, from the
+project root. Run it once after adding scenes, scripts, or
+textures, before running the game or filling catalog scene_uid
+fields.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.TP
+\fB\-\-godot\fR \fIpath\fR
+Godot binary; default $GODOT, then godot on PATH, then the
+macOS app bundle
+.SS godot\-cli project run
+Run the game for a few frames and capture the last frame and
+the log
+.PP
+Imports (unless \-\-no\-import), then runs the main scene or
+\-\-scene with \-\-write\-movie into capture/, quits after
+\-\-frames, and reads the log. The result names the last frame,
+the log, and every ERROR or SCRIPT ERROR line with its backtrace;
+it fails (exit 1) when Godot did not exit cleanly or the log
+holds an error, so the change is not done until this passes.
+Frames other than the last, and the .wav Godot writes, are
+deleted unless \-\-keep\-frames.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.TP
+\fB\-\-godot\fR \fIpath\fR
+Godot binary; default $GODOT, then godot on PATH, then the
+macOS app bundle
+.TP
+\fB\-\-scene\fR \fIvalue\fR
+Scene to run (res:// or project\-relative); the main scene
+when omitted
+.TP
+\fB\-\-frames\fR \fIn\fR
+Frames to run before quitting; 60 is one second, 5 is enough
+for a static screen (default: 60)
+.TP
+\fB\-\-resolution\fR \fIvalue\fR
+Window size as WIDTHxHEIGHT (default: 640x360)
+.TP
+\fB\-\-capture\-dir\fR \fIpath\fR
+Folder under the project for the frame and log; created with
+a .gdignore (default: capture)
+.TP
+\fB\-\-no\-import\fR
+Skip the headless import pass that assigns UIDs to new files
+.TP
+\fB\-\-keep\-frames\fR
+Keep every frame and the .wav; the default keeps only the last
+frame
+.TP
+\fB\-\-headless\fR
+No window and no frames, only the log; for machines without
+a display
+.TP
+\fB\-\-user\-arg\fR \fIvalue\fR
+Argument passed after \-\-, readable with OS.get_cmdline_user_args();
+repeatable
 .SS godot\-cli project show
 Summarize key project.godot configuration
 .TP

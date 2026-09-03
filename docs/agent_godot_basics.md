@@ -22,7 +22,7 @@ A `Camera2D` under the player follows it, so the player stays centred and the wo
 
 ## Run the game and check the result
 
-After a scene change, `scene validate` proves the file is well formed. To see the result, run the game from the terminal; Godot writes a frame and a log with no extra tooling:
+After a scene change, `scene validate` proves the file is well formed. To see the result, run the game. `godot-cli project run --project-root . --json` does the whole loop below and returns the last frame, the log path, and the error lines, failing when there are any. By hand, Godot writes a frame and a log with no extra tooling:
 
 ```bash
 mkdir -p capture && touch capture/.gdignore          # Godot skips this folder, so frames are not imported
