@@ -15,6 +15,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-03
+
 ### Added
 
 - `scene plan` and `scene apply` describe the intent and patch shapes and list every recipe in their help text, and `project apply` describes its sections, so an agent reading the MCP tool description does not need the 37 KB guide to learn a recipe's fields. An unknown recipe now fails as `unknown_recipe` with the known names in the details.
