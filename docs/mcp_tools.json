@@ -1,6 +1,6 @@
 {
   "name": "godot-cli",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "request_envelope": {
@@ -2022,6 +2022,35 @@
           "show",
           "--project-root",
           ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_move",
+      "argv": [
+        "project",
+        "move",
+        "--project-root",
+        "<path>",
+        "--from",
+        "<res://path>",
+        "--to",
+        "<res://path>"
+      ],
+      "options": [
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "move",
+          "--project-root",
+          ".",
+          "--from",
+          "res://scripts/player.gd",
+          "--to",
+          "res://scripts/hero.gd",
           "--json"
         ]
       }

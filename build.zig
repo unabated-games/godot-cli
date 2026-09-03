@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.6.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.7.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
@@ -870,6 +870,28 @@ pub fn build(b: *std.Build) void {
     relink_smoke.setCwd(b.path("."));
     relink_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&relink_smoke.step);
+
+    // project move: the file, its .uid sidecar, every ext_resource path, and
+    // the main-scene setting all move together.
+    const project_move_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\printf 'config_version=5\n\n[application]\n\nconfig/name="Move"\nrun/main_scene="res://scenes/a.tscn"\n' > "$tmp/project.godot" &&
+        \\mkdir -p "$tmp/scripts" && printf 'extends Node\n' > "$tmp/scripts/p.gd" && printf 'uid://abc\n' > "$tmp/scripts/p.gd.uid" &&
+        \\./zig-out/bin/godot-cli scene new --output "$tmp/scenes/a.tscn" --root-name A --root-type Node --project-root "$tmp" >/dev/null &&
+        \\printf '{ "ops": [ { "op": "assign_ext", "path": "/root/A", "property": "script", "type": "Script", "res_path": "res://scripts/p.gd" } ] }' > "$tmp/p.json" &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp/scenes/a.tscn" --patch "$tmp/p.json" --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli project move --project-root "$tmp" --from scripts/p.gd --to scripts/hero/h.gd --json | grep -q '"references_retargeted":1' &&
+        \\test -f "$tmp/scripts/hero/h.gd" && test -f "$tmp/scripts/hero/h.gd.uid" && ! test -e "$tmp/scripts/p.gd" &&
+        \\grep -q 'path="res://scripts/hero/h.gd"' "$tmp/scenes/a.tscn" &&
+        \\./zig-out/bin/godot-cli project move --project-root "$tmp" --from res://scenes/a.tscn --to res://levels/one.tscn --json | grep -q '"settings_updated":1' &&
+        \\grep -q 'run/main_scene="res://levels/one.tscn"' "$tmp/project.godot" &&
+        \\./zig-out/bin/godot-cli scene validate "$tmp/levels/one.tscn" --project-root "$tmp" --json | grep -q '"error_count":0'
+    });
+    project_move_smoke.setCwd(b.path("."));
+    project_move_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_move_smoke.step);
 
     // Generated CLI surface: the Markdown command reference, the man page, and
     // the shell completions all come from the CommandSpec tree, so they are

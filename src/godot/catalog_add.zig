@@ -121,7 +121,11 @@ fn normalizeScenePath(allocator: std.mem.Allocator, project_root: []const u8, sc
     if (std.mem.startsWith(u8, scene, "res://")) return try allocator.dupe(u8, scene);
     if (std.fs.path.isAbsolute(scene)) return error.InvalidScenePath;
     var rel: []const u8 = scene;
-    if (std.mem.startsWith(u8, rel, project_root)) rel = rel[project_root.len..];
+    // Strip the project root only as a whole path component; with a root of
+    // "." a bare prefix match would turn "../x" into "./x".
+    if (!std.mem.eql(u8, project_root, ".") and rel.len > project_root.len and std.mem.startsWith(u8, rel, project_root) and rel[project_root.len] == '/') {
+        rel = rel[project_root.len + 1 ..];
+    }
     while (std.mem.startsWith(u8, rel, "./")) rel = rel[2..];
     while (std.mem.startsWith(u8, rel, "/")) rel = rel[1..];
     if (rel.len == 0 or std.mem.startsWith(u8, rel, "..")) return error.InvalidScenePath;

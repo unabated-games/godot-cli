@@ -108,6 +108,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli batch`](#godot-cli-batch) | Run multiple CLI commands in one invocation |
 | [`godot-cli project`](#godot-cli-project) | Read and write Godot project.godot settings |
 | [`godot-cli project show`](#godot-cli-project-show) | Summarize key project.godot configuration |
+| [`godot-cli project move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`godot-cli project apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
 | [`godot-cli project input`](#godot-cli-project-input) | Input Map actions in project.godot |
 | [`godot-cli project input list`](#godot-cli-project-input-list) | List input actions |
@@ -657,6 +658,8 @@ godot-cli scene node remove [options] [args...]
 
 Rename a node and rewrite descendant parent attributes
 
+Takes the scene path and the node's viewport path: scene node rename main.tscn /root/Main/Player --name Hero. Connections from or to the node follow the rename.
+
 ```
 godot-cli scene node rename [options] [args...]
 ```
@@ -665,13 +668,7 @@ godot-cli scene node rename [options] [args...]
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
-| `--parent` | `<value>` | Viewport parent path (e.g. /root/Main) | — |
-| `--name` | `<value>` | Node name | — |
-| `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) | — |
-| `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
-| `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--raw-value` | — | Write property value verbatim | — |
-| `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
+| `--name` | `<value>` | New node name | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -686,6 +683,8 @@ godot-cli scene node rename [options] [args...]
 
 Move a node under a new parent path
 
+Takes the scene path and the node's viewport path: scene node reparent main.tscn /root/Main/Player/Camera --parent /root/Main. The node becomes the new parent's last child, as in the editor.
+
 ```
 godot-cli scene node reparent [options] [args...]
 ```
@@ -694,13 +693,7 @@ godot-cli scene node reparent [options] [args...]
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
-| `--parent` | `<value>` | Viewport parent path (e.g. /root/Main) | — |
-| `--name` | `<value>` | Node name | — |
-| `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) | — |
-| `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
-| `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--raw-value` | — | Write property value verbatim | — |
-| `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
+| `--parent` | `<value>` | New parent, viewport path (e.g. /root/Main) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -1049,6 +1042,7 @@ godot-cli scene set-property [options] [args...]
 | `--raw-value` | — | Write value verbatim without Variant normalization | — |
 | `--node` | `<value>` | Target node by viewport path (e.g. /root/Main/Player) | — |
 | `--node-name` | `<value>` | Target node section by name attribute | — |
+| `--section-id` | `<value>` | Target an ext_resource or sub_resource by its id (e.g. CapsuleShape2D_abc12) | — |
 | `--section-line` | `<value>` | Target section by header line number | — |
 | `--section` | `<value>` | Target section by tag name (e.g. resource) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
@@ -1667,6 +1661,7 @@ godot-cli project [options]
 | Subcommand | Summary |
 |------------|---------|
 | [`show`](#godot-cli-project-show) | Summarize key project.godot configuration |
+| [`move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
 | [`input`](#godot-cli-project-input) | Input Map actions in project.godot |
 | [`settings`](#godot-cli-project-settings) | Scalar project settings (application, display, layer_names, …) |
@@ -1693,6 +1688,25 @@ godot-cli project show [options] [args...]
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
+
+### `godot-cli project move`
+
+Move or rename a file and repoint every reference to it
+
+Renames the file with its .uid and .import sidecars, rewrites every ext_resource path in the project's scenes and resources, repoints catalog manifests, and updates project.godot settings such as the main scene and autoloads. Paths are res:// or project-relative.
+
+```
+godot-cli project move [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--from` | `<value>` | Current path (res://scripts/player.gd or scripts/player.gd) | — |
+| `--to` | `<value>` | New path | — |
+| `--dry-run` | — | Report what would change without moving or writing | — |
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 
 ### `godot-cli project apply`

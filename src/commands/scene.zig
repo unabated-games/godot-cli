@@ -16,6 +16,7 @@ const scene_instance = @import("../godot/scene_instance.zig");
 const resource_uid_lookup = @import("../godot/resource_uid_lookup.zig");
 const scene_patch = @import("../godot/scene_patch.zig");
 const scene_connections = @import("../godot/scene_connections.zig");
+const error_details = @import("../godot/error_details.zig");
 const scene_plan = @import("../godot/scene_plan.zig");
 const scene_diff = @import("../godot/scene_diff.zig");
 const scene_undo = @import("../godot/scene_undo.zig");
@@ -274,8 +275,30 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         if (inv.getOption("node")) |node_path| {
             var list = try node_tree.collectNodes(cli.allocator, &doc);
             defer list.deinit(cli.allocator);
-            const info = node_tree.findByPath(&list, node_path) orelse return error.Usage;
+            const info = node_tree.findByPath(&list, node_path) orelse {
+                // A path under an instanced node names something inside the
+                // PackedScene, which this file does not contain.
+                for (list.nodes) |*node| {
+                    if (node.instance == null) continue;
+                    if (node_path.len > node.path.len and std.mem.startsWith(u8, node_path, node.path) and node_path[node.path.len] == '/') {
+                        const hint = try std.fmt.allocPrint(cli.allocator, "{s} is inside the instanced scene {s}; override it with the instance_override patch op (path {s}, child {s}), which marks the instance editable", .{ node_path, node.instance_path orelse node.instance.?, node.path, node_path[node.path.len + 1 ..] });
+                        error_details.record(.{ .field = "node", .value = node_path, .hint = hint });
+                        return error.NodeNotFound;
+                    }
+                }
+                error_details.record(.{ .field = "node", .value = node_path, .hint = "no node at this viewport path; scene node list shows the paths" });
+                return error.NodeNotFound;
+            };
             break :blk info.section_index;
+        }
+        if (inv.getOption("section-id")) |section_id| {
+            for (doc.sections.items, 0..) |section, index| {
+                if (section.header.getString("id")) |id| {
+                    if (std.mem.eql(u8, id, section_id)) break :blk index;
+                }
+            }
+            error_details.record(.{ .field = "section-id", .value = section_id, .hint = "no ext_resource or sub_resource with this id; scene inspect lists them" });
+            return error.NodeNotFound;
         }
         if (inv.getOption("node-name")) |node_name| {
             break :blk text_format.document.findSectionIndexByNodeName(&doc, node_name) orelse return error.Usage;
@@ -1798,6 +1821,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
         .{ .long = "node", .kind = .string, .description = "Target node by viewport path (e.g. /root/Main/Player)" },
         .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },
+        .{ .long = "section-id", .kind = .string, .description = "Target an ext_resource or sub_resource by its id (e.g. CapsuleShape2D_abc12)" },
         .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (e.g. resource)" },
     } ++ save_options;
@@ -1847,6 +1871,12 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
+    } ++ save_options;
+    const node_rename_options = [_]spec.OptionSpec{
+        .{ .long = "name", .kind = .string, .description = "New node name" },
+    } ++ save_options;
+    const node_reparent_options = [_]spec.OptionSpec{
+        .{ .long = "parent", .kind = .string, .description = "New parent, viewport path (e.g. /root/Main)" },
     } ++ save_options;
     const node_remove_options = [_]spec.OptionSpec{
         .{ .long = "recursive", .kind = .flag, .description = "Remove descendant nodes as well" },
@@ -2042,13 +2072,15 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "rename",
                         .summary = "Rename a node and rewrite descendant parent attributes",
-                        .options = &node_edit_options,
+                        .description = "Takes the scene path and the node's viewport path: scene node rename main.tscn /root/Main/Player --name Hero. Connections from or to the node follow the rename.",
+                        .options = &node_rename_options,
                         .handler = sceneNodeRenameHandler,
                     },
                     .{
                         .name = "reparent",
+                        .description = "Takes the scene path and the node's viewport path: scene node reparent main.tscn /root/Main/Player/Camera --parent /root/Main. The node becomes the new parent's last child, as in the editor.",
                         .summary = "Move a node under a new parent path",
-                        .options = &node_edit_options,
+                        .options = &node_reparent_options,
                         .handler = sceneNodeReparentHandler,
                     },
                 },

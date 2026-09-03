@@ -104,6 +104,17 @@ After both commands the descendants have followed:
 
 `scene node remove <path>` deletes a node, and takes `--recursive` when it has children.
 
+## Move or rename a file
+
+A file that moves by hand leaves every `res://` reference to it stale. `project move` does the move and the repointing together: the file and its `.uid` sidecar, every scene and resource that referenced it, catalog manifests, and settings in `project.godot` such as the main scene.
+
+```bash
+godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
+godot-cli project move --project-root . --from res://scenes/level_2.tscn --to res://levels/two.tscn
+```
+
+`--dry-run` lists what would change.
+
 ## Check the result
 
 ```bash

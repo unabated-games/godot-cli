@@ -9,6 +9,7 @@ const project_plugins = @import("../godot/project_plugins.zig");
 const project_rendering = @import("../godot/project_rendering.zig");
 const project_physics = @import("../godot/project_physics.zig");
 const project_unified = @import("../godot/project_unified.zig");
+const project_move = @import("../godot/project_move.zig");
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
@@ -639,6 +640,33 @@ fn renderingValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     };
 }
 
+fn moveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse return error.Usage;
+    const from = inv.getOption("from") orelse return error.Usage;
+    const to = inv.getOption("to") orelse return error.Usage;
+
+    var result = try project_move.moveResource(cli.allocator, cli.io, root, from, to, inv.flag("dry-run"));
+    defer result.deinit(cli.allocator);
+
+    var files = std.json.Array.init(cli.allocator);
+    for (result.changed_files) |f| try files.append(.{ .string = try cli.allocator.dupe(u8, f) });
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "from", .{ .string = try cli.allocator.dupe(u8, result.from) });
+    try data.put(cli.allocator, "to", .{ .string = try cli.allocator.dupe(u8, result.to) });
+    try data.put(cli.allocator, "sidecars_moved", .{ .integer = @intCast(result.sidecars_moved) });
+    try data.put(cli.allocator, "files_changed", .{ .integer = @intCast(result.files_changed) });
+    try data.put(cli.allocator, "references_retargeted", .{ .integer = @intCast(result.references_retargeted) });
+    try data.put(cli.allocator, "manifests_updated", .{ .integer = @intCast(result.manifests_updated) });
+    try data.put(cli.allocator, "settings_updated", .{ .integer = @intCast(result.settings_updated) });
+    try data.put(cli.allocator, "changed_files", .{ .array = files });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "moved {s} to {s}; retargeted {d} reference(s) in {d} file(s), {d} manifest(s), {d} setting(s)", .{ result.from, result.to, result.references_retargeted, result.files_changed, result.manifests_updated, result.settings_updated });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
 fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
     const root = projectRootFrom(inv) orelse return error.Usage;
@@ -834,6 +862,12 @@ pub fn commands() spec.CommandSpec {
         .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
     };
 
+    const move_options = [_]spec.OptionSpec{
+        .{ .long = "from", .kind = .string, .description = "Current path (res://scripts/player.gd or scripts/player.gd)" },
+        .{ .long = "to", .kind = .string, .description = "New path" },
+        .{ .long = "dry-run", .kind = .flag, .description = "Report what would change without moving or writing" },
+    } ++ project_options;
+
     return .{
         .name = "project",
         .summary = "Read and write Godot project.godot settings",
@@ -845,6 +879,13 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Summarize key project.godot configuration",
                 .options = &project_options,
                 .handler = showHandler,
+            },
+            .{
+                .name = "move",
+                .summary = "Move or rename a file and repoint every reference to it",
+                .description = "Renames the file with its .uid and .import sidecars, rewrites every ext_resource path in the project's scenes and resources, repoints catalog manifests, and updates project.godot settings such as the main scene and autoloads. Paths are res:// or project-relative.",
+                .options = &move_options,
+                .handler = moveHandler,
             },
             .{
                 .name = "apply",

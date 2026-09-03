@@ -15,6 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-03
+
+### Added
+
+- **`project move --from --to`**: rename or move a file with its `.uid` and `.import` sidecars and repoint everything that referenced it, across every scene and resource in the project, catalog manifests, and `project.godot` settings such as the main scene and autoloads. The refactor trial did this as `mv`, a `grep`, and `scene retarget-ext` per file; it is one command now.
+- `scene set-property --section-id <id>` targets an `ext_resource` or `sub_resource` by id, where `--section sub_resource` only ever found the first one.
+- `set-property --node` on a path inside an instanced scene fails with `node_not_found` and a hint naming the instance and the `instance_override` op with `child` that reaches it; it returned a bare `Usage`.
+
+### Fixed
+
+- `scene node rename` and `scene node reparent` showed `node add`'s option table in `--help`, the reference, and the completions, and never stated their positional form. Each has its own options and an example in its description.
+
 ## [0.6.0] — 2026-09-03
 
 ### Added

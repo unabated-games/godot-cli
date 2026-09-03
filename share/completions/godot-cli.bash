@@ -54,7 +54,7 @@ _godot_cli_children() {
             echo "add relink scan list show validate search export"
             ;;
         'project')
-            echo "show apply input settings autoload plugins rendering physics"
+            echo "show move apply input settings autoload plugins rendering physics"
             ;;
         'project input')
             echo "list apply validate"
@@ -131,10 +131,10 @@ _godot_cli_options() {
             echo "--recursive --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node rename')
-            echo "--parent --name --type --property --value --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node reparent')
-            echo "--parent --name --type --property --value --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--parent --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene connection add')
             echo "--from --signal --to --method --deferred --one-shot --binds --unbinds --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -173,7 +173,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'scene set-property')
-            echo "--property --value --raw-value --node --node-name --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--property --value --raw-value --node --node-name --section-id --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene normalize')
             echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -258,6 +258,9 @@ _godot_cli_options() {
             ;;
         'project show')
             echo "--project-root"
+            ;;
+        'project move')
+            echo "--from --to --dry-run --project-root"
             ;;
         'project apply')
             echo "--project-root --intent --file --dry-run"
@@ -407,6 +410,7 @@ _godot_cli_takes_args() {
         'catalog export') return 0 ;;
         'batch') return 0 ;;
         'project show') return 0 ;;
+        'project move') return 0 ;;
         'project apply') return 0 ;;
         'project input list') return 0 ;;
         'project input apply') return 0 ;;

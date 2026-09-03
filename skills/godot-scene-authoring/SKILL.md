@@ -65,6 +65,16 @@ godot-cli scene node add <scene> --parent /root/Main --name HUD --type Control \
   --property grow_vertical --value 2 --project-root .
 ```
 
+## Move or rename a file
+
+Never `mv` a script, scene, or texture by hand; the `res://` paths in every scene that uses it go stale. One command moves the file with its `.uid` sidecar and repoints every scene, resource, manifest, and `project.godot` setting:
+
+```bash
+godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
+```
+
+`--dry-run` lists what would change. Nodes inside an instanced scene are not in the parent file: to change one, use the `instance_override` patch op with `child`, which marks the instance editable; `set-property --node` on such a path fails with a hint saying so.
+
 ## Resources (.tres)
 
 Materials, themes, shapes, and any other Resource are `.tres` files, and they are authored the same way as scenes:

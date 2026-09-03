@@ -147,6 +147,13 @@ pub const App = struct {
                     failure.details = .{ .object = details };
                 }
             }
+            if (std.mem.eql(u8, name, "NodeNotFound")) {
+                if (error_details.takeJson(self.allocator) catch null) |details| {
+                    failure.kind = "node_not_found";
+                    failure.message = "no such node in this scene file";
+                    failure.details = .{ .object = details };
+                }
+            }
             if (std.mem.eql(u8, name, "InvalidPropertyValue") or
                 std.mem.eql(u8, name, "MissingPatchField") or
                 std.mem.eql(u8, name, "MissingIntentField"))
