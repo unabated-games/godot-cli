@@ -149,6 +149,9 @@ Scene root node name (default: Root)
 \fB\-\-root\-type\fR \fIvalue\fR
 Scene root node type (default: Node)
 .TP
+\fB\-\-no\-uid\fR
+Do not stamp a uid="uid://..." on the header
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -905,10 +908,13 @@ Intent JSON with steps/recipes (expands to patch ops)
 Existing patch JSON to validate and preview
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of \-\-intent
+The intent itself, instead of a file: {"steps": [{"recipe":
+"player_2d", "parent": "/root/Main", "name": "Player"}]}; recipe
+fields: scene recipes
 .TP
 \fB\-\-patch\-json\fR \fIvalue\fR
-The patch JSON itself, instead of \-\-patch
+The patch itself, instead of a file: {"ops": [{"op": "node_add",
+"parent": "/root/Main", "name": "HUD", "type": "CanvasLayer"}]}
 .TP
 \fB\-\-write\-patch\fR \fIpath\fR
 Write expanded patch JSON to this path
@@ -942,10 +948,13 @@ Scene file (.tscn)
 JSON patch file with { "ops": [ … ] }
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of \-\-intent
+The intent itself, instead of a file: {"steps": [{"recipe":
+"player_2d", "parent": "/root/Main", "name": "Player"}]}; recipe
+fields: scene recipes
 .TP
 \fB\-\-patch\-json\fR \fIvalue\fR
-The patch JSON itself, instead of \-\-patch
+The patch itself, instead of a file: {"ops": [{"op": "node_add",
+"parent": "/root/Main", "name": "HUD", "type": "CanvasLayer"}]}
 .TP
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON (expands to patch ops via scene plan)
@@ -1236,6 +1245,9 @@ as \-\-property/\-\-value
 .TP
 \fB\-\-raw\-value\fR
 Write property values verbatim
+.TP
+\fB\-\-no\-uid\fR
+Do not stamp a uid="uid://..." on the header
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -1808,11 +1820,15 @@ the log
 Imports (unless \-\-no\-import), then runs the main scene or
 \-\-scene with \-\-write\-movie into capture/, quits after
 \-\-frames, and reads the log. The result names the last frame,
-the log, and every ERROR or SCRIPT ERROR line with its backtrace;
-it fails (exit 1) when Godot did not exit cleanly or the log
-holds an error, so the change is not done until this passes.
-Frames other than the last, and the .wav Godot writes, are
-deleted unless \-\-keep\-frames.
+the log and its last 40 lines, and every ERROR or SCRIPT ERROR
+line with its backtrace; it fails (exit 1) when Godot did not
+exit cleanly or the log holds an error, so the change is not
+done until this passes. \-\-press move_right@10..40 holds an
+input action over a frame range so movement and buttons can
+be exercised; the frame then shows the result. Frames other
+than the last, and the .wav Godot writes, are deleted unless
+\-\-keep\-frames. Over MCP the frame is also returned as an
+image.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)
@@ -1830,7 +1846,8 @@ Frames to run before quitting; 60 is one second, 5 is enough
 for a static screen (default: 60)
 .TP
 \fB\-\-resolution\fR \fIvalue\fR
-Window size as WIDTHxHEIGHT (default: 640x360)
+Window size as WIDTHxHEIGHT; default is the project's display/window/size,
+else 640x360
 .TP
 \fB\-\-capture\-dir\fR \fIpath\fR
 Folder under the project for the frame and log; created with
@@ -1850,6 +1867,11 @@ a display
 \fB\-\-user\-arg\fR \fIvalue\fR
 Argument passed after \-\-, readable with OS.get_cmdline_user_args();
 repeatable
+.TP
+\fB\-\-press\fR \fIvalue\fR
+Hold an input action over physics frames, e.g. move_right@10..40
+or ui_accept@5; repeatable. Runs through a generated SceneTree
+script so the scene loads the same way
 .SS godot\-cli project show
 Summarize key project.godot configuration
 .TP
@@ -1898,7 +1920,8 @@ input {"actions": [{"name", "events": [{"type": "key", "keycode":
 examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of a file
+The intent itself, instead of a file; the same document the
+intent option describes
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -1925,7 +1948,8 @@ Intent JSON file: {"actions": [{"name": "move_left", "events":
 each action replaces one of the same name
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of a file
+The intent itself, instead of a file; the same document the
+intent option describes
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -1991,7 +2015,8 @@ Intent JSON file: {"<section>": {"<key>": value}}, e.g. {"application":
 640}}; keys merge into the existing file
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of a file
+The intent itself, instead of a file; the same document the
+intent option describes
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -2025,7 +2050,8 @@ Intent JSON file: {"autoloads": [{"name": "GameState", "path":
 false}
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of a file
+The intent itself, instead of a file; the same document the
+intent option describes
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -2083,7 +2109,8 @@ Intent JSON file: {"enable": ["my_addon"], "disable": []};
 names are folders under addons/
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of a file
+The intent itself, instead of a file; the same document the
+intent option describes
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -2114,7 +2141,8 @@ Intent JSON file: {"method": "forward_plus" | "mobile" | "gl_compatibility",
 rendering/ keys
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of a file
+The intent itself, instead of a file; the same document the
+intent option describes
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -2144,7 +2172,8 @@ Intent JSON file: {"engine_3d": "Jolt Physics", "gravity_3d":
 980, "engine_2d": "GodotPhysics2D", "gravity_2d": 980}
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
-The intent JSON itself, instead of a file
+The intent itself, instead of a file; the same document the
+intent option describes
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent

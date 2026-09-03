@@ -111,7 +111,8 @@ pub const Tag = struct {
         const index = self.fields.getIndex(key) orelse return;
         const removed_key = self.fields.keys()[index];
         const removed_value = self.fields.values()[index];
-        self.fields.swapRemoveAt(index);
+        // Ordered: the header is written in field order, and Godot's is fixed.
+        self.fields.orderedRemoveAt(index);
         allocator.free(removed_key);
         switch (removed_value) {
             .string, .raw => |s| allocator.free(s),

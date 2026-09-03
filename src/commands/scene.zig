@@ -199,10 +199,12 @@ fn buildIssuesJson(cli: *const app_mod.App, report: *const id_validate.Report) !
     return issues;
 }
 
-fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
+fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind_for_command: []const u8) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
     const path = inv.positionals[0];
+    // `scene validate` on a .tres is common; report what the file is.
+    const kind: []const u8 = if (std.mem.endsWith(u8, path, ".tres")) "resource" else if (std.mem.endsWith(u8, path, ".tscn")) "scene" else kind_for_command;
 
     const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
     var setup = try ValidateSetup.init(cli, inv, path);
@@ -627,6 +629,7 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
 
     var doc = try scene_edit.createNewResource(cli.allocator, resource_type);
     defer doc.deinit(cli.allocator);
+    const uid_text = try stampHeaderUid(cli, inv, &doc);
     const resource_index = doc.sections.items.len - 1;
 
     const property_pairs = try collectPropertyPairs(cli, inv);
@@ -646,11 +649,26 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
     try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, resource_type) });
+    if (uid_text) |uid| try data.put(cli.allocator, "uid", .{ .string = uid });
     try data.put(cli.allocator, "property_count", .{ .integer = @intCast(property_pairs.len) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     const summary = try std.fmt.allocPrint(cli.allocator, "created {s} resource {s}", .{ resource_type, output_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = &.{} };
+}
+
+/// The editor gives every saved scene and resource a `uid="uid://..."` in its
+/// header, and other files reference it by that uid. Without one, `catalog
+/// add` has no `scene_uid` and the editor rewrites the header on first save.
+/// Random 63-bit, as `ResourceUID::create_id` is; `--no-uid` skips it.
+fn stampHeaderUid(cli: *const app_mod.App, inv: *const spec.Invocation, doc: *text_format.document.Document) !?[]const u8 {
+    if (inv.flag("no-uid")) return null;
+    var bytes: [8]u8 = undefined;
+    cli.io.random(&bytes);
+    const id: i64 = @intCast((std.mem.readInt(u64, &bytes, .little) & 0x7FFF_FFFF_FFFF_FFFF) | 1);
+    const text = try resource_uid.idToText(cli.allocator, id);
+    try doc.sections.items[0].header.setStringField(cli.allocator, "uid", text);
+    return text;
 }
 
 fn sceneNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -661,6 +679,7 @@ fn sceneNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     var doc = try scene_edit.createNewScene(cli.allocator, root_name, root_type);
     defer doc.deinit(cli.allocator);
+    const uid_text = try stampHeaderUid(cli, inv, &doc);
 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
@@ -668,6 +687,7 @@ fn sceneNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    if (uid_text) |uid| try data.put(cli.allocator, "uid", .{ .string = uid });
     try data.put(cli.allocator, "root_name", .{ .string = try cli.allocator.dupe(u8, root_name) });
     try data.put(cli.allocator, "root_type", .{ .string = try cli.allocator.dupe(u8, root_type) });
     try data.put(cli.allocator, "root_path", .{ .string = try std.fmt.allocPrint(cli.allocator, "/root/{s}", .{root_name}) });
@@ -1452,7 +1472,7 @@ fn collectPropertyPairs(cli: *const app_mod.App, inv: *const spec.Invocation) ![
         while (it.next()) |entry| {
             const value: []const u8 = switch (entry.value_ptr.*) {
                 .string => |s| s,
-                .integer => |i| try std.fmt.allocPrint(cli.allocator, "{d}", .{i}),
+                .integer => |i| if (scene_patch.isFloatProperty(entry.key_ptr.*)) try std.fmt.allocPrint(cli.allocator, "{d}.0", .{i}) else try std.fmt.allocPrint(cli.allocator, "{d}", .{i}),
                 .float => |f| try std.fmt.allocPrint(cli.allocator, "{d}", .{f}),
                 .number_string => |s| s,
                 .bool => |b| if (b) "true" else "false",
@@ -1899,8 +1919,8 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
     } ++ id_session_options;
     const set_property_options = [_]spec.OptionSpec{
-        .{ .long = "property", .kind = .string, .description = "Property name to set" },
-        .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)" },
+        .{ .long = "property", .kind = .string, .description = "Property name to set", .required = true },
+        .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)", .required = true },
         .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
         .{ .long = "node", .kind = .string, .description = "Target node by viewport path (e.g. /root/Main/Player)" },
         .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },
@@ -1912,8 +1932,8 @@ pub fn sceneCommands() spec.CommandSpec {
         project_root_opt,
     };
     const retarget_options = [_]spec.OptionSpec{
-        .{ .long = "from", .kind = .string, .description = "Current ext_resource path (res://…)" },
-        .{ .long = "to", .kind = .string, .description = "New ext_resource path (res://…)" },
+        .{ .long = "from", .kind = .string, .description = "Current ext_resource path (res://…)", .required = true },
+        .{ .long = "to", .kind = .string, .description = "New ext_resource path (res://…)", .required = true },
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path" },
         .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding", .advanced = true },
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation on write", .advanced = true },
@@ -1947,9 +1967,9 @@ pub fn sceneCommands() spec.CommandSpec {
         optional_project_root_opt,
     };
     const node_edit_options = [_]spec.OptionSpec{
-        .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)" },
-        .{ .long = "name", .kind = .string, .description = "Node name" },
-        .{ .long = "type", .kind = .string, .description = "Godot node class name (e.g. CharacterBody2D)" },
+        .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)", .required = true },
+        .{ .long = "name", .kind = .string, .description = "Node name", .required = true },
+        .{ .long = "type", .kind = .string, .description = "Godot node class name (e.g. CharacterBody2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new node; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
         .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
@@ -1957,10 +1977,10 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
     } ++ save_options;
     const node_rename_options = [_]spec.OptionSpec{
-        .{ .long = "name", .kind = .string, .description = "New node name" },
+        .{ .long = "name", .kind = .string, .description = "New node name", .required = true },
     } ++ save_options;
     const node_reparent_options = [_]spec.OptionSpec{
-        .{ .long = "parent", .kind = .string, .description = "New parent, viewport path (e.g. /root/Main)" },
+        .{ .long = "parent", .kind = .string, .description = "New parent, viewport path (e.g. /root/Main)", .required = true },
     } ++ save_options;
     const node_remove_options = [_]spec.OptionSpec{
         .{ .long = "recursive", .kind = .flag, .description = "Remove descendant nodes as well" },
@@ -1968,15 +1988,15 @@ pub fn sceneCommands() spec.CommandSpec {
     const plan_options = [_]spec.OptionSpec{
         .{ .long = "intent", .kind = .path, .description = "Intent JSON with steps/recipes (expands to patch ops)" },
         .{ .long = "patch", .kind = .path, .description = "Existing patch JSON to validate and preview" },
-        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of --intent" },
-        .{ .long = "patch-json", .kind = .string, .description = "The patch JSON itself, instead of --patch" },
+        .{ .long = "intent-json", .kind = .string, .description = "The intent itself, instead of a file: {\"steps\": [{\"recipe\": \"player_2d\", \"parent\": \"/root/Main\", \"name\": \"Player\"}]}; recipe fields: scene recipes" },
+        .{ .long = "patch-json", .kind = .string, .description = "The patch itself, instead of a file: {\"ops\": [{\"op\": \"node_add\", \"parent\": \"/root/Main\", \"name\": \"HUD\", \"type\": \"CanvasLayer\"}]}" },
         .{ .long = "write-patch", .kind = .path, .description = "Write expanded patch JSON to this path" },
         project_root_opt,
     };
     const apply_options = [_]spec.OptionSpec{
         .{ .long = "patch", .kind = .path, .description = "JSON patch file with { \"ops\": [ … ] }" },
-        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of --intent" },
-        .{ .long = "patch-json", .kind = .string, .description = "The patch JSON itself, instead of --patch" },
+        .{ .long = "intent-json", .kind = .string, .description = "The intent itself, instead of a file: {\"steps\": [{\"recipe\": \"player_2d\", \"parent\": \"/root/Main\", \"name\": \"Player\"}]}; recipe fields: scene recipes" },
+        .{ .long = "patch-json", .kind = .string, .description = "The patch itself, instead of a file: {\"ops\": [{\"op\": \"node_add\", \"parent\": \"/root/Main\", \"name\": \"HUD\", \"type\": \"CanvasLayer\"}]}" },
         .{ .long = "intent", .kind = .path, .description = "Intent JSON (expands to patch ops via scene plan)" },
         .{ .long = "snapshot", .kind = .path, .description = "Copy scene to this path before applying" },
         .{ .long = "auto-snapshot", .kind = .flag, .description = "Save snapshot to <scene>.godot-cli-snapshot before apply" },
@@ -1997,7 +2017,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "project-root", .kind = .path, .description = "Godot project root for res:// seed path and id session cache" },
         .{ .long = "resource-path", .kind = .string, .description = "Godot res:// path for ID seeding (overrides the project root)", .advanced = true },
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)", .advanced = true },
-        .{ .long = "output", .kind = .path, .description = "Output path (required)" },
+        .{ .long = "output", .kind = .path, .description = "Output path (required)", .required = true },
         .{ .long = "dry-run", .kind = .flag, .description = "Report copy without writing" },
         .{ .long = "id-session", .kind = .path, .description = "Path to ext_resource id session cache JSON", .advanced = true },
         .{ .long = "no-id-session", .kind = .flag, .description = "Do not load or update ext_resource id session cache", .advanced = true },
@@ -2014,8 +2034,8 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "dry-run", .kind = .flag, .description = "Report restore without writing" },
     };
     const instance_add_options = [_]spec.OptionSpec{
-        .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)" },
-        .{ .long = "name", .kind = .string, .description = "Node name for the new instance" },
+        .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)", .required = true },
+        .{ .long = "name", .kind = .string, .description = "Node name for the new instance", .required = true },
         .{ .long = "scene", .kind = .string, .description = "PackedScene res:// path to instance" },
         .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves the scene path; needs the project root)" },
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
@@ -2027,19 +2047,20 @@ pub fn sceneCommands() spec.CommandSpec {
     // declared once: twice over, help listed it twice and completions offered
     // it twice.
     const scene_new_options = [_]spec.OptionSpec{
-        .{ .long = "output", .kind = .path, .description = "Output .tscn path (required)" },
+        .{ .long = "output", .kind = .path, .description = "Output .tscn path (required)", .required = true },
         .{ .long = "root-name", .kind = .string, .description = "Scene root node name (default: Root)" },
         .{ .long = "root-type", .kind = .string, .description = "Scene root node type (default: Node)" },
+        .{ .long = "no-uid", .kind = .flag, .description = "Do not stamp a uid=\"uid://...\" on the header" },
     } ++ withoutOption(&save_options, "output");
     const refs_options = [_]spec.OptionSpec{
         project_root_opt,
     };
     const ext_add_options = [_]spec.OptionSpec{
-        .{ .long = "type", .kind = .string, .description = "Godot resource type (e.g. Script, PackedScene)" },
-        .{ .long = "path", .kind = .string, .description = "Godot res:// path for the external resource" },
+        .{ .long = "type", .kind = .string, .description = "Godot resource type (e.g. Script, PackedScene)", .required = true },
+        .{ .long = "path", .kind = .string, .description = "Godot res:// path for the external resource", .required = true },
     } ++ save_options;
     const sub_add_options = [_]spec.OptionSpec{
-        .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. RectangleShape2D)" },
+        .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. RectangleShape2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
         .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
@@ -2047,19 +2068,19 @@ pub fn sceneCommands() spec.CommandSpec {
     } ++ save_options;
     const resource_remove_options = save_options;
     const connection_add_options = [_]spec.OptionSpec{
-        .{ .long = "from", .kind = .string, .description = "Emitting node, viewport path (e.g. /root/Main/Menu/Resume)" },
-        .{ .long = "signal", .kind = .string, .description = "Signal name (e.g. pressed)" },
-        .{ .long = "to", .kind = .string, .description = "Receiving node, viewport path" },
-        .{ .long = "method", .kind = .string, .description = "Method on the receiving node's script (e.g. _on_resume_pressed)" },
+        .{ .long = "from", .kind = .string, .description = "Emitting node, viewport path (e.g. /root/Main/Menu/Resume)", .required = true },
+        .{ .long = "signal", .kind = .string, .description = "Signal name (e.g. pressed)", .required = true },
+        .{ .long = "to", .kind = .string, .description = "Receiving node, viewport path", .required = true },
+        .{ .long = "method", .kind = .string, .description = "Method on the receiving node's script (e.g. _on_resume_pressed)", .required = true },
         .{ .long = "deferred", .kind = .flag, .description = "CONNECT_DEFERRED: call at idle time" },
         .{ .long = "one-shot", .kind = .flag, .description = "CONNECT_ONE_SHOT: disconnect after the first emission" },
         .{ .long = "binds", .kind = .string, .description = "Extra arguments as Godot array text, e.g. '[\"quit\"]'" },
         .{ .long = "unbinds", .kind = .integer, .description = "Number of trailing signal arguments to drop" },
     } ++ save_options;
     const connection_remove_options = [_]spec.OptionSpec{
-        .{ .long = "from", .kind = .string, .description = "Emitting node, viewport path" },
-        .{ .long = "signal", .kind = .string, .description = "Signal name" },
-        .{ .long = "to", .kind = .string, .description = "Receiving node, viewport path" },
+        .{ .long = "from", .kind = .string, .description = "Emitting node, viewport path", .required = true },
+        .{ .long = "signal", .kind = .string, .description = "Signal name", .required = true },
+        .{ .long = "to", .kind = .string, .description = "Receiving node, viewport path", .required = true },
         .{ .long = "method", .kind = .string, .description = "Method name; omit to remove every connection of that signal between the two nodes" },
     } ++ save_options;
 
@@ -2388,23 +2409,24 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (default: resource)" },
     } ++ save_options;
     const resource_new_options = [_]spec.OptionSpec{
-        .{ .long = "output", .kind = .path, .description = "Output .tres path (required)" },
-        .{ .long = "type", .kind = .string, .description = "Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)" },
+        .{ .long = "output", .kind = .path, .description = "Output .tres path (required)", .required = true },
+        .{ .long = "type", .kind = .string, .description = "Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
         .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
+        .{ .long = "no-uid", .kind = .flag, .description = "Do not stamp a uid=\"uid://...\" on the header" },
     } ++ withoutOption(&save_options, "output");
     const resource_sub_add_options = [_]spec.OptionSpec{
-        .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. StyleBoxFlat)" },
+        .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. StyleBoxFlat)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new sub-resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
         .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
     } ++ save_options;
     const resource_ext_add_options = [_]spec.OptionSpec{
-        .{ .long = "type", .kind = .string, .description = "Resource type of the external file (e.g. Texture2D, Script)" },
-        .{ .long = "path", .kind = .string, .description = "res:// path of the external file" },
+        .{ .long = "type", .kind = .string, .description = "Resource type of the external file (e.g. Texture2D, Script)", .required = true },
+        .{ .long = "path", .kind = .string, .description = "res:// path of the external file", .required = true },
     } ++ save_options;
     const batch_options = [_]spec.OptionSpec{
         project_root_opt,

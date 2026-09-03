@@ -39,7 +39,7 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
         try sortExtResourceSections(allocator, doc);
     }
     if (options.update_load_steps) {
-        updateLoadSteps(doc);
+        try updateLoadSteps(allocator, doc);
     }
     if (options.assign_node_unique_ids) {
         try assignNodeUniqueIds(allocator, doc, options.seed_path);
@@ -357,7 +357,10 @@ fn sortExtResourceSections(allocator: std.mem.Allocator, doc: *document.Document
     doc.sections = reordered;
 }
 
-pub fn updateLoadSteps(doc: *document.Document) void {
+/// Keeps an existing `load_steps` in step with the ext_resource and
+/// sub_resource count, and drops it when nothing is left to count, since Godot
+/// never writes `load_steps=1`.
+pub fn updateLoadSteps(allocator: std.mem.Allocator, doc: *document.Document) !void {
     var ext_count: usize = 0;
     var sub_count: usize = 0;
 
@@ -369,12 +372,18 @@ pub fn updateLoadSteps(doc: *document.Document) void {
     const load_steps: i64 = @intCast(ext_count + sub_count + 1);
 
     for (doc.sections.items) |*section| {
-        if (std.mem.eql(u8, section.header.name, "gd_scene") or std.mem.eql(u8, section.header.name, "gd_resource")) {
-            if (section.header.fields.getPtr("load_steps")) |value| {
-                value.* = .{ .integer = load_steps };
-            }
+        if (!std.mem.eql(u8, section.header.name, "gd_scene") and !std.mem.eql(u8, section.header.name, "gd_resource")) continue;
+        if (load_steps <= 1) {
+            section.header.removeField(allocator, "load_steps");
             return;
         }
+        if (section.header.fields.getPtr("load_steps")) |value| {
+            value.* = .{ .integer = load_steps };
+        }
+        // Never added when absent: Godot omits it for small scenes (a script
+        // reference alone saves as `[gd_scene format=3]`), and the round-trip
+        // fixtures hold it to that.
+        return;
     }
 }
 

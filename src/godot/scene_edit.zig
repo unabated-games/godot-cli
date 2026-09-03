@@ -38,8 +38,9 @@ pub fn createNewScene(allocator: std.mem.Allocator, root_name: []const u8, root_
 
     var gd_header = tag.Tag{ .name = try allocator.dupe(u8, "gd_scene"), .fields = .{} };
     errdefer gd_header.deinit(allocator);
+    // No load_steps: Godot writes it only when above one, and save
+    // preparation adds it before `format` when resources arrive.
     try gd_header.setIntegerField(allocator, "format", 3);
-    try gd_header.setIntegerField(allocator, "load_steps", 1);
 
     try doc.sections.append(allocator, .{
         .line = 0,

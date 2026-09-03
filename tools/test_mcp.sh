@@ -86,7 +86,9 @@ shown = by_id[9]["result"]["structuredContent"]
 assert shown["ok"] and shown["data"]["project_root"].startswith("/"), shown
 recipes = by_id[10]["result"]["contents"][0]["text"]
 assert "`static_body_2d`" in recipes and "`color`" in recipes, recipes[:200]
-node_add_schema = next(t for t in tools if t["name"] == "scene_node_add")["inputSchema"]["properties"]
+node_add_tool = next(t for t in tools if t["name"] == "scene_node_add")
+assert {"file", "parent", "name", "type"} <= set(node_add_tool["inputSchema"]["required"]), node_add_tool["inputSchema"]["required"]
+node_add_schema = node_add_tool["inputSchema"]["properties"]
 assert "id-session" not in node_add_schema and "dry-run" in node_add_schema, list(node_add_schema)
 new_schema = next(t for t in tools if t["name"] == "project_new")["inputSchema"]["properties"]
 assert new_schema["width"]["type"] == "integer", new_schema["width"]

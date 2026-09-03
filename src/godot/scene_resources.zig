@@ -249,7 +249,7 @@ pub fn addExtResourceWithId(
         .properties = .empty,
     });
 
-    save_prepare.updateLoadSteps(doc);
+    try save_prepare.updateLoadSteps(allocator, doc);
 
     return .{
         .section_index = section_index,
@@ -304,7 +304,7 @@ pub fn addSubResourceWithId(
         try document.setSectionProperty(doc, allocator, section_index, prop.name, prop.value);
     }
 
-    save_prepare.updateLoadSteps(doc);
+    try save_prepare.updateLoadSteps(allocator, doc);
 
     return .{
         .section_index = section_index,
@@ -368,7 +368,7 @@ fn removeResource(
 
     var section = try document.removeSection(doc, section_index);
     section.deinit(allocator);
-    save_prepare.updateLoadSteps(doc);
+    try save_prepare.updateLoadSteps(allocator, doc);
     return section_index;
 }
 
@@ -533,5 +533,6 @@ test "remove ext resource when unused" {
 
     _ = try removeExtResource(allocator, &doc, "1_unused");
     try std.testing.expectEqual(@as(usize, 2), doc.sections.items.len);
-    try std.testing.expectEqual(@as(i64, 1), doc.sections.items[0].header.getInteger("load_steps").?);
+    // Godot never writes load_steps=1, so the field goes with the last resource.
+    try std.testing.expect(doc.sections.items[0].header.getInteger("load_steps") == null);
 }

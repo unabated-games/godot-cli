@@ -43,6 +43,7 @@ const instructions =
     \\Read the resource godot-cli://docs/quickstart before the first edit; use the godot-scene-session prompt to start a session.
     \\Every tool returns the CLI's JSON envelope (ok, data, messages, failure); a failure's details name the field or value to fix.
     \\Discover with scene_node_list and catalog_list before editing, validate with scene_validate after every edit.
+    \\Start with the godot-scene-session prompt, or read godot-cli://prompts/session if this client does not show prompts; godot-cli://docs/recipes lists every intent recipe's fields. The core tools: project_new, project_input_apply, scene_new, scene_apply, scene_instance_add, scene_connection_add, resource_new, catalog_add, scene_validate, project_run.
     \\The docs describe a --project-root option; over MCP there is none. When the server was started with --project-root it is bound to that project, adds the option to every call, and refuses paths outside it; project_show reports the absolute root. Otherwise paths resolve against the server's working directory.
 ;
 
@@ -312,18 +313,41 @@ fn callTool(state: *State, arena: std.mem.Allocator, params: ?std.json.ObjectMap
         .environ = state.environ,
     };
     const outcome = try tools.call(arena, &app, tool, argv);
-    return .{ .result = try callResult(arena, outcome.envelope, outcome.is_error) };
+    const image = if (std.mem.eql(u8, tool.name, "project_run")) try frameImage(arena, outcome.envelope) else null;
+    return .{ .result = try callResult(arena, outcome.envelope, outcome.is_error, image) };
+}
+
+/// The captured frame from a project_run envelope as a base64 PNG, so a
+/// client with no file access still sees what the game drew.
+fn frameImage(arena: std.mem.Allocator, envelope: []const u8) !?[]const u8 {
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, envelope, .{}) catch return null;
+    if (parsed != .object) return null;
+    const data = parsed.object.get("data") orelse return null;
+    if (data != .object) return null;
+    const frame = data.object.get("frame") orelse return null;
+    if (frame != .string or !std.mem.endsWith(u8, frame.string, ".png")) return null;
+    const bytes = std.Io.Dir.cwd().readFileAlloc(std.Io.Threaded.global_single_threaded.io(), frame.string, arena, .limited(8 * 1024 * 1024)) catch return null;
+    const encoder = std.base64.standard.Encoder;
+    const out = try arena.alloc(u8, encoder.calcSize(bytes.len));
+    return encoder.encode(out, bytes);
 }
 
 /// The envelope goes out twice: as the text block every client shows the
 /// model, and parsed as `structuredContent` for clients that read it. Parsing
 /// our own output guarantees the two cannot disagree.
-fn callResult(arena: std.mem.Allocator, envelope: []const u8, is_error: bool) !std.json.Value {
+fn callResult(arena: std.mem.Allocator, envelope: []const u8, is_error: bool, image_base64: ?[]const u8) !std.json.Value {
     var text_block: std.json.ObjectMap = .{};
     try text_block.put(arena, "type", .{ .string = "text" });
     try text_block.put(arena, "text", .{ .string = envelope });
     var content: std.json.Array = .init(arena);
     try content.append(.{ .object = text_block });
+    if (image_base64) |encoded| {
+        var image_block: std.json.ObjectMap = .{};
+        try image_block.put(arena, "type", .{ .string = "image" });
+        try image_block.put(arena, "data", .{ .string = encoded });
+        try image_block.put(arena, "mimeType", .{ .string = "image/png" });
+        try content.append(.{ .object = image_block });
+    }
 
     var result = try baseResult(arena);
     try result.object.put(arena, "content", .{ .array = content });
@@ -416,6 +440,7 @@ fn readResource(state: *State, arena: std.mem.Allocator, params: ?std.json.Objec
         const outcome = try tools.call(arena, &app, tool, argv);
         mime = "application/json";
         text = outcome.envelope;
+        _ = callResult; // the catalog resource carries the envelope alone
     } else {
         var data: std.json.ObjectMap = .{};
         try data.put(arena, "uri", .{ .string = uri });

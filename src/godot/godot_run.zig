@@ -25,7 +25,41 @@ pub const Options = struct {
     headless: bool = false,
     /// Passed after `--`; reachable from OS.get_cmdline_user_args().
     user_args: []const []const u8 = &.{},
+    /// Input actions to hold for a range of physics frames. When any are
+    /// given the run goes through a generated SceneTree script that loads the
+    /// scene and drives Input.action_press/release, so movement and buttons
+    /// can be exercised without a hand-written test path.
+    presses: []const Press = &.{},
+    /// The main scene from project.godot, needed by the press script when
+    /// `scene` is null. Resolved by the caller.
+    main_scene: ?[]const u8 = null,
 };
+
+pub const Press = struct {
+    action: []const u8,
+    /// First physics frame (1-based) the action is held on.
+    start: u32,
+    /// Last physics frame the action is held on, inclusive.
+    end: u32,
+};
+
+/// `name@10..40` holds an action over a frame range; `name@10` presses it
+/// on one frame.
+pub fn parsePress(text: []const u8) ?Press {
+    const at = std.mem.indexOfScalar(u8, text, '@') orelse return null;
+    const action = text[0..at];
+    if (action.len == 0) return null;
+    const range = text[at + 1 ..];
+    if (std.mem.indexOf(u8, range, "..")) |dots| {
+        const start = std.fmt.parseInt(u32, range[0..dots], 10) catch return null;
+        const end = std.fmt.parseInt(u32, range[dots + 2 ..], 10) catch return null;
+        if (end < start or start == 0) return null;
+        return .{ .action = action, .start = start, .end = end };
+    }
+    const frame = std.fmt.parseInt(u32, range, 10) catch return null;
+    if (frame == 0) return null;
+    return .{ .action = action, .start = frame, .end = frame };
+}
 
 pub const Result = struct {
     godot: []const u8,
@@ -35,9 +69,13 @@ pub const Result = struct {
     frame: ?[]const u8 = null,
     frames_written: usize = 0,
     log_path: []const u8,
+    /// The last lines of the log, so a client need not read the file.
+    log_tail: []const u8 = "",
     errors: []const []const u8,
     stderr_tail: []const u8,
     duration_ms: i64,
+    /// Path of the generated press script, when one was used.
+    driver_script: ?[]const u8 = null,
 };
 
 pub const Error = error{
@@ -138,7 +176,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     var argv: std.ArrayList([]const u8) = .empty;
     argv.appendSlice(allocator, &.{ godot, "--path", "." }) catch return error.OutOfMemory;
     if (options.headless) argv.append(allocator, "--headless") catch return error.OutOfMemory;
-    if (options.scene) |scene| argv.append(allocator, scene) catch return error.OutOfMemory;
+    if (options.presses.len != 0) {
+        const script_relative = try writeDriverScript(allocator, io, options);
+        result.driver_script = std.fs.path.join(allocator, &.{ options.project_root, script_relative }) catch return error.OutOfMemory;
+        argv.appendSlice(allocator, &.{ "--script", script_relative }) catch return error.OutOfMemory;
+    } else if (options.scene) |scene| argv.append(allocator, scene) catch return error.OutOfMemory;
     if (!options.headless) {
         argv.appendSlice(allocator, &.{ "--resolution", options.resolution, "--write-movie", shot_pattern }) catch return error.OutOfMemory;
     }
@@ -163,8 +205,60 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     }
 
     result.errors = try errorLines(allocator, io, result.log_path);
+    const log_text = std.Io.Dir.cwd().readFileAlloc(io, result.log_path, allocator, .unlimited) catch "";
+    result.log_tail = try tail(allocator, log_text, 40);
     result.duration_ms = started.durationTo(.now(io, .real)).raw.toMilliseconds();
     return result;
+}
+
+/// A SceneTree script that loads the scene and holds the requested actions
+/// over their frame ranges. Godot has no flag for injecting input, and this
+/// is what the trial agents wrote by hand each time.
+fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options) Error![]const u8 {
+    const scene_arg = options.scene orelse options.main_scene orelse return error.Io;
+    const scene_res = if (std.mem.startsWith(u8, scene_arg, "res://")) scene_arg else std.fmt.allocPrint(allocator, "res://{s}", .{std.mem.trimStart(u8, scene_arg, "./")}) catch return error.OutOfMemory;
+
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    const w = &out.writer;
+    w.writeAll("# Written by godot-cli project run --press; safe to delete.\nextends SceneTree\n\n") catch return error.OutOfMemory;
+    w.print("const SCENE := \"{s}\"\nconst PRESSES := [", .{scene_res}) catch return error.OutOfMemory;
+    for (options.presses, 0..) |press, i| {
+        w.print("{s}[\"{s}\", {d}, {d}]", .{ if (i == 0) "" else ", ", press.action, press.start, press.end }) catch return error.OutOfMemory;
+    }
+    w.writeAll(
+        \\]
+        \\var _frame := 0
+        \\
+        \\func _init() -> void:
+        \\    var packed: PackedScene = load(SCENE)
+        \\    if packed == null:
+        \\        push_error("godot-cli: cannot load " + SCENE)
+        \\        quit(1)
+        \\        return
+        \\    root.add_child(packed.instantiate())
+        \\    physics_frame.connect(_tick)
+        \\
+        \\func _tick() -> void:
+        \\    _frame += 1
+        \\    for press in PRESSES:
+        \\        if _frame == press[1]:
+        \\            if not InputMap.has_action(press[0]):
+        \\                push_error("godot-cli: no input action named " + press[0])
+        \\            Input.action_press(press[0])
+        \\        if _frame == press[2] + 1:
+        \\            Input.action_release(press[0])
+        \\
+    ) catch return error.OutOfMemory;
+
+    const relative = std.fmt.allocPrint(allocator, "{s}/godot_cli_run.gd", .{options.capture_dir}) catch return error.OutOfMemory;
+    const full = std.fs.path.join(allocator, &.{ options.project_root, relative }) catch return error.OutOfMemory;
+    const file = std.Io.Dir.cwd().createFile(io, full, .{}) catch return error.Io;
+    defer file.close(io);
+    var buffer: [4096]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+    writer.interface.writeAll(out.written()) catch return error.Io;
+    writer.interface.flush() catch return error.Io;
+    return relative;
 }
 
 fn clearCapture(allocator: std.mem.Allocator, io: std.Io, options: Options) Error!void {
@@ -275,6 +369,18 @@ test "error lines carry their backtrace and stop at the next plain line" {
     try std.testing.expect(std.mem.startsWith(u8, lines[0], "SCRIPT ERROR"));
     try std.testing.expect(std.mem.startsWith(u8, lines[1], "   at:"));
     try std.testing.expectEqualStrings("ERROR: deliberate", lines[2]);
+}
+
+test "press syntax" {
+    const range = parsePress("move_right@10..40").?;
+    try std.testing.expectEqualStrings("move_right", range.action);
+    try std.testing.expectEqual(@as(u32, 10), range.start);
+    try std.testing.expectEqual(@as(u32, 40), range.end);
+    const single = parsePress("ui_accept@5").?;
+    try std.testing.expectEqual(single.start, single.end);
+    try std.testing.expect(parsePress("nope") == null);
+    try std.testing.expect(parsePress("x@0") == null);
+    try std.testing.expect(parsePress("x@9..3") == null);
 }
 
 test "tail keeps the last lines" {

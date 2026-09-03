@@ -111,17 +111,46 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const frames = std.fmt.parseInt(u32, inv.getOption("frames") orelse "60", 10) catch return error.InvalidValue;
     const user_args = try inv.getOptionAll(cli.allocator, "user-arg");
 
+    const press_texts = try inv.getOptionAll(cli.allocator, "press");
+    var presses: std.ArrayList(godot_run.Press) = .empty;
+    for (press_texts) |text| {
+        const press = godot_run.parsePress(text) orelse {
+            error_details.record(.{ .field = "press", .value = text, .hint = "write <action>@<frame> or <action>@<first>..<last>, frames counted from 1, e.g. move_right@10..40" });
+            return error.InvalidPropertyValue;
+        };
+        try presses.append(cli.allocator, press);
+    }
+
+    // The project's own window size is the right default; a fixed one would
+    // silently run a 1280x720 project at 640x360.
+    var main_scene: ?[]const u8 = null;
+    var project_resolution: ?[]const u8 = null;
+    if (loadProject(cli, inv)) |loaded_const| {
+        var loaded = loaded_const;
+        defer loaded.doc.deinit(cli.allocator);
+        if (loaded.doc.sectionMut("application")) |app| {
+            if (app.getEntry("run/main_scene")) |value| main_scene = try cli.allocator.dupe(u8, project_godot.unquoteValue(value) orelse value);
+        }
+        if (loaded.doc.sectionMut("display")) |display| {
+            if (display.getEntry("window/size/viewport_width")) |w| if (display.getEntry("window/size/viewport_height")) |h| {
+                project_resolution = try std.fmt.allocPrint(cli.allocator, "{s}x{s}", .{ w, h });
+            };
+        }
+    } else |_| {}
+
     const run = try godot_run.run(cli.allocator, cli.io, cli.environ, .{
         .project_root = root,
         .godot = inv.getOption("godot"),
         .scene = inv.getOption("scene"),
         .frames = frames,
-        .resolution = inv.getOption("resolution") orelse "640x360",
+        .resolution = inv.getOption("resolution") orelse project_resolution orelse "640x360",
         .capture_dir = inv.getOption("capture-dir") orelse "capture",
         .import = !inv.flag("no-import"),
         .keep_frames = inv.flag("keep-frames"),
         .headless = inv.flag("headless"),
         .user_args = user_args,
+        .presses = presses.items,
+        .main_scene = main_scene,
     });
 
     var data: std.json.ObjectMap = .{};
@@ -130,6 +159,9 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "frames_requested", .{ .integer = frames });
     try data.put(cli.allocator, "frames_written", .{ .integer = @intCast(run.frames_written) });
     if (run.frame) |frame| try data.put(cli.allocator, "frame", .{ .string = frame });
+    try data.put(cli.allocator, "presses", .{ .integer = @intCast(presses.items.len) });
+    if (run.driver_script) |script| try data.put(cli.allocator, "driver_script", .{ .string = script });
+    if (run.log_tail.len != 0) try data.put(cli.allocator, "log_tail", .{ .string = run.log_tail });
 
     const clean_exit = run.exit != null and run.exit.? == 0;
     const ok = clean_exit and run.errors.len == 0;
@@ -1039,7 +1071,7 @@ fn physicsValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
 
 const new_options = [_]spec.OptionSpec{
     .{ .long = "project-root", .kind = .path, .description = "Folder to create the project in (default: current directory)" },
-    .{ .long = "name", .kind = .string, .description = "Project name (application/config/name)" },
+    .{ .long = "name", .kind = .string, .description = "Project name (application/config/name)", .required = true },
     .{ .long = "main-scene", .kind = .string, .description = "Main scene as a res:// path (application/run/main_scene)" },
     .{ .long = "width", .kind = .integer, .description = "Viewport width in pixels (display/window/size/viewport_width)" },
     .{ .long = "height", .kind = .integer, .description = "Viewport height in pixels (display/window/size/viewport_height)" },
@@ -1056,7 +1088,7 @@ fn intentOptions(comptime intent_description: []const u8) [5]spec.OptionSpec {
     return .{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
         .{ .long = "intent", .kind = .path, .description = intent_description },
-        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of a file" },
+        .{ .long = "intent-json", .kind = .string, .description = "The intent itself, instead of a file; the same document the intent option describes" },
         .{ .long = "file", .kind = .path, .description = "Alias for --intent" },
         .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
     };
@@ -1072,12 +1104,13 @@ const run_options = [_]spec.OptionSpec{
     godot_option,
     .{ .long = "scene", .kind = .string, .description = "Scene to run (res:// or project-relative); the main scene when omitted" },
     .{ .long = "frames", .kind = .integer, .description = "Frames to run before quitting; 60 is one second, 5 is enough for a static screen", .default_value = "60" },
-    .{ .long = "resolution", .kind = .string, .description = "Window size as WIDTHxHEIGHT", .default_value = "640x360" },
+    .{ .long = "resolution", .kind = .string, .description = "Window size as WIDTHxHEIGHT; default is the project's display/window/size, else 640x360" },
     .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; created with a .gdignore", .default_value = "capture" },
     .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },
     .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
     .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display" },
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
+    .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Runs through a generated SceneTree script so the scene loads the same way", .repeatable = true },
 };
 
 pub fn commands() spec.CommandSpec {
@@ -1100,15 +1133,15 @@ pub fn commands() spec.CommandSpec {
 
     const settings_get_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
-        .{ .long = "section", .kind = .string, .description = "Section name (e.g. application)" },
-        .{ .long = "key", .kind = .string, .description = "Setting key (e.g. run/main_scene)" },
+        .{ .long = "section", .kind = .string, .description = "Section name (e.g. application)", .required = true },
+        .{ .long = "key", .kind = .string, .description = "Setting key (e.g. run/main_scene)", .required = true },
     };
 
     const settings_set_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
-        .{ .long = "section", .kind = .string, .description = "Section name (e.g. application)" },
-        .{ .long = "key", .kind = .string, .description = "Setting key (e.g. run/main_scene)" },
-        .{ .long = "value", .kind = .string, .description = "Plain value (quoted automatically for strings)" },
+        .{ .long = "section", .kind = .string, .description = "Section name (e.g. application)", .required = true },
+        .{ .long = "key", .kind = .string, .description = "Setting key (e.g. run/main_scene)", .required = true },
+        .{ .long = "value", .kind = .string, .description = "Plain value (quoted automatically for strings)", .required = true },
         .{ .long = "raw", .kind = .flag, .description = "Store --value verbatim (already Godot-formatted)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
     };
@@ -1121,8 +1154,8 @@ pub fn commands() spec.CommandSpec {
     };
 
     const move_options = [_]spec.OptionSpec{
-        .{ .long = "from", .kind = .string, .description = "Current path (res://scripts/player.gd or scripts/player.gd)" },
-        .{ .long = "to", .kind = .string, .description = "New path" },
+        .{ .long = "from", .kind = .string, .description = "Current path (res://scripts/player.gd or scripts/player.gd)", .required = true },
+        .{ .long = "to", .kind = .string, .description = "New path", .required = true },
         .{ .long = "dry-run", .kind = .flag, .description = "Report what would change without moving or writing" },
     } ++ project_options;
 
@@ -1150,7 +1183,7 @@ pub fn commands() spec.CommandSpec {
                 .name = "run",
                 .summary = "Run the game for a few frames and capture the last frame and the log",
                 .description =
-                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames.
+                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range so movement and buttons can be exercised; the frame then shows the result. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
                 ,
                 .options = &run_options,
                 .handler = runHandler,

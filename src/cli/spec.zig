@@ -21,6 +21,9 @@ pub const OptionSpec = struct {
     /// the MCP server leaves it out of tool schemas unless started with
     /// --all-options, so 85 tools do not each carry the same six flags.
     advanced: bool = false,
+    /// The handler fails with a usage error without it. Rendered in help and
+    /// docs, and listed in the MCP schema's `required`.
+    required: bool = false,
 };
 
 /// Separator between repeated values in the options map. NUL cannot appear in

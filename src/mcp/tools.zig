@@ -126,8 +126,15 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
             } });
         }
         try prop.put(allocator, "description", .{ .string = try describe(allocator, opt.description, opt.kind, pinned) });
-        if (opt.default_value) |default_value| try prop.put(allocator, "default", .{ .string = default_value });
+        if (opt.default_value) |default_value| {
+            if (opt.kind == .integer) {
+                if (std.fmt.parseInt(i64, default_value, 10)) |n| try prop.put(allocator, "default", .{ .integer = n }) else |_| try prop.put(allocator, "default", .{ .string = default_value });
+            } else {
+                try prop.put(allocator, "default", .{ .string = default_value });
+            }
+        }
         try properties.put(allocator, opt.long, .{ .object = prop });
+        if (opt.required) try required.append(.{ .string = opt.long });
     }
 
     var schema: std.json.ObjectMap = .{};

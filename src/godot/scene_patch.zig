@@ -512,6 +512,16 @@ fn collectPropertyInputs(
 /// vector and `"\"Paused\""` is a string. A bare `"Paused"` is neither, and
 /// writing it produces `text = Paused`, which Godot cannot load. Rejecting it
 /// with the quoted form in `details.hint` lets an agent fix its own patch.
+/// Properties the editor always writes as floats. A JSON `8` for one of these
+/// would otherwise land as `offset_left = 8`, which Godot loads but the editor
+/// rewrites as `8.0` on the next save. Names are matched by prefix or exactly.
+pub fn isFloatProperty(property: []const u8) bool {
+    const name = if (std.mem.lastIndexOfScalar(u8, property, '/')) |slash| property[slash + 1 ..] else property;
+    const prefixes = [_][]const u8{ "offset_", "anchor_", "rotation", "skew", "radius", "height", "volume_db", "pitch_scale", "gravity_scale", "mass", "friction", "bounce", "speed_scale", "wait_time", "energy", "range", "attenuation", "max_distance", "unit_size", "step", "min_value", "max_value", "value", "ratio", "stretch_ratio", "fov", "near", "far", "size_flags_stretch_ratio", "line_spacing", "outline_size" };
+    for (prefixes) |prefix| if (std.mem.startsWith(u8, name, prefix)) return true;
+    return false;
+}
+
 fn jsonValueToPropertyText(allocator: std.mem.Allocator, property: []const u8, value: std.json.Value) Error![]const u8 {
     return switch (value) {
         .string => |s| {
@@ -519,7 +529,7 @@ fn jsonValueToPropertyText(allocator: std.mem.Allocator, property: []const u8, v
             return try allocator.dupe(u8, s);
         },
         .float => |f| std.fmt.allocPrint(allocator, "{d}", .{f}),
-        .integer => |i| std.fmt.allocPrint(allocator, "{d}", .{i}),
+        .integer => |i| if (isFloatProperty(property)) std.fmt.allocPrint(allocator, "{d}.0", .{i}) else std.fmt.allocPrint(allocator, "{d}", .{i}),
         .bool => |b| allocator.dupe(u8, if (b) "true" else "false"),
         else => error.InvalidPatch,
     };

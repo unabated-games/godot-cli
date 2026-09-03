@@ -240,7 +240,7 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "updated", .{ .bool = result.updated });
     var messages: std.ArrayList([]const u8) = .empty;
     if (result.scene_uid.len == 0) {
-        try messages.append(cli.allocator, "scene has no uid header yet; run the Godot import (godot --headless --path . --import --quit) and re-run catalog add --update to fill scene_uid");
+        try messages.append(cli.allocator, "scene has no uid=\"uid://...\" in its header, so scene_uid is empty; scene new stamps one on new scenes, and the editor adds one when it next saves this file. Re-run catalog add --update afterwards");
     }
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     if (inv.flag("dry-run")) {

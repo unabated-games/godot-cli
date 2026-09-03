@@ -200,6 +200,11 @@ pub fn build(b: *std.Build) void {
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"static_body_2d","parent":"/root/Main","name":"Floor","size":"Vector2(200, 20)","color":"Color(0.3, 0.5, 0.8, 1)"}]}' --json | grep -q 'PackedVector2Array(-100, -10, 100, -10, 100, 10, -100, 10)' &&
         \\test -s "$t/icon.svg" &&
         \\./zig-out/bin/godot-cli project show --project-root "$t" --json | grep -q '"viewport_width":"640"' &&
+        \\head -1 "$t/main.tscn" | grep -q 'uid="uid://' &&
+        \\./zig-out/bin/godot-cli resource new --output "$t/box.tres" --type StyleBoxFlat --json | grep -q '"uid":"uid://' &&
+        \\./zig-out/bin/godot-cli scene validate "$t/box.tres" --json | grep -q '"kind":"resource"' &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Lbl --type Label --properties '{"offset_left":8,"z_index":2}' --json >/dev/null &&
+        \\grep -q 'offset_left = 8.0' "$t/main.tscn" && grep -q 'z_index = 2' "$t/main.tscn" &&
         \\rm -rf "$t"
     });
     batch_fixes_smoke.setCwd(b.path("."));
@@ -735,7 +740,9 @@ pub fn build(b: *std.Build) void {
     const run_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/project --godot "$GODOT" --scene sample.tscn --frames 3 --headless --json || true) &&
-        \\echo "$out" | grep -q '"import_exit":0' && echo "$out" | grep -q '"error_count":' &&
+        \\echo "$out" | grep -q '"import_exit":0' && echo "$out" | grep -q '"error_count":' && echo "$out" | grep -q '"log_tail":' &&
+        \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/project --godot "$GODOT" --scene sample.tscn --frames 4 --headless --no-import --press ui_accept@1..2 --json || true) &&
+        \\echo "$out" | grep -q '"presses":1' && test -f test_fixtures/project/capture/godot_cli_run.gd &&
         \\test -f test_fixtures/project/capture/.gdignore && test -f test_fixtures/project/capture/godot.log &&
         \\./zig-out/bin/godot-cli project import --project-root test_fixtures/project --godot "$GODOT" --json | grep -q '"ok":true' &&
         \\rm -rf test_fixtures/project/capture
@@ -898,11 +905,11 @@ pub fn build(b: *std.Build) void {
         \\tmp=$(mktemp -d) &&
         \\trap 'rm -rf "$tmp"' EXIT &&
         \\touch "$tmp/project.godot" &&
-        \\./zig-out/bin/godot-cli resource new --output "$tmp/mat/wood.tres" --type StandardMaterial3D --property albedo_color --value "Color(1, 0.5, 0.25, 1)" --property roughness --value 0.8 --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli resource new --output "$tmp/mat/wood.tres" --type StandardMaterial3D --property albedo_color --value "Color(1, 0.5, 0.25, 1)" --property roughness --value 0.8 --no-uid --project-root "$tmp" >/dev/null &&
         \\cmp "$tmp/mat/wood.tres" test_fixtures/project/resources/mat_godot_saved.tres &&
-        \\./zig-out/bin/godot-cli resource new --output "$tmp/shape.tres" --type RectangleShape2D --property size --value "Vector2(64, 16)" --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli resource new --output "$tmp/shape.tres" --type RectangleShape2D --property size --value "Vector2(64, 16)" --no-uid --project-root "$tmp" >/dev/null &&
         \\cmp "$tmp/shape.tres" test_fixtures/project/resources/shape_godot_saved.tres &&
-        \\./zig-out/bin/godot-cli resource new --output "$tmp/theme.tres" --type Theme --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli resource new --output "$tmp/theme.tres" --type Theme --no-uid --project-root "$tmp" >/dev/null &&
         \\./zig-out/bin/godot-cli resource sub add "$tmp/theme.tres" --type StyleBoxFlat --property bg_color --value "Color(0.1, 0.1, 0.1, 1)" --property corner_radius_top_left --value 6 --project-root "$tmp" >/dev/null &&
         \\id=$(grep -o 'id="StyleBoxFlat_[^"]*"' "$tmp/theme.tres" | cut -d'"' -f2) &&
         \\./zig-out/bin/godot-cli resource set-property "$tmp/theme.tres" --property Button/styles/normal --value "SubResource(\"$id\")" --project-root "$tmp" >/dev/null &&

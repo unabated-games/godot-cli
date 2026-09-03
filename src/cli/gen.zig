@@ -204,6 +204,7 @@ pub fn markdown(
                 if (placeholder.len == 0) try w.writeAll("—") else try w.print("`{s}`", .{placeholder});
                 try w.writeAll(" | ");
                 try writeMarkdownCell(w, opt.description);
+                if (opt.required) try w.writeAll(" (required)");
                 try w.writeAll(" | ");
                 if (opt.default_value) |default_value| {
                     try w.print("`{s}`", .{default_value});
@@ -323,6 +324,7 @@ pub fn commandTree(
                 try option_row.put(allocator, "default", .{ .string = default_value });
             }
             if (opt.repeatable) try option_row.put(allocator, "repeatable", .{ .bool = true });
+            if (opt.required) try option_row.put(allocator, "required", .{ .bool = true });
             try options_json.append(.{ .object = option_row });
         }
         try row.put(allocator, "options", .{ .array = options_json });

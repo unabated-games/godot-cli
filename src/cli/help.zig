@@ -120,7 +120,7 @@ fn printOption(writer: *std.Io.Writer, opt: spec.OptionSpec) std.Io.Writer.Error
     else
         std.fmt.bufPrint(&label, "    --{s}{s}", .{ opt.long, placeholder }) catch opt.long;
 
-    try writer.print("  {s:<30} {s}\n", .{ label_text, opt.description });
+    try writer.print("  {s:<30} {s}{s}\n", .{ label_text, opt.description, if (opt.required) " (required)" else "" });
 }
 
 pub fn findCommand(root: *const spec.CommandSpec, path: []const []const u8) ?*const spec.CommandSpec {

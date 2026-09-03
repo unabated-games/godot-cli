@@ -98,7 +98,7 @@ _godot_cli_options() {
             echo "--referrer --from --id-session --project-root"
             ;;
         'scene new')
-            echo "--output --root-name --root-type --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--output --root-name --root-type --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene refs')
             echo "--project-root"
@@ -188,7 +188,7 @@ _godot_cli_options() {
             echo "--reference"
             ;;
         'resource new')
-            echo "--output --type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--output --type --property --value --properties --raw-value --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource sub add')
             echo "--type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -263,7 +263,7 @@ _godot_cli_options() {
             echo "--project-root --godot"
             ;;
         'project run')
-            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg"
+            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press"
             ;;
         'project show')
             echo "--project-root"
