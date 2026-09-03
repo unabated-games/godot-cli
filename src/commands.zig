@@ -6,6 +6,7 @@ const catalog = @import("commands/catalog.zig");
 const batch = @import("commands/batch.zig");
 const project = @import("commands/project.zig");
 const gen = @import("commands/gen.zig");
+const mcp = @import("commands/mcp.zig");
 
 fn pingHandler(ctx: *anyopaque, inv: *const spec.Invocation) anyerror!spec.Result {
     _ = ctx;
@@ -40,11 +41,12 @@ pub const root = spec.CommandSpec{
         gen.completionsCommand(),
         gen.manCommand(),
         gen.referenceCommand(),
+        mcp.command(),
     },
 };
 
 test "root exposes uid commands" {
-    try std.testing.expectEqual(@as(usize, 11), root.children.len);
+    try std.testing.expectEqual(@as(usize, 12), root.children.len);
     try std.testing.expectEqualStrings("uid", root.children[2].name);
     try std.testing.expectEqualStrings("scene", root.children[3].name);
     try std.testing.expectEqualStrings("catalog", root.children[5].name);
@@ -53,6 +55,7 @@ test "root exposes uid commands" {
     try std.testing.expectEqualStrings("completions", root.children[8].name);
     try std.testing.expectEqualStrings("man", root.children[9].name);
     try std.testing.expectEqualStrings("reference", root.children[10].name);
+    try std.testing.expectEqualStrings("mcp", root.children[11].name);
 }
 
 /// Duplicate names are invisible in normal use — the parser takes the first

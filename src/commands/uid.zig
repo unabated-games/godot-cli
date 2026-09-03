@@ -1,5 +1,6 @@
 const std = @import("std");
 const spec = @import("../cli/spec.zig");
+const pos = @import("positionals.zig");
 const app_mod = @import("../cli/app.zig");
 const resource_uid = @import("../godot/resource_uid.zig");
 const scene_id = @import("../godot/scene_id.zig");
@@ -147,6 +148,7 @@ pub fn sessionCommands() spec.CommandSpec {
                 .description = "Updates scene_id_cache.json so future saves reuse Godot-assigned ext_resource ids.",
                 .options = &import_options,
                 .handler = uidSessionImportHandler,
+                .positionals = &pos.scene_file,
             },
         },
     };
@@ -162,11 +164,13 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Encode a numeric Resource UID to uid:// text",
                 .description = "Converts a 63-bit integer to Godot's uid:// representation.",
                 .handler = uidEncodeHandler,
+                .positionals = &pos.uid_id,
             },
             .{
                 .name = "decode",
                 .summary = "Decode uid:// text to a numeric Resource UID",
                 .handler = uidDecodeHandler,
+                .positionals = &pos.uid_text,
             },
             .{
                 .name = "create-for-path",
@@ -177,6 +181,7 @@ pub fn commands() spec.CommandSpec {
                     .{ .long = "resource-path", .kind = .string, .description = "Godot path e.g. res://main.tscn" },
                 },
                 .handler = uidCreateForPathHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "scene-id",

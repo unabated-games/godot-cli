@@ -6,7 +6,7 @@
 _godot_cli_children() {
     case "$1" in
         '')
-            echo "help ping uid scene resource catalog batch project completions man reference"
+            echo "help ping uid scene resource catalog batch project completions man reference mcp"
             ;;
         'uid')
             echo "encode decode create-for-path scene-id cache session"
@@ -340,6 +340,9 @@ _godot_cli_options() {
         'reference')
             echo "--output --format"
             ;;
+        'mcp')
+            echo "--project-root"
+            ;;
         *)
             echo ""
             ;;
@@ -437,6 +440,7 @@ _godot_cli_takes_args() {
         'completions') return 0 ;;
         'man') return 0 ;;
         'reference') return 0 ;;
+        'mcp') return 0 ;;
         *) return 1 ;;
     esac
 }

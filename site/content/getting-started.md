@@ -29,7 +29,7 @@ The installer downloads the release archive for your platform, checks it against
 
 Add the `source` line to `~/.zshrc` or `~/.bashrc` to keep it.
 
-To pin a version, pass `--version 0.7.1`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
+To pin a version, pass `--version 0.8.0`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
 
 Windows has no installer script. Unpack the `.zip` from the [releases page](https://github.com/unabated-games/godot-cli/releases) and put `bin\` on `PATH`.
 
@@ -85,11 +85,13 @@ The file that comes out is an ordinary scene. Open the project in Godot and the 
 
 Add `--json` and stdout carries one document: `ok`, `version`, `command`, `data`, `messages`, and `failure`. Exit codes are 0 for success, 1 for a runtime failure, and 2 for a usage error.
 
-The same commands can be driven as JSON instead of argv, which is what the MCP tool catalog in `docs/mcp_tools.json` describes:
+The same commands can be driven as JSON instead of argv:
 
 ```bash
 godot-cli --json --request '{"argv": ["scene", "node", "list", "level.tscn"]}'
 ```
+
+Or served over MCP, one tool per command, with `godot-cli mcp --project-root .`. [Set up an agent]({{ base_url }}/how-to/agent-setup/) has the config for Claude Code, Cursor, and OpenCode.
 
 ## Next
 

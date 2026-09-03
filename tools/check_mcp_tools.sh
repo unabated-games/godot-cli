@@ -28,7 +28,7 @@ with open(catalog_path) as handle:
 
 # Commands that describe the CLI itself rather than a Godot file operation.
 # An agent authoring scenes has no use for them.
-excluded = {"help", "ping", "completions", "man", "reference"}
+excluded = {"help", "ping", "completions", "man", "reference", "mcp"}
 
 runnable = [c["path"] for c in tree["commands"] if c["runnable"] and c["path"] not in excluded]
 known = {c["path"] for c in tree["commands"]}

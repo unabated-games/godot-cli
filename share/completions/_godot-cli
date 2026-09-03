@@ -6,7 +6,7 @@
 _godot_cli_children() {
     case "$1" in
         '')
-            _godot_cli_reply=( 'help:Show help for a command' 'ping:Framework health check' 'uid:Godot-compatible resource and scene ID helpers' 'scene:Inspect and edit Godot scene files' 'resource:Inspect and edit Godot resource files' 'catalog:Project component catalog' 'batch:Run multiple CLI commands in one invocation' 'project:Read and write Godot project.godot settings' 'completions:Print shell completions (bash, zsh, fish)' 'man:Print the godot-cli(1) man page in roff format' 'reference:Print the command reference as Markdown or JSON' )
+            _godot_cli_reply=( 'help:Show help for a command' 'ping:Framework health check' 'uid:Godot-compatible resource and scene ID helpers' 'scene:Inspect and edit Godot scene files' 'resource:Inspect and edit Godot resource files' 'catalog:Project component catalog' 'batch:Run multiple CLI commands in one invocation' 'project:Read and write Godot project.godot settings' 'completions:Print shell completions (bash, zsh, fish)' 'man:Print the godot-cli(1) man page in roff format' 'reference:Print the command reference as Markdown or JSON' 'mcp:Serve the commands as MCP tools over stdio' )
             ;;
         'uid')
             _godot_cli_reply=( 'encode:Encode a numeric Resource UID to uid\:// text' 'decode:Decode uid\:// text to a numeric Resource UID' 'create-for-path:Deterministic Resource UID for a project path and file' 'scene-id:Scene-local 5-character unique id helpers' 'cache:Inspect project uid_cache.bin' 'session:Persistent ext_resource id session cache' )
@@ -339,6 +339,9 @@ _godot_cli_options() {
             ;;
         'reference')
             _godot_cli_reply=( '--output:Write to this file instead of stdout' '--format:markdown or json' )
+            ;;
+        'mcp')
+            _godot_cli_reply=( '--project-root:Godot project to serve; injected into every call and enforced on path arguments' )
             ;;
         *)
             _godot_cli_reply=()

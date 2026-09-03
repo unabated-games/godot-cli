@@ -100,7 +100,7 @@ Godot's own controls are in the catalog too, marked as documentation only, so an
 
 ## Built for agents, usable by hand
 
-`--json` on any command returns one envelope: `ok`, `data`, `messages`, `failure`, and a stable exit code. Anything you can type as argv you can send as a JSON request instead, which is how the bundled tool catalog describes every command to an MCP server. `godot-cli reference --format json` prints the whole command surface as data, for anyone generating their own bindings.
+`--json` on any command returns one envelope: `ok`, `data`, `messages`, `failure`, and a stable exit code. `godot-cli mcp` serves the same commands over the Model Context Protocol, one tool per command with schemas built from the command tree, the agent docs as resources, and the project catalog as a live resource, so Claude Code, Cursor, and OpenCode can call them without a shell. Anything you can type as argv you can also send as a JSON request, and `godot-cli reference --format json` prints the whole command surface as data for anyone generating their own bindings.
 
 For people there is `--help` on everything, a man page, and completions for bash, zsh, and fish, all generated from the same command tree the parser uses. The skill for Cursor, Claude Code, and OpenCode installs with one flag and carries the rules an agent needs, including the one about `_ready()`.
 

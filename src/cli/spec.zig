@@ -43,6 +43,18 @@ pub const global_options = [_]GlobalOptionSpec{
     .{ .long = "request-stdin", .description = "Read JSON command descriptor from stdin" },
 };
 
+/// A positional argument. Declared so `--help`, the man page, the Markdown
+/// reference, `reference --format json`, and the MCP tool schemas all know a
+/// command takes one; handlers still read `Invocation.positionals` directly.
+pub const PositionalSpec = struct {
+    name: []const u8,
+    description: []const u8,
+    kind: ValueKind = .string,
+    required: bool = true,
+    /// Accepts one or more values; must be the last positional.
+    variadic: bool = false,
+};
+
 pub const CommandHandler = *const fn (ctx: *anyopaque, inv: *const Invocation) anyerror!Result;
 
 pub const CommandSpec = struct {
@@ -51,6 +63,7 @@ pub const CommandSpec = struct {
     description: ?[]const u8 = null,
     options: []const OptionSpec = &.{},
     children: []const CommandSpec = &.{},
+    positionals: []const PositionalSpec = &.{},
     handler: ?CommandHandler = null,
 };
 

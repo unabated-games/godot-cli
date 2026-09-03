@@ -52,15 +52,8 @@ pub fn emitSuccess(
     }
 
     if (json_output) {
-        try writer.writeAll("{\"ok\":true,\"version\":\"");
-        try writer.writeAll(version.version);
-        try writer.writeAll("\",\"command\":");
-        try writeStringArrayJson(writer, path);
-        try writer.writeAll(",\"data\":");
-        try writeJsonValue(writer, result.data);
-        try writer.writeAll(",\"messages\":");
-        try writeStringArrayJson(writer, result.messages);
-        try writer.writeAll(",\"failure\":null}\n");
+        try writeSuccessEnvelope(writer, path, result);
+        try writer.writeAll("\n");
         try writer.flush();
         return;
     }
@@ -96,16 +89,8 @@ pub fn emitFailure(
     const stdout = &stdout_file_writer.interface;
 
     if (json_output) {
-        try stdout.writeAll("{\"ok\":false,\"version\":\"");
-        try stdout.writeAll(version.version);
-        try stdout.writeAll("\",\"command\":");
-        try writeStringArrayJson(stdout, path);
-        try stdout.print(",\"failure\":{{\"kind\":\"{s}\",\"message\":\"{s}\",\"details\":", .{
-            failure.kind,
-            failure.message,
-        });
-        try writeJsonValue(stdout, failure.details);
-        try stdout.writeAll("}}\n");
+        try writeFailureEnvelope(stdout, path, failure);
+        try stdout.writeAll("\n");
         try stdout.flush();
         return;
     }
@@ -120,6 +105,35 @@ pub fn emitFailure(
     }
 
     try stderr.flush();
+}
+
+/// The `--json` success envelope, without a trailing newline. The MCP server
+/// writes the same bytes into a tool result so agents see one shape everywhere.
+pub fn writeSuccessEnvelope(writer: *std.Io.Writer, path: []const []const u8, result: spec.Result) std.Io.Writer.Error!void {
+    try writer.writeAll("{\"ok\":true,\"version\":\"");
+    try writer.writeAll(version.version);
+    try writer.writeAll("\",\"command\":");
+    try writeStringArrayJson(writer, path);
+    try writer.writeAll(",\"data\":");
+    try writeJsonValue(writer, result.data);
+    try writer.writeAll(",\"messages\":");
+    try writeStringArrayJson(writer, result.messages);
+    try writer.writeAll(",\"failure\":null}");
+}
+
+/// The `--json` failure envelope, without a trailing newline.
+pub fn writeFailureEnvelope(writer: *std.Io.Writer, path: []const []const u8, failure: Failure) std.Io.Writer.Error!void {
+    try writer.writeAll("{\"ok\":false,\"version\":\"");
+    try writer.writeAll(version.version);
+    try writer.writeAll("\",\"command\":");
+    try writeStringArrayJson(writer, path);
+    try writer.writeAll(",\"failure\":{\"kind\":");
+    try std.json.Stringify.value(failure.kind, .{}, writer);
+    try writer.writeAll(",\"message\":");
+    try std.json.Stringify.value(failure.message, .{}, writer);
+    try writer.writeAll(",\"details\":");
+    try writeJsonValue(writer, failure.details);
+    try writer.writeAll("}}");
 }
 
 pub fn emitVersion(io: std.Io, stdout_buffer: []u8, json_output: bool) std.Io.Writer.Error!void {

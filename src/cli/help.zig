@@ -34,7 +34,6 @@ pub fn printCommandHelp(
     defer usage.deinit(allocator);
 
     try usage.appendSlice(allocator, version.name);
-    try usage.appendSlice(allocator, " ");
     for (path) |segment| {
         try usage.append(allocator, ' ');
         try usage.appendSlice(allocator, segment);
@@ -42,14 +41,25 @@ pub fn printCommandHelp(
     if (command.options.len != 0 or command.children.len != 0) {
         try usage.appendSlice(allocator, " [options]");
     }
-    if (command.handler != null) {
-        try usage.appendSlice(allocator, " [args...]");
+    for (command.positionals) |arg| {
+        try usage.append(allocator, ' ');
+        try appendPositionalUsage(&usage, allocator, arg);
     }
 
     try writer.print("{s}\n\n", .{usage.items});
     try writer.print("{s}\n\n", .{command.summary});
     if (command.description) |description| {
         try writer.print("{s}\n\n", .{description});
+    }
+
+    if (command.positionals.len != 0) {
+        try writer.print("Arguments:\n", .{});
+        for (command.positionals) |arg| {
+            var label: [64]u8 = undefined;
+            const label_text = std.fmt.bufPrint(&label, "<{s}>{s}", .{ arg.name, if (arg.variadic) "..." else "" }) catch arg.name;
+            try writer.print("  {s:<30} {s}{s}\n", .{ label_text, arg.description, if (arg.required) "" else " (optional)" });
+        }
+        try writer.print("\n", .{});
     }
 
     if (command.options.len != 0) {
@@ -67,6 +77,15 @@ pub fn printCommandHelp(
         }
         try writer.print("\n", .{});
     }
+}
+
+/// `<file>`, `[node]`, or `<files>...`: the same spelling the man page and
+/// the Markdown reference use.
+pub fn appendPositionalUsage(out: *std.ArrayList(u8), allocator: std.mem.Allocator, arg: spec.PositionalSpec) !void {
+    try out.append(allocator, if (arg.required) '<' else '[');
+    try out.appendSlice(allocator, arg.name);
+    try out.append(allocator, if (arg.required) '>' else ']');
+    if (arg.variadic) try out.appendSlice(allocator, "...");
 }
 
 fn printGlobalOptions(writer: *std.Io.Writer) std.Io.Writer.Error!void {

@@ -5,7 +5,7 @@
 function __godot_cli_children
     switch "$argv[1]"
         case ''
-            echo 'help ping uid scene resource catalog batch project completions man reference'
+            echo 'help ping uid scene resource catalog batch project completions man reference mcp'
         case 'uid'
             echo 'encode decode create-for-path scene-id cache session'
         case 'uid scene-id'
@@ -96,6 +96,7 @@ complete -c godot-cli -n '__godot_cli_at ""' -a 'project' -d 'Read and write God
 complete -c godot-cli -n '__godot_cli_at ""' -a 'completions' -d 'Print shell completions (bash, zsh, fish)'
 complete -c godot-cli -n '__godot_cli_at ""' -a 'man' -d 'Print the godot-cli(1) man page in roff format'
 complete -c godot-cli -n '__godot_cli_at ""' -a 'reference' -d 'Print the command reference as Markdown or JSON'
+complete -c godot-cli -n '__godot_cli_at ""' -a 'mcp' -d 'Serve the commands as MCP tools over stdio'
 complete -c godot-cli -n '__godot_cli_at "uid"' -a 'encode' -d 'Encode a numeric Resource UID to uid:// text'
 complete -c godot-cli -n '__godot_cli_at "uid"' -a 'decode' -d 'Decode uid:// text to a numeric Resource UID'
 complete -c godot-cli -n '__godot_cli_at "uid"' -a 'create-for-path' -d 'Deterministic Resource UID for a project path and file'
@@ -649,6 +650,7 @@ complete -c godot-cli -n '__godot_cli_at "completions"' -l output -r -d 'Write t
 complete -c godot-cli -n '__godot_cli_at "man"' -l output -r -d 'Write to this file instead of stdout'
 complete -c godot-cli -n '__godot_cli_at "reference"' -l output -r -d 'Write to this file instead of stdout'
 complete -c godot-cli -n '__godot_cli_at "reference"' -l format -r -d 'markdown or json'
+complete -c godot-cli -n '__godot_cli_at "mcp"' -l project-root -r -d 'Godot project to serve; injected into every call and enforced on path arguments'
 
 # Commands that take file or directory arguments
 complete -c godot-cli -F -n '__godot_cli_at "ping"'
@@ -740,3 +742,4 @@ complete -c godot-cli -F -n '__godot_cli_at "project physics validate"'
 complete -c godot-cli -F -n '__godot_cli_at "completions"'
 complete -c godot-cli -F -n '__godot_cli_at "man"'
 complete -c godot-cli -F -n '__godot_cli_at "reference"'
+complete -c godot-cli -F -n '__godot_cli_at "mcp"'

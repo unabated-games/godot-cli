@@ -44,7 +44,7 @@ man godot-cli
 Options worth knowing:
 
 ```bash
-./install.sh --version 0.7.1     # pin a release
+./install.sh --version 0.8.0     # pin a release
 ./install.sh --prefix /opt/godot-cli
 ./install.sh --install-skill     # also install the agent skill
 ```
@@ -171,6 +171,59 @@ covering the workflow, when to pass `--project-root`, and the anti-patterns to
 avoid. For tools that wrap the CLI, [`mcp_tools.json`](mcp_tools.json) carries a
 request shape per command, and `godot-cli reference --format json` emits the
 whole command surface as data.
+
+## Serve it over MCP
+
+`godot-cli mcp` speaks the Model Context Protocol on stdin and stdout, so a
+client that supports MCP calls every command as a tool without a shell. The
+tool names match `mcp_tools.json` (`scene_node_add`, `project_settings_set`),
+the input schema of each comes from the command's options and arguments, and
+the result is the same `--json` envelope, as text and as structured content.
+
+With `--project-root` the server works inside one project: `--project-root .`
+is added to every call that takes it, and a path argument that resolves outside
+the project is refused before anything runs.
+
+Claude Code, from the project root (or the same JSON in `.mcp.json`):
+
+```bash
+claude mcp add godot-cli -- godot-cli mcp --project-root .
+```
+
+Cursor, in `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "godot-cli": {
+      "type": "stdio",
+      "command": "godot-cli",
+      "args": ["mcp", "--project-root", "."]
+    }
+  }
+}
+```
+
+OpenCode, in `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "godot-cli": {
+      "type": "local",
+      "command": ["godot-cli", "mcp", "--project-root", "."],
+      "enabled": true
+    }
+  }
+}
+```
+
+The agent docs ship inside the server as resources (`godot-cli://docs/quickstart`
+and the rest, listed by `resources/list`), the project's catalog is
+`godot-cli://catalog`, and the `godot-scene-session` prompt opens a session with
+the same rules the skill carries. The skill is still worth installing for
+clients that read it; the two describe the same workflow.
 
 ## Next
 

@@ -1,6 +1,6 @@
 ---
 title: Set up a coding agent to author Godot scenes
-description: Install the skill, write project rules that keep an agent editing scene files, and recover when it drifts back to building nodes in code.
+description: Install the skill or the MCP server, write project rules that keep an agent editing scene files, and recover when it drifts back to building nodes in code.
 ---
 
 # Set up an agent
@@ -95,12 +95,61 @@ The thing it needed had no scene-level form. Until 0.4.0 that was true of signal
 
 The agent hit an error and worked around it. This is worth reading the transcript for: a failed `scene instance add` followed by a GDScript workaround usually means a missing `--project-root`, or a `res://` path that does not exist. `scene refs --project-root .` lists every external path in a scene and whether it resolves.
 
-## Using godot-cli from an MCP server
+## Serve it over MCP instead of a shell
 
-Every command works as a JSON request, so a server can pass documents through rather than building argv:
+Some harnesses would rather call a tool than run a command. `godot-cli mcp` serves the whole command tree over the Model Context Protocol on stdin and stdout: one tool per command, named the way `mcp_tools.json` names them, with an input schema built from the command's options and arguments. A call returns the same JSON envelope the shell prints, once as text and once as structured content, so a failure still carries the field and value to fix.
+
+Start it with the project pinned:
+
+```bash
+godot-cli mcp --project-root .
+```
+
+In that mode the server adds `--project-root .` to every call that accepts it, drops the option from the schemas so the agent cannot get it wrong, and refuses any path argument that resolves outside the project before the command runs.
+
+Claude Code takes the command line directly, or the same shape in `.mcp.json` at the project root:
+
+```bash
+claude mcp add godot-cli -- godot-cli mcp --project-root .
+```
+
+Cursor reads `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "godot-cli": {
+      "type": "stdio",
+      "command": "godot-cli",
+      "args": ["mcp", "--project-root", "."]
+    }
+  }
+}
+```
+
+OpenCode reads `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "godot-cli": {
+      "type": "local",
+      "command": ["godot-cli", "mcp", "--project-root", "."],
+      "enabled": true
+    }
+  }
+}
+```
+
+The agent docs travel with the server as resources, so an agent that has never seen `$GODOT_CLI_HOME` can still read `godot-cli://docs/quickstart` and `godot-cli://docs/godot-basics`, and `godot-cli://catalog` is the live catalog of the pinned project. The `godot-scene-session` prompt opens a session with the same seven rules the skill carries; in Claude Code it appears as a slash command under the server's name. Install the skill as well where the client supports it. The two say the same thing, and a rule the agent reads twice is a rule it keeps.
+
+The server speaks both protocol eras: the `initialize` handshake current clients send, and the stateless 2026-07-28 revision for clients that move to it.
+
+For anything that wraps the CLI its own way, every command also works as a JSON request:
 
 ```bash
 godot-cli --json --request '{"argv": ["scene", "node", "list", "scenes/main.tscn"]}'
 ```
 
-`$GODOT_CLI_HOME/docs/mcp_tools.json` lists a request shape per command, and `godot-cli reference --format json` prints the whole command surface, every command, option, and value kind, for generating bindings.
+`godot-cli reference --format json` prints the whole command surface, every command, option, argument, and value kind, for generating bindings.

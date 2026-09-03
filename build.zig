@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.7.1";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.8.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
@@ -76,6 +76,35 @@ pub fn build(b: *std.Build) void {
     // install prefix when running `zig build` (i.e. when executing the default
     // step). By default the install prefix is `zig-out/` but can be overridden
     // by passing `--prefix` or `-p`.
+    // The MCP server embeds the agent docs and example intents as resources.
+    // Each file is an anonymous import so `@embedFile` can reach outside src/.
+    const embedded_files = [_]struct { name: []const u8, path: []const u8 }{
+        .{ .name = "doc_quickstart", .path = "docs/agent_quickstart.md" },
+        .{ .name = "doc_godot_basics", .path = "docs/agent_godot_basics.md" },
+        .{ .name = "doc_scene_authoring", .path = "docs/agent_scene_authoring.md" },
+        .{ .name = "doc_batch_commands", .path = "docs/agent_batch_commands.md" },
+        .{ .name = "doc_commands", .path = "docs/commands.md" },
+        .{ .name = "example_assign_sprite_texture", .path = "share/examples/intents/assign_sprite_texture.json" },
+        .{ .name = "example_autoload_game_state", .path = "share/examples/intents/autoload_game_state.json" },
+        .{ .name = "example_catalog_button", .path = "share/examples/intents/catalog_button.json" },
+        .{ .name = "example_display_stretch", .path = "share/examples/intents/display_stretch.json" },
+        .{ .name = "example_enable_sample_plugin", .path = "share/examples/intents/enable_sample_plugin.json" },
+        .{ .name = "example_hud_main", .path = "share/examples/intents/hud_main.json" },
+        .{ .name = "example_hud_top_bar", .path = "share/examples/intents/hud_top_bar.json" },
+        .{ .name = "example_main_scene", .path = "share/examples/intents/main_scene.json" },
+        .{ .name = "example_physics_jolt", .path = "share/examples/intents/physics_jolt.json" },
+        .{ .name = "example_physics_layers", .path = "share/examples/intents/physics_layers.json" },
+        .{ .name = "example_player_with_icon", .path = "share/examples/intents/player_with_icon.json" },
+        .{ .name = "example_project_bootstrap", .path = "share/examples/intents/project_bootstrap.json" },
+        .{ .name = "example_rendering_forward_plus", .path = "share/examples/intents/rendering_forward_plus.json" },
+        .{ .name = "example_wasd_movement", .path = "share/examples/intents/wasd_movement.json" },
+        .{ .name = "example_sprite_icon_texture", .path = "share/examples/patches/sprite_icon_texture.json" },
+    };
+    for (embedded_files) |file| {
+        mod.addAnonymousImport(file.name, .{ .root_source_file = b.path(file.path) });
+        exe.root_module.addAnonymousImport(file.name, .{ .root_source_file = b.path(file.path) });
+    }
+
     b.installArtifact(exe);
 
     // This creates a top level step. Top level steps have a name and can be
@@ -130,6 +159,13 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    // The MCP server over a real pipe: both protocol openings, a tool call,
+    // a confined path, resources, and the prompt.
+    const mcp_smoke = b.addSystemCommand(&.{ "bash", "tools/test_mcp.sh" });
+    mcp_smoke.setCwd(b.path("."));
+    mcp_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&mcp_smoke.step);
 
     const inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",

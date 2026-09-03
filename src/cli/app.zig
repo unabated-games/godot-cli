@@ -121,52 +121,7 @@ pub const App = struct {
 
         const ctx: *anyopaque = @ptrCast(@constCast(self));
         const result = handler(ctx, &inv) catch |err| {
-            var failure = emit.Failure{
-                .kind = "command_failed",
-                .message = @errorName(err),
-            };
-            if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId") or
-                std.mem.eql(u8, @errorName(err), "DuplicateExtPath"))
-            {
-                if (scene_resources.conflictDetailsJson(self.allocator) catch null) |details| {
-                    failure.kind = @errorName(err);
-                    failure.message = if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId"))
-                        "scene resource id already exists in file"
-                    else
-                        "ext_resource path already exists in file";
-                    failure.details = .{ .object = details };
-                }
-            }
-            // Field and value errors from patches and intents carry the
-            // context an agent needs to fix its own document.
-            const name = @errorName(err);
-            if (std.mem.eql(u8, name, "FileNotFound") or std.mem.eql(u8, name, "Io") or std.mem.eql(u8, name, "AccessDenied")) {
-                if (error_details.takeJson(self.allocator) catch null) |details| {
-                    failure.kind = "io";
-                    failure.message = "could not write the output file";
-                    failure.details = .{ .object = details };
-                }
-            }
-            if (std.mem.eql(u8, name, "NodeNotFound")) {
-                if (error_details.takeJson(self.allocator) catch null) |details| {
-                    failure.kind = "node_not_found";
-                    failure.message = "no such node in this scene file";
-                    failure.details = .{ .object = details };
-                }
-            }
-            if (std.mem.eql(u8, name, "InvalidPropertyValue") or
-                std.mem.eql(u8, name, "MissingPatchField") or
-                std.mem.eql(u8, name, "MissingIntentField"))
-            {
-                failure.kind = if (std.mem.eql(u8, name, "InvalidPropertyValue")) "invalid_property_value" else "missing_field";
-                failure.message = if (std.mem.eql(u8, name, "InvalidPropertyValue"))
-                    "property value is not valid Variant text"
-                else
-                    "required field is missing";
-                if (error_details.takeJson(self.allocator) catch null) |details| {
-                    failure.details = .{ .object = details };
-                }
-            }
+            const failure = failureFromHandlerError(self.allocator, err);
             emit.emitFailure(self.allocator, self.io, &stdout_buffer, &stderr_buffer, inv.global.json_output, inv.path, failure) catch {};
             return .failure;
         };
@@ -233,6 +188,60 @@ pub const App = struct {
         return parser.parseArgv(self.allocator, self.root, cli_args);
     }
 };
+
+/// Turn a handler error into the failure envelope an agent can act on: the
+/// duplicate-id, missing-file, node, and patch-field errors carry the details
+/// the handler recorded in the side channel. Shared by `run`, `batch`, and the
+/// MCP server so every entry point reports the same thing.
+pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit.Failure {
+    var failure = emit.Failure{
+        .kind = "command_failed",
+        .message = @errorName(err),
+    };
+    if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId") or
+        std.mem.eql(u8, @errorName(err), "DuplicateExtPath"))
+    {
+        if (scene_resources.conflictDetailsJson(allocator) catch null) |details| {
+            failure.kind = @errorName(err);
+            failure.message = if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId"))
+                "scene resource id already exists in file"
+            else
+                "ext_resource path already exists in file";
+            failure.details = .{ .object = details };
+        }
+    }
+    // Field and value errors from patches and intents carry the
+    // context an agent needs to fix its own document.
+    const name = @errorName(err);
+    if (std.mem.eql(u8, name, "FileNotFound") or std.mem.eql(u8, name, "Io") or std.mem.eql(u8, name, "AccessDenied")) {
+        if (error_details.takeJson(allocator) catch null) |details| {
+            failure.kind = "io";
+            failure.message = "could not write the output file";
+            failure.details = .{ .object = details };
+        }
+    }
+    if (std.mem.eql(u8, name, "NodeNotFound")) {
+        if (error_details.takeJson(allocator) catch null) |details| {
+            failure.kind = "node_not_found";
+            failure.message = "no such node in this scene file";
+            failure.details = .{ .object = details };
+        }
+    }
+    if (std.mem.eql(u8, name, "InvalidPropertyValue") or
+        std.mem.eql(u8, name, "MissingPatchField") or
+        std.mem.eql(u8, name, "MissingIntentField"))
+    {
+        failure.kind = if (std.mem.eql(u8, name, "InvalidPropertyValue")) "invalid_property_value" else "missing_field";
+        failure.message = if (std.mem.eql(u8, name, "InvalidPropertyValue"))
+            "property value is not valid Variant text"
+        else
+            "required field is missing";
+        if (error_details.takeJson(allocator) catch null) |details| {
+            failure.details = .{ .object = details };
+        }
+    }
+    return failure;
+}
 
 fn mergeLeadingGlobalFlags(args: []const []const u8, global: *spec.GlobalOptions) void {
     for (args) |arg| {

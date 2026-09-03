@@ -29,6 +29,8 @@ Use `godot-cli` on PATH. Never reference the godot-cli source tree; docs and exa
 | `$GODOT_CLI_HOME/docs/mcp_tools.json` | Command JSON shapes |
 | `$GODOT_CLI_HOME/examples/intents/` | Copy-paste intent files |
 
+If the client is connected to `godot-cli mcp` instead, the same commands are tools named `scene_node_add`, `catalog_list`, and so on, with the docs above available as `godot-cli://docs/...` resources; the rules below apply unchanged.
+
 Work from the Godot project root (`project.godot`). Pass `--json` on every command and `--project-root .` for writes, catalog, validate, apply, and project commands.
 
 ## Rules

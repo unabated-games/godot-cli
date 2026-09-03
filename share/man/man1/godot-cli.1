@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-03" "godot-cli 0.7.1" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-03" "godot-cli 0.8.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -63,13 +63,22 @@ Godot\-compatible resource and scene ID helpers
 Encode a numeric Resource UID to uid:// text
 .PP
 Converts a 63\-bit integer to Godot's uid:// representation.
+.TP
+\fIid\fR
+Numeric UID to encode
 .SS godot\-cli uid decode
 Decode uid:// text to a numeric Resource UID
+.TP
+\fIuid\fR
+uid:// text to decode
 .SS godot\-cli uid create\-for\-path
 Deterministic Resource UID for a project path and file
 .PP
 Matches ResourceUID.create_id_for_path using project name,
 Godot resource path, and file bytes.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
 .TP
 \fB\-\-project\-name\fR \fIvalue\fR
 Project application/config/name
@@ -96,6 +105,9 @@ Godot project root (directory containing project.godot)
 .SS godot\-cli uid cache lookup
 Resolve uid:// text to path or path to uid:// text
 .TP
+\fIquery\fR
+res:// path or uid:// text to look up
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
 .SS godot\-cli uid session
@@ -105,6 +117,9 @@ Import ext_resource ids from a Godot\-saved scene
 .PP
 Updates scene_id_cache.json so future saves reuse Godot\-assigned
 ext_resource ids.
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .TP
 \fB\-\-referrer\fR \fIvalue\fR
 Referrer res:// path (scene being saved)
@@ -164,6 +179,9 @@ List ext_resource references in a scene
 With \-\-project\-root, resolves res:// paths to filesystem
 paths and reports whether each file exists.
 .TP
+\fIfile\fR
+Scene file (.tscn)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for uid_cache lookup and res:// seed path
 .SS godot\-cli scene ext
@@ -173,6 +191,9 @@ Add an ext_resource section
 .PP
 Inserts before node sections and assigns a Godot\-style id
 (e.g. 1_ab12c).
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
 .TP
 \fB\-\-type\fR \fIvalue\fR
 Godot resource type (e.g. Script, PackedScene)
@@ -214,6 +235,12 @@ Takes the scene path and the resource id (e.g. 1_abc12). Fails
 with referrer list if the id is still referenced in property
 text.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fIid\fR
+Resource id as written in the file, e.g. CapsuleShape2D_abc12
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -248,6 +275,9 @@ Add a sub_resource section
 .PP
 Inserts before node sections and assigns a Godot\-style id
 (e.g. CapsuleShape3D_ab12c).
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
 .TP
 \fB\-\-type\fR \fIvalue\fR
 Godot resource class (e.g. RectangleShape2D)
@@ -296,6 +326,12 @@ Takes the scene path and the resource id (e.g. 1_abc12). Fails
 with referrer list if the id is still referenced in property
 text.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fIid\fR
+Resource id as written in the file, e.g. CapsuleShape2D_abc12
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -330,6 +366,9 @@ Reads section headers, parsed properties (with \-\-json), and
 runs ID validation. Pass \-\-project\-root to check uids against
 uid_cache.bin.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for uid_cache lookup and res:// seed path
 .TP
@@ -346,6 +385,9 @@ List and query scene node tree
 .SS godot\-cli scene node list
 List all nodes in a scene with paths and section lines
 .TP
+\fIfile\fR
+Scene file (.tscn)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (optional; ignored for file\-only reads)
 .SS godot\-cli scene node get
@@ -353,6 +395,12 @@ Get one node by viewport path or by name
 .PP
 Pass file and node path (e.g. /root/Root/Player), or use \-\-node\-name
 with optional \-\-parent.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fInode\fR
+Node by viewport path; omit when using \-\-node\-name (optional)
 .TP
 \fB\-\-node\-name\fR \fIvalue\fR
 Node name to look up (alternative to node path positional)
@@ -368,6 +416,9 @@ Add a child node under a parent path
 .PP
 Requires \-\-parent, \-\-name, and \-\-type. Assigns unique_id
 on save via save preparation.
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .TP
 \fB\-\-parent\fR \fIvalue\fR
 Viewport parent path (e.g. /root/Main)
@@ -425,6 +476,12 @@ Remove a node by viewport path
 Takes the scene path and the node's viewport path (e.g. /root/Main/Player).
 Fails if the node has children unless \-\-recursive is set.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fInode\fR
+Node by viewport path, e.g. /root/Main/Player
+.TP
 \fB\-\-recursive\fR
 Remove descendant nodes as well
 .TP
@@ -462,6 +519,12 @@ Takes the scene path and the node's viewport path: scene node
 rename main.tscn /root/Main/Player \-\-name Hero. Connections
 from or to the node follow the rename.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fInode\fR
+Node by viewport path, e.g. /root/Main/Player
+.TP
 \fB\-\-name\fR \fIvalue\fR
 New node name
 .TP
@@ -498,6 +561,12 @@ Move a node under a new parent path
 Takes the scene path and the node's viewport path: scene node
 reparent main.tscn /root/Main/Player/Camera \-\-parent /root/Main.
 The node becomes the new parent's last child, as in the editor.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fInode\fR
+Node by viewport path, e.g. /root/Main/Player
 .TP
 \fB\-\-parent\fR \fIvalue\fR
 New parent, viewport path (e.g. /root/Main)
@@ -538,11 +607,17 @@ a button wired here shows connected in the editor and needs
 no _ready() code.
 .SS godot\-cli scene connection list
 List signal connections with from/to as viewport paths
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .SS godot\-cli scene connection add
 Connect a signal from one node to a method on another
 .PP
 Both nodes must exist. Fails with DuplicateConnection if the
 same signal, nodes, and method are already connected.
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .TP
 \fB\-\-from\fR \fIvalue\fR
 Emitting node, viewport path (e.g. /root/Main/Menu/Resume)
@@ -598,6 +673,9 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene connection remove
 Remove a signal connection
 .TP
+\fIfile\fR
+Scene file (.tscn)
+.TP
 \fB\-\-from\fR \fIvalue\fR
 Emitting node, viewport path
 .TP
@@ -645,6 +723,9 @@ Instance a PackedScene under a parent node
 .PP
 Adds ext_resource type=PackedScene and a node with instance=ExtResource(...).
 Use \-\-scene or \-\-catalog\-id (project entries only).
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .TP
 \fB\-\-parent\fR \fIvalue\fR
 Viewport parent path (e.g. /root/Main)
@@ -712,6 +793,9 @@ Show template metadata, node tree, and sections
 Like scene inspect + node list for a built\-in template. Use
 \-\-content for raw .tscn text.
 .TP
+\fItemplate\fR
+Template id, e.g. 2d/top_down_player
+.TP
 \fB\-\-templates\-root\fR \fIpath\fR
 Directory containing built\-in templates (default: compile\-time
 templates/)
@@ -726,6 +810,9 @@ Copy a template to a new scene file
 .PP
 Requires \-\-output. Optional \-\-rename\-node and \-\-set\-property
 apply edits before save preparation.
+.TP
+\fItemplate\fR
+Template id, e.g. 2d/top_down_player
 .TP
 \fB\-\-templates\-root\fR \fIpath\fR
 Directory containing built\-in templates (default: compile\-time
@@ -771,6 +858,9 @@ Expand intent JSON to a patch and preview (no write)
 Accepts \-\-intent or \-\-patch. Optional scene path positional
 dry\-runs the patch. See docs/agent_scene_authoring.md.
 .TP
+\fIfile\fR
+Scene file to dry\-run the expanded patch against (optional)
+.TP
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON with steps/recipes (expands to patch ops)
 .TP
@@ -787,6 +877,9 @@ Apply a declarative JSON patch to a scene
 .PP
 Batch node/resource/instance edits. Use \-\-patch or \-\-intent.
 See docs/agent_scene_authoring.md.
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .TP
 \fB\-\-patch\fR \fIpath\fR
 JSON patch file with { "ops": [ … ] }
@@ -846,6 +939,12 @@ Compare node trees between two scenes
 Reports added, removed, and type\-changed nodes. Use \-\-properties
 for property\-level diff.
 .TP
+\fIa\fR
+First scene file
+.TP
+\fIb\fR
+Second scene file
+.TP
 \fB\-\-properties\fR
 Include node property diffs (added/removed/changed)
 .TP
@@ -855,6 +954,9 @@ Godot project root (optional; ignored for file\-only reads)
 Restore a scene from a snapshot file
 .PP
 Copies \-\-from snapshot over the target scene (full file restore).
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .TP
 \fB\-\-from\fR \fIpath\fR
 Snapshot file to restore from
@@ -867,11 +969,17 @@ Report restore without writing
 .SS godot\-cli scene validate
 Validate scene IDs and references (fails on errors)
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for uid_cache lookup and res:// seed path
 .SS godot\-cli scene validate\-batch
 Validate multiple scene files (aggregated JSON, exit 1 on any
 error)
+.TP
+\fIfiles...\fR
+One or more scene or resource files
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for uid_cache lookup and res:// seed path
@@ -881,6 +989,9 @@ Set a property on a node section and save the scene
 Target a node with \-\-node (viewport path) or \-\-node\-name,
 or a section with \-\-section\-line. Value is written verbatim
 after =.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
 .TP
 \fB\-\-property\fR \fIvalue\fR
 Property name to set
@@ -939,6 +1050,9 @@ save
 .PP
 Runs Godot\-compatible save preparation without editing properties.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -968,6 +1082,9 @@ properties
 Rewrite property values through Variant parse/format
 .SS godot\-cli scene retarget\-ext
 Replace ext_resource paths across one or more files
+.TP
+\fIfiles...\fR
+One or more scene or resource files
 .TP
 \fB\-\-from\fR \fIvalue\fR
 Current ext_resource path (res://…)
@@ -1005,6 +1122,9 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene round\-trip
 Parse and rewrite a scene; fail if structure is not preserved
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-output\fR \fIpath\fR
 Output path (default: overwrite input)
 .TP
@@ -1015,6 +1135,12 @@ Compare a scene to a Godot headless save (semantic match)
 .PP
 Ignores ext_resource id suffixes and default sub_resource fields
 stripped by Godot.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fIsaved\fR
+Godot\-saved file to compare against; or pass \-\-reference (optional)
 .TP
 \fB\-\-reference\fR \fIpath\fR
 Godot\-saved reference file (default: second positional)
@@ -1073,6 +1199,9 @@ Sub\-resources embedded in a .tres
 .SS godot\-cli resource sub add
 Add a sub_resource; reference it as SubResource("<id>")
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-type\fR \fIvalue\fR
 Godot resource class (e.g. StyleBoxFlat)
 .TP
@@ -1119,6 +1248,12 @@ Remove a sub_resource by id
 Takes the file path and the resource id. Fails with referrer
 list if the id is still referenced.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fIid\fR
+Resource id as written in the file, e.g. CapsuleShape2D_abc12
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -1150,6 +1285,9 @@ Rewrite property values through Variant parse/format
 External resource references in a .tres
 .SS godot\-cli resource ext add
 Register an external file; reference it as ExtResource("<id>")
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
 .TP
 \fB\-\-type\fR \fIvalue\fR
 Resource type of the external file (e.g. Texture2D, Script)
@@ -1190,6 +1328,12 @@ Remove an ext_resource by id
 Takes the file path and the resource id. Fails with referrer
 list if the id is still referenced.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fIid\fR
+Resource id as written in the file, e.g. CapsuleShape2D_abc12
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -1223,6 +1367,9 @@ Parse a .tres file and report structure and ID issues
 Reads section headers, parsed properties (with \-\-json), and
 runs ID validation.
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for uid_cache lookup and res:// seed path
 .TP
@@ -1237,16 +1384,25 @@ Omit parsed properties (faster for large files)
 .SS godot\-cli resource validate
 Validate resource IDs and references (fails on errors)
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for uid_cache lookup and res:// seed path
 .SS godot\-cli resource validate\-batch
 Validate multiple resource files (aggregated JSON, exit 1 on
 any error)
 .TP
+\fIfiles...\fR
+One or more scene or resource files
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for uid_cache lookup and res:// seed path
 .SS godot\-cli resource set\-property
 Set a property on a resource section and save
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
 .TP
 \fB\-\-property\fR \fIvalue\fR
 Property name to set
@@ -1294,6 +1450,9 @@ Rewrite property values through Variant parse/format
 Repair scene\-local IDs and sort ext_resource sections for
 save
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
 .TP
@@ -1323,6 +1482,9 @@ properties
 Rewrite property values through Variant parse/format
 .SS godot\-cli resource retarget\-ext
 Replace ext_resource paths across one or more files
+.TP
+\fIfiles...\fR
+One or more scene or resource files
 .TP
 \fB\-\-from\fR \fIvalue\fR
 Current ext_resource path (res://…)
@@ -1361,6 +1523,9 @@ Rewrite property values through Variant parse/format
 Parse and rewrite a resource file; fail if structure is not
 preserved
 .TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
 \fB\-\-output\fR \fIpath\fR
 Output path (default: overwrite input)
 .TP
@@ -1368,6 +1533,12 @@ Output path (default: overwrite input)
 Check structure preservation without writing
 .SS godot\-cli resource compare\-godot
 Compare a resource to a Godot headless save (semantic match)
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fIsaved\fR
+Godot\-saved file to compare against; or pass \-\-reference (optional)
 .TP
 \fB\-\-reference\fR \fIpath\fR
 Godot\-saved reference file (default: second positional)
@@ -1383,6 +1554,9 @@ Writes <scene>.manifest.json beside the scene, filling scene_uid
 from the scene header and scaffolding a row for each signal
 declared by the root script. With \-\-update, prose already
 written is preserved.
+.TP
+\fIfile\fR
+Scene file (.tscn)
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
@@ -1451,6 +1625,9 @@ Show merged catalog entry by id
 .PP
 Returns manifest fields merged with scene nodes and GDScript
 exports/signals. Builtin ids use the godot/ namespace.
+.TP
+\fIid\fR
+Catalog entry id, e.g. ui/button
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
@@ -1806,6 +1983,26 @@ Write to this file instead of stdout
 .TP
 \fB\-\-format\fR \fIvalue\fR
 markdown or json (default: markdown)
+.SS godot\-cli mcp
+Serve the commands as MCP tools over stdio
+.PP
+Speaks the Model Context Protocol on stdin and stdout so Claude
+Code,
+Cursor, and OpenCode can call every command as a tool, read
+the agent
+docs as resources, and start a session from the godot\-scene\-session
+prompt. With \-\-project\-root the server works inside that
+project:
+\-\-project\-root . is added to every call and path arguments
+may not
+leave it.
+
+  claude mcp add godot\-cli \-\- godot\-cli mcp \-\-project\-root
+\&.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project to serve; injected into every call and enforced
+on path arguments
 .SH EXIT STATUS
 .TP
 .B 0

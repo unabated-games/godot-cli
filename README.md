@@ -25,7 +25,7 @@ $ godot-cli scene new --output level.tscn --root-name Level --root-type Node2D
 $ godot-cli scene node add level.tscn --parent /root/Level --name Player --type CharacterBody2D
 $ godot-cli scene instance add level.tscn --parent /root/Level --scene res://ui/hud.tscn --name HUD
 $ godot-cli scene validate level.tscn --project-root . --json
-{"ok":true,"version":"0.7.1","command":["scene","validate"],"data":{"path":"level.tscn","issues":[]},...}
+{"ok":true,"version":"0.8.0","command":["scene","validate"],"data":{"path":"level.tscn","issues":[]},...}
 ```
 
 That scene is a normal Godot scene: the hierarchy lives in the file, the way a
@@ -80,12 +80,18 @@ scene to instance and when.
 
 ```bash
 ./install.sh --install-skill   # skill for Cursor, Claude Code, OpenCode, ~/.agents
+claude mcp add godot-cli -- godot-cli mcp --project-root .   # or serve it over MCP
 ```
+
+`godot-cli mcp` serves every command as an MCP tool over stdio, with schemas
+generated from the command tree, the agent docs as resources, and the project
+catalog as a live resource. See [getting started](docs/getting_started.md#serve-it-over-mcp)
+for the Claude Code, Cursor, and OpenCode config.
 
 - [Agent quickstart](docs/agent_quickstart.md) — one page, the whole workflow
 - [Agent scene authoring](docs/agent_scene_authoring.md) — recipes, patch and intent format, anti-patterns
 - [Agent batch commands](docs/agent_batch_commands.md) — multi-step workflows in one invocation
-- [`docs/mcp_tools.json`](docs/mcp_tools.json) — JSON request shape for every command
+- `godot-cli mcp --project-root .` — the MCP server; [`docs/mcp_tools.json`](docs/mcp_tools.json) carries a worked request per command
 - `godot-cli reference --format json` — the whole command surface as data
 
 ## Documentation

@@ -141,6 +141,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli completions`](#godot-cli-completions) | Print shell completions (bash, zsh, fish) |
 | [`godot-cli man`](#godot-cli-man) | Print the godot-cli(1) man page in roff format |
 | [`godot-cli reference`](#godot-cli-reference) | Print the command reference as Markdown or JSON |
+| [`godot-cli mcp`](#godot-cli-mcp) | Serve the commands as MCP tools over stdio |
 
 ## Commands
 
@@ -159,7 +160,7 @@ Framework health check
 Returns a trivial response so callers can verify JSON and CLI wiring.
 
 ```
-godot-cli ping [args...]
+godot-cli ping
 ```
 
 ### `godot-cli uid`
@@ -188,16 +189,28 @@ Encode a numeric Resource UID to uid:// text
 Converts a 63-bit integer to Godot's uid:// representation.
 
 ```
-godot-cli uid encode [args...]
+godot-cli uid encode <id>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<id>` | Numeric UID to encode |
 
 ### `godot-cli uid decode`
 
 Decode uid:// text to a numeric Resource UID
 
 ```
-godot-cli uid decode [args...]
+godot-cli uid decode <uid>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<uid>` | uid:// text to decode |
 
 ### `godot-cli uid create-for-path`
 
@@ -206,8 +219,14 @@ Deterministic Resource UID for a project path and file
 Matches ResourceUID.create_id_for_path using project name, Godot resource path, and file bytes.
 
 ```
-godot-cli uid create-for-path [options] [args...]
+godot-cli uid create-for-path [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -235,7 +254,7 @@ godot-cli uid scene-id [options]
 Generate scene unique ids with a deterministic seed
 
 ```
-godot-cli uid scene-id generate [options] [args...]
+godot-cli uid scene-id generate [options]
 ```
 
 **Options**
@@ -265,7 +284,7 @@ godot-cli uid cache [options]
 List all UID cache entries
 
 ```
-godot-cli uid cache list [options] [args...]
+godot-cli uid cache list [options]
 ```
 
 **Options**
@@ -279,8 +298,14 @@ godot-cli uid cache list [options] [args...]
 Resolve uid:// text to path or path to uid:// text
 
 ```
-godot-cli uid cache lookup [options] [args...]
+godot-cli uid cache lookup [options] <query>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<query>` | res:// path or uid:// text to look up |
 
 **Options**
 
@@ -309,8 +334,14 @@ Import ext_resource ids from a Godot-saved scene
 Updates scene_id_cache.json so future saves reuse Godot-assigned ext_resource ids.
 
 ```
-godot-cli uid session import [options] [args...]
+godot-cli uid session import [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -361,7 +392,7 @@ Create a new empty scene file
 Writes a minimal gd_scene with a single root node. Use scene node add to build the tree.
 
 ```
-godot-cli scene new [options] [args...]
+godot-cli scene new [options]
 ```
 
 **Options**
@@ -387,8 +418,14 @@ List ext_resource references in a scene
 With --project-root, resolves res:// paths to filesystem paths and reports whether each file exists.
 
 ```
-godot-cli scene refs [options] [args...]
+godot-cli scene refs [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -418,8 +455,14 @@ Add an ext_resource section
 Inserts before node sections and assigns a Godot-style id (e.g. 1_ab12c).
 
 ```
-godot-cli scene ext add [options] [args...]
+godot-cli scene ext add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -444,8 +487,15 @@ Remove an ext_resource by id
 Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.
 
 ```
-godot-cli scene ext remove [options] [args...]
+godot-cli scene ext remove [options] <file> <id>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<id>` | Resource id as written in the file, e.g. CapsuleShape2D_abc12 |
 
 **Options**
 
@@ -483,8 +533,14 @@ Add a sub_resource section
 Inserts before node sections and assigns a Godot-style id (e.g. CapsuleShape3D_ab12c).
 
 ```
-godot-cli scene sub add [options] [args...]
+godot-cli scene sub add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -511,8 +567,15 @@ Remove a sub_resource by id
 Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.
 
 ```
-godot-cli scene sub remove [options] [args...]
+godot-cli scene sub remove [options] <file> <id>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<id>` | Resource id as written in the file, e.g. CapsuleShape2D_abc12 |
 
 **Options**
 
@@ -535,8 +598,14 @@ Parse a .tscn file and report structure and ID issues
 Reads section headers, parsed properties (with --json), and runs ID validation. Pass --project-root to check uids against uid_cache.bin.
 
 ```
-godot-cli scene inspect [options] [args...]
+godot-cli scene inspect [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -571,8 +640,14 @@ godot-cli scene node [options]
 List all nodes in a scene with paths and section lines
 
 ```
-godot-cli scene node list [options] [args...]
+godot-cli scene node list [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -587,8 +662,15 @@ Get one node by viewport path or by name
 Pass file and node path (e.g. /root/Root/Player), or use --node-name with optional --parent.
 
 ```
-godot-cli scene node get [options] [args...]
+godot-cli scene node get [options] <file> [node]
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `[node]` | Node by viewport path; omit when using --node-name (optional) |
 
 **Options**
 
@@ -605,8 +687,14 @@ Add a child node under a parent path
 Requires --parent, --name, and --type. Assigns unique_id on save via save preparation.
 
 ```
-godot-cli scene node add [options] [args...]
+godot-cli scene node add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -636,8 +724,15 @@ Remove a node by viewport path
 Takes the scene path and the node's viewport path (e.g. /root/Main/Player). Fails if the node has children unless --recursive is set.
 
 ```
-godot-cli scene node remove [options] [args...]
+godot-cli scene node remove [options] <file> <node>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<node>` | Node by viewport path, e.g. /root/Main/Player |
 
 **Options**
 
@@ -661,8 +756,15 @@ Rename a node and rewrite descendant parent attributes
 Takes the scene path and the node's viewport path: scene node rename main.tscn /root/Main/Player --name Hero. Connections from or to the node follow the rename.
 
 ```
-godot-cli scene node rename [options] [args...]
+godot-cli scene node rename [options] <file> <node>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<node>` | Node by viewport path, e.g. /root/Main/Player |
 
 **Options**
 
@@ -686,8 +788,15 @@ Move a node under a new parent path
 Takes the scene path and the node's viewport path: scene node reparent main.tscn /root/Main/Player/Camera --parent /root/Main. The node becomes the new parent's last child, as in the editor.
 
 ```
-godot-cli scene node reparent [options] [args...]
+godot-cli scene node reparent [options] <file> <node>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<node>` | Node by viewport path, e.g. /root/Main/Player |
 
 **Options**
 
@@ -727,8 +836,14 @@ godot-cli scene connection [options]
 List signal connections with from/to as viewport paths
 
 ```
-godot-cli scene connection list [args...]
+godot-cli scene connection list <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 ### `godot-cli scene connection add`
 
@@ -737,8 +852,14 @@ Connect a signal from one node to a method on another
 Both nodes must exist. Fails with DuplicateConnection if the same signal, nodes, and method are already connected.
 
 ```
-godot-cli scene connection add [options] [args...]
+godot-cli scene connection add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -767,8 +888,14 @@ godot-cli scene connection add [options] [args...]
 Remove a signal connection
 
 ```
-godot-cli scene connection remove [options] [args...]
+godot-cli scene connection remove [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -809,8 +936,14 @@ Instance a PackedScene under a parent node
 Adds ext_resource type=PackedScene and a node with instance=ExtResource(...). Use --scene or --catalog-id (project entries only).
 
 ```
-godot-cli scene instance add [options] [args...]
+godot-cli scene instance add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -853,7 +986,7 @@ godot-cli scene template [options]
 List built-in scene templates
 
 ```
-godot-cli scene template list [options] [args...]
+godot-cli scene template list [options]
 ```
 
 **Options**
@@ -871,8 +1004,14 @@ Show template metadata, node tree, and sections
 Like scene inspect + node list for a built-in template. Use --content for raw .tscn text.
 
 ```
-godot-cli scene template show [options] [args...]
+godot-cli scene template show [options] <template>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<template>` | Template id, e.g. 2d/top_down_player |
 
 **Options**
 
@@ -889,8 +1028,14 @@ Copy a template to a new scene file
 Requires --output. Optional --rename-node and --set-property apply edits before save preparation.
 
 ```
-godot-cli scene template copy [options] [args...]
+godot-cli scene template copy [options] <template>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<template>` | Template id, e.g. 2d/top_down_player |
 
 **Options**
 
@@ -916,8 +1061,14 @@ Expand intent JSON to a patch and preview (no write)
 Accepts --intent or --patch. Optional scene path positional dry-runs the patch. See docs/agent_scene_authoring.md.
 
 ```
-godot-cli scene plan [options] [args...]
+godot-cli scene plan [options] [file]
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `[file]` | Scene file to dry-run the expanded patch against (optional) |
 
 **Options**
 
@@ -935,8 +1086,14 @@ Apply a declarative JSON patch to a scene
 Batch node/resource/instance edits. Use --patch or --intent. See docs/agent_scene_authoring.md.
 
 ```
-godot-cli scene apply [options] [args...]
+godot-cli scene apply [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -967,8 +1124,15 @@ Compare node trees between two scenes
 Reports added, removed, and type-changed nodes. Use --properties for property-level diff.
 
 ```
-godot-cli scene diff [options] [args...]
+godot-cli scene diff [options] <a> <b>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<a>` | First scene file |
+| `<b>` | Second scene file |
 
 **Options**
 
@@ -984,8 +1148,14 @@ Restore a scene from a snapshot file
 Copies --from snapshot over the target scene (full file restore).
 
 ```
-godot-cli scene restore [options] [args...]
+godot-cli scene restore [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -1000,8 +1170,14 @@ godot-cli scene restore [options] [args...]
 Validate scene IDs and references (fails on errors)
 
 ```
-godot-cli scene validate [options] [args...]
+godot-cli scene validate [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1014,8 +1190,14 @@ godot-cli scene validate [options] [args...]
 Validate multiple scene files (aggregated JSON, exit 1 on any error)
 
 ```
-godot-cli scene validate-batch [options] [args...]
+godot-cli scene validate-batch [options] <files>...
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<files>...` | One or more scene or resource files |
 
 **Options**
 
@@ -1030,8 +1212,14 @@ Set a property on a node section and save the scene
 Target a node with --node (viewport path) or --node-name, or a section with --section-line. Value is written verbatim after =.
 
 ```
-godot-cli scene set-property [options] [args...]
+godot-cli scene set-property [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1062,8 +1250,14 @@ Repair scene-local IDs and sort ext_resource sections for save
 Runs Godot-compatible save preparation without editing properties.
 
 ```
-godot-cli scene normalize [options] [args...]
+godot-cli scene normalize [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1084,8 +1278,14 @@ godot-cli scene normalize [options] [args...]
 Replace ext_resource paths across one or more files
 
 ```
-godot-cli scene retarget-ext [options] [args...]
+godot-cli scene retarget-ext [options] <files>...
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<files>...` | One or more scene or resource files |
 
 **Options**
 
@@ -1108,8 +1308,14 @@ godot-cli scene retarget-ext [options] [args...]
 Parse and rewrite a scene; fail if structure is not preserved
 
 ```
-godot-cli scene round-trip [options] [args...]
+godot-cli scene round-trip [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1125,8 +1331,15 @@ Compare a scene to a Godot headless save (semantic match)
 Ignores ext_resource id suffixes and default sub_resource fields stripped by Godot.
 
 ```
-godot-cli scene compare-godot [options] [args...]
+godot-cli scene compare-godot [options] <file> [saved]
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `[saved]` | Godot-saved file to compare against; or pass --reference (optional) |
 
 **Options**
 
@@ -1165,7 +1378,7 @@ Create a new .tres resource file
 Writes a gd_resource header and a [resource] section. Repeat --property/--value for several properties. Add sub-resources with resource sub add and external files with resource ext add.
 
 ```
-godot-cli resource new [options] [args...]
+godot-cli resource new [options]
 ```
 
 **Options**
@@ -1206,8 +1419,14 @@ godot-cli resource sub [options]
 Add a sub_resource; reference it as SubResource("&lt;id&gt;")
 
 ```
-godot-cli resource sub add [options] [args...]
+godot-cli resource sub add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1234,8 +1453,15 @@ Remove a sub_resource by id
 Takes the file path and the resource id. Fails with referrer list if the id is still referenced.
 
 ```
-godot-cli resource sub remove [options] [args...]
+godot-cli resource sub remove [options] <file> <id>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<id>` | Resource id as written in the file, e.g. CapsuleShape2D_abc12 |
 
 **Options**
 
@@ -1271,8 +1497,14 @@ godot-cli resource ext [options]
 Register an external file; reference it as ExtResource("&lt;id&gt;")
 
 ```
-godot-cli resource ext add [options] [args...]
+godot-cli resource ext add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1297,8 +1529,15 @@ Remove an ext_resource by id
 Takes the file path and the resource id. Fails with referrer list if the id is still referenced.
 
 ```
-godot-cli resource ext remove [options] [args...]
+godot-cli resource ext remove [options] <file> <id>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<id>` | Resource id as written in the file, e.g. CapsuleShape2D_abc12 |
 
 **Options**
 
@@ -1321,8 +1560,14 @@ Parse a .tres file and report structure and ID issues
 Reads section headers, parsed properties (with --json), and runs ID validation.
 
 ```
-godot-cli resource inspect [options] [args...]
+godot-cli resource inspect [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1338,8 +1583,14 @@ godot-cli resource inspect [options] [args...]
 Validate resource IDs and references (fails on errors)
 
 ```
-godot-cli resource validate [options] [args...]
+godot-cli resource validate [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1352,8 +1603,14 @@ godot-cli resource validate [options] [args...]
 Validate multiple resource files (aggregated JSON, exit 1 on any error)
 
 ```
-godot-cli resource validate-batch [options] [args...]
+godot-cli resource validate-batch [options] <files>...
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<files>...` | One or more scene or resource files |
 
 **Options**
 
@@ -1366,8 +1623,14 @@ godot-cli resource validate-batch [options] [args...]
 Set a property on a resource section and save
 
 ```
-godot-cli resource set-property [options] [args...]
+godot-cli resource set-property [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1393,8 +1656,14 @@ godot-cli resource set-property [options] [args...]
 Repair scene-local IDs and sort ext_resource sections for save
 
 ```
-godot-cli resource normalize [options] [args...]
+godot-cli resource normalize [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1415,8 +1684,14 @@ godot-cli resource normalize [options] [args...]
 Replace ext_resource paths across one or more files
 
 ```
-godot-cli resource retarget-ext [options] [args...]
+godot-cli resource retarget-ext [options] <files>...
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<files>...` | One or more scene or resource files |
 
 **Options**
 
@@ -1439,8 +1714,14 @@ godot-cli resource retarget-ext [options] [args...]
 Parse and rewrite a resource file; fail if structure is not preserved
 
 ```
-godot-cli resource round-trip [options] [args...]
+godot-cli resource round-trip [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
 
 **Options**
 
@@ -1454,8 +1735,15 @@ godot-cli resource round-trip [options] [args...]
 Compare a resource to a Godot headless save (semantic match)
 
 ```
-godot-cli resource compare-godot [options] [args...]
+godot-cli resource compare-godot [options] <file> [saved]
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `[saved]` | Godot-saved file to compare against; or pass --reference (optional) |
 
 **Options**
 
@@ -1493,8 +1781,14 @@ Create or update a JSON catalog manifest for a scene
 Writes &lt;scene&gt;.manifest.json beside the scene, filling scene_uid from the scene header and scaffolding a row for each signal declared by the root script. With --update, prose already written is preserved.
 
 ```
-godot-cli catalog add [options] [args...]
+godot-cli catalog add [options] <file>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
 
 **Options**
 
@@ -1519,7 +1813,7 @@ Repoint manifests whose scene has moved
 For every manifest whose scene file is missing, resolves its scene_uid through .godot/uid_cache.bin and rewrites the scene path. Requires the project to have been opened in Godot since the move, since the editor is what refreshes that cache. Exits 1 if any manifest is still unrepaired.
 
 ```
-godot-cli catalog relink [options] [args...]
+godot-cli catalog relink [options]
 ```
 
 **Options**
@@ -1536,7 +1830,7 @@ Scan project for catalog manifests
 Walks the project for *.manifest.json, parses fields, and validates catalog entries.
 
 ```
-godot-cli catalog scan [options] [args...]
+godot-cli catalog scan [options]
 ```
 
 **Options**
@@ -1552,7 +1846,7 @@ List valid catalog entries
 Runs catalog scan and returns valid entries only (id, scene, summary, tags).
 
 ```
-godot-cli catalog list [options] [args...]
+godot-cli catalog list [options]
 ```
 
 **Options**
@@ -1568,8 +1862,14 @@ Show merged catalog entry by id
 Returns manifest fields merged with scene nodes and GDScript exports/signals. Builtin ids use the godot/ namespace.
 
 ```
-godot-cli catalog show [options] [args...]
+godot-cli catalog show [options] <id>
 ```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<id>` | Catalog entry id, e.g. ui/button |
 
 **Options**
 
@@ -1584,7 +1884,7 @@ Validate catalog manifests in a project
 Runs catalog scan and fails when any manifest has validation errors.
 
 ```
-godot-cli catalog validate [options] [args...]
+godot-cli catalog validate [options]
 ```
 
 **Options**
@@ -1600,7 +1900,7 @@ Search project catalog entries and builtins
 Filter by tags and/or free-text query across summaries and documentation fields.
 
 ```
-godot-cli catalog search [options] [args...]
+godot-cli catalog search [options]
 ```
 
 **Options**
@@ -1618,7 +1918,7 @@ Export agent digest markdown
 Writes a markdown catalog digest for LLM agents (default: AGENTS.md in the project root).
 
 ```
-godot-cli catalog export [options] [args...]
+godot-cli catalog export [options]
 ```
 
 **Options**
@@ -1636,7 +1936,7 @@ Run multiple CLI commands in one invocation
 Each step is a full argv array. Modes: stop (default), continue, atomic. See docs/agent_batch_commands.md.
 
 ```
-godot-cli batch [options] [args...]
+godot-cli batch [options]
 ```
 
 **Options**
@@ -1681,7 +1981,7 @@ godot-cli project [options]
 Summarize key project.godot configuration
 
 ```
-godot-cli project show [options] [args...]
+godot-cli project show [options]
 ```
 
 **Options**
@@ -1697,7 +1997,7 @@ Move or rename a file and repoint every reference to it
 Renames the file with its .uid and .import sidecars, rewrites every ext_resource path in the project's scenes and resources, repoints catalog manifests, and updates project.godot settings such as the main scene and autoloads. Paths are res:// or project-relative.
 
 ```
-godot-cli project move [options] [args...]
+godot-cli project move [options]
 ```
 
 **Options**
@@ -1714,7 +2014,7 @@ godot-cli project move [options] [args...]
 Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics)
 
 ```
-godot-cli project apply [options] [args...]
+godot-cli project apply [options]
 ```
 
 **Options**
@@ -1747,7 +2047,7 @@ godot-cli project input [options]
 List input actions
 
 ```
-godot-cli project input list [options] [args...]
+godot-cli project input list [options]
 ```
 
 **Options**
@@ -1761,7 +2061,7 @@ godot-cli project input list [options] [args...]
 Apply input map intent JSON (merge/replace per action)
 
 ```
-godot-cli project input apply [options] [args...]
+godot-cli project input apply [options]
 ```
 
 **Options**
@@ -1778,7 +2078,7 @@ godot-cli project input apply [options] [args...]
 Validate [input] section event objects
 
 ```
-godot-cli project input validate [options] [args...]
+godot-cli project input validate [options]
 ```
 
 **Options**
@@ -1810,7 +2110,7 @@ godot-cli project settings [options]
 List settings (optional --section filter)
 
 ```
-godot-cli project settings list [options] [args...]
+godot-cli project settings list [options]
 ```
 
 **Options**
@@ -1825,7 +2125,7 @@ godot-cli project settings list [options] [args...]
 Get one setting value
 
 ```
-godot-cli project settings get [options] [args...]
+godot-cli project settings get [options]
 ```
 
 **Options**
@@ -1841,7 +2141,7 @@ godot-cli project settings get [options] [args...]
 Set one setting value
 
 ```
-godot-cli project settings set [options] [args...]
+godot-cli project settings set [options]
 ```
 
 **Options**
@@ -1860,7 +2160,7 @@ godot-cli project settings set [options] [args...]
 Apply settings intent JSON (per-key merge)
 
 ```
-godot-cli project settings apply [options] [args...]
+godot-cli project settings apply [options]
 ```
 
 **Options**
@@ -1877,7 +2177,7 @@ godot-cli project settings apply [options] [args...]
 Validate res:// paths in settings
 
 ```
-godot-cli project settings validate [options] [args...]
+godot-cli project settings validate [options]
 ```
 
 **Options**
@@ -1908,7 +2208,7 @@ godot-cli project autoload [options]
 List autoload entries
 
 ```
-godot-cli project autoload list [options] [args...]
+godot-cli project autoload list [options]
 ```
 
 **Options**
@@ -1922,7 +2222,7 @@ godot-cli project autoload list [options] [args...]
 Apply autoload intent JSON (merge by name; optional replace_all)
 
 ```
-godot-cli project autoload apply [options] [args...]
+godot-cli project autoload apply [options]
 ```
 
 **Options**
@@ -1939,7 +2239,7 @@ godot-cli project autoload apply [options] [args...]
 Validate autoload paths and names
 
 ```
-godot-cli project autoload validate [options] [args...]
+godot-cli project autoload validate [options]
 ```
 
 **Options**
@@ -1971,7 +2271,7 @@ godot-cli project plugins [options]
 List addons and enabled state
 
 ```
-godot-cli project plugins list [options] [args...]
+godot-cli project plugins list [options]
 ```
 
 **Options**
@@ -1985,7 +2285,7 @@ godot-cli project plugins list [options] [args...]
 Enable one plugin
 
 ```
-godot-cli project plugins enable [options] [args...]
+godot-cli project plugins enable [options]
 ```
 
 **Options**
@@ -2002,7 +2302,7 @@ godot-cli project plugins enable [options] [args...]
 Disable one plugin
 
 ```
-godot-cli project plugins disable [options] [args...]
+godot-cli project plugins disable [options]
 ```
 
 **Options**
@@ -2019,7 +2319,7 @@ godot-cli project plugins disable [options] [args...]
 Apply plugin intent JSON (enable/disable lists)
 
 ```
-godot-cli project plugins apply [options] [args...]
+godot-cli project plugins apply [options]
 ```
 
 **Options**
@@ -2036,7 +2336,7 @@ godot-cli project plugins apply [options] [args...]
 Validate enabled plugin paths exist
 
 ```
-godot-cli project plugins validate [options] [args...]
+godot-cli project plugins validate [options]
 ```
 
 **Options**
@@ -2066,7 +2366,7 @@ godot-cli project rendering [options]
 List [rendering] section settings
 
 ```
-godot-cli project rendering list [options] [args...]
+godot-cli project rendering list [options]
 ```
 
 **Options**
@@ -2080,7 +2380,7 @@ godot-cli project rendering list [options] [args...]
 Apply rendering intent JSON (friendly aliases)
 
 ```
-godot-cli project rendering apply [options] [args...]
+godot-cli project rendering apply [options]
 ```
 
 **Options**
@@ -2097,7 +2397,7 @@ godot-cli project rendering apply [options] [args...]
 Validate known rendering method/driver values
 
 ```
-godot-cli project rendering validate [options] [args...]
+godot-cli project rendering validate [options]
 ```
 
 **Options**
@@ -2127,7 +2427,7 @@ godot-cli project physics [options]
 List [physics] section settings
 
 ```
-godot-cli project physics list [options] [args...]
+godot-cli project physics list [options]
 ```
 
 **Options**
@@ -2141,7 +2441,7 @@ godot-cli project physics list [options] [args...]
 Apply physics intent JSON (friendly aliases)
 
 ```
-godot-cli project physics apply [options] [args...]
+godot-cli project physics apply [options]
 ```
 
 **Options**
@@ -2158,7 +2458,7 @@ godot-cli project physics apply [options] [args...]
 Validate known physics engine and scalar values
 
 ```
-godot-cli project physics validate [options] [args...]
+godot-cli project physics validate [options]
 ```
 
 **Options**
@@ -2179,7 +2479,7 @@ binary that printed them.
   fish:  godot-cli completions fish &gt; ~/.config/fish/completions/godot-cli.fish
 
 ```
-godot-cli completions [options] [args...]
+godot-cli completions [options]
 ```
 
 **Options**
@@ -2195,7 +2495,7 @@ Print the godot-cli(1) man page in roff format
 Render with: godot-cli man | man -l -
 
 ```
-godot-cli man [options] [args...]
+godot-cli man [options]
 ```
 
 **Options**
@@ -2213,7 +2513,7 @@ docs/commands.md. --format json prints the whole command surface —
 every command, option, and value kind — for tools that wrap the CLI.
 
 ```
-godot-cli reference [options] [args...]
+godot-cli reference [options]
 ```
 
 **Options**
@@ -2222,6 +2522,29 @@ godot-cli reference [options] [args...]
 |--------|-------|-------------|---------|
 | `--output` | `<path>` | Write to this file instead of stdout | — |
 | `--format` | `<value>` | markdown or json | `markdown` |
+
+### `godot-cli mcp`
+
+Serve the commands as MCP tools over stdio
+
+Speaks the Model Context Protocol on stdin and stdout so Claude Code,
+Cursor, and OpenCode can call every command as a tool, read the agent
+docs as resources, and start a session from the godot-scene-session
+prompt. With --project-root the server works inside that project:
+--project-root . is added to every call and path arguments may not
+leave it.
+
+  claude mcp add godot-cli -- godot-cli mcp --project-root .
+
+```
+godot-cli mcp [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project to serve; injected into every call and enforced on path arguments | — |
 
 ## Exit codes
 

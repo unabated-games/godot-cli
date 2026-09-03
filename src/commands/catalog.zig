@@ -1,5 +1,6 @@
 const std = @import("std");
 const spec = @import("../cli/spec.zig");
+const pos = @import("positionals.zig");
 const app_mod = @import("../cli/app.zig");
 const catalog_add = @import("../godot/catalog_add.zig");
 const catalog_relink = @import("../godot/catalog_relink.zig");
@@ -610,6 +611,7 @@ pub fn commands() spec.CommandSpec {
                 .description = "Writes <scene>.manifest.json beside the scene, filling scene_uid from the scene header and scaffolding a row for each signal declared by the root script. With --update, prose already written is preserved.",
                 .options = &add_options,
                 .handler = addHandler,
+                .positionals = &pos.scene_file,
             },
             .{
                 .name = "relink",
@@ -641,6 +643,7 @@ pub fn commands() spec.CommandSpec {
                 .description = "Returns manifest fields merged with scene nodes and GDScript exports/signals. Builtin ids use the godot/ namespace.",
                 .options = &.{project_root_opt},
                 .handler = showHandler,
+                .positionals = &pos.catalog_id,
             },
             .{
                 .name = "validate",

@@ -156,7 +156,10 @@ pub fn markdown(
         if (entry.command.options.len != 0 or entry.command.children.len != 0) {
             try w.writeAll(" [options]");
         }
-        if (entry.command.handler != null) try w.writeAll(" [args...]");
+        for (entry.command.positionals) |arg| {
+            try w.writeAll(" ");
+            try writePositionalUsage(w, arg);
+        }
         try w.writeAll("\n```\n");
 
         if (entry.command.children.len != 0) {
@@ -170,6 +173,18 @@ pub fn markdown(
                 try writeAnchor(w, child.name);
                 try w.writeAll(") | ");
                 try writeMarkdownCell(w, child.summary);
+                try w.writeAll(" |\n");
+            }
+        }
+
+        if (entry.command.positionals.len != 0) {
+            try w.writeAll("\n**Arguments**\n\n| Argument | Description |\n|----------|-------------|\n");
+            for (entry.command.positionals) |arg| {
+                try w.writeAll("| `");
+                try writePositionalUsage(w, arg);
+                try w.writeAll("` | ");
+                try writeMarkdownCell(w, arg.description);
+                if (!arg.required) try w.writeAll(" (optional)");
                 try w.writeAll(" |\n");
             }
         }
@@ -217,6 +232,15 @@ pub fn markdown(
 /// Pipes end a table cell and newlines end a row, so both have to go. Angle
 /// brackets are escaped because option descriptions use them as placeholders
 /// (`<scene>.manifest.json`), and a Markdown renderer reads those as HTML tags.
+fn writePositionalUsage(w: *std.Io.Writer, arg: spec.PositionalSpec) !void {
+    try w.print("{c}{s}{c}{s}", .{
+        @as(u8, if (arg.required) '<' else '['),
+        arg.name,
+        @as(u8, if (arg.required) '>' else ']'),
+        if (arg.variadic) "..." else "",
+    });
+}
+
 fn writeMarkdownCell(w: *std.Io.Writer, text: []const u8) !void {
     for (text) |byte| switch (byte) {
         '|' => try w.writeAll("\\|"),
@@ -273,6 +297,18 @@ pub fn commandTree(
         }
         try row.put(allocator, "runnable", .{ .bool = entry.command.handler != null });
 
+        var positionals_json: std.json.Array = .init(allocator);
+        for (entry.command.positionals) |arg| {
+            var arg_row: std.json.ObjectMap = .{};
+            try arg_row.put(allocator, "name", .{ .string = arg.name });
+            try arg_row.put(allocator, "kind", .{ .string = @tagName(arg.kind) });
+            try arg_row.put(allocator, "description", .{ .string = arg.description });
+            try arg_row.put(allocator, "required", .{ .bool = arg.required });
+            try arg_row.put(allocator, "variadic", .{ .bool = arg.variadic });
+            try positionals_json.append(.{ .object = arg_row });
+        }
+        try row.put(allocator, "positionals", .{ .array = positionals_json });
+
         var options_json: std.json.Array = .init(allocator);
         for (entry.command.options) |opt| {
             var option_row: std.json.ObjectMap = .{};
@@ -285,6 +321,7 @@ pub fn commandTree(
             if (opt.default_value) |default_value| {
                 try option_row.put(allocator, "default", .{ .string = default_value });
             }
+            if (opt.repeatable) try option_row.put(allocator, "repeatable", .{ .bool = true });
             try options_json.append(.{ .object = option_row });
         }
         try row.put(allocator, "options", .{ .array = options_json });
@@ -415,6 +452,16 @@ pub fn manPage(
         if (entry.command.description) |description| {
             try w.writeAll(".PP\n");
             try writeRoff(w, description);
+            try w.writeAll("\n");
+        }
+
+        for (entry.command.positionals) |arg| {
+            try w.writeAll(".TP\n\\fI");
+            try writeRoff(w, arg.name);
+            if (arg.variadic) try w.writeAll("...");
+            try w.writeAll("\\fR\n");
+            try writeRoff(w, arg.description);
+            if (!arg.required) try w.writeAll(" (optional)");
             try w.writeAll("\n");
         }
 
@@ -967,6 +1014,10 @@ const test_root = spec.CommandSpec{
                                 .{ .long = "dry-run", .description = "Report what would change; don't write" },
                                 .{ .long = "mode", .kind = .string, .description = "One of a|b", .default_value = "a" },
                             },
+                            .positionals = &.{
+                                .{ .name = "file", .kind = .path, .description = "Scene file" },
+                                .{ .name = "node", .required = false, .description = "Node path" },
+                            },
                             .handler = @ptrFromInt(@alignOf(fn () void)),
                         },
                     },
@@ -985,6 +1036,8 @@ test "markdown reference lists every command and option" {
     try std.testing.expect(std.mem.indexOf(u8, text, "### `godot-cli scene node add`") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "(#godot-cli-scene-node-add)") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "| `--parent` | `<value>` |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "godot-cli scene node add [options] <file> [node]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "| `[node]` | Node path (optional) |") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "| `a` |") != null);
     // A pipe inside a description would otherwise end the table cell.
     try std.testing.expect(std.mem.indexOf(u8, text, "One of a\\|b") != null);
@@ -1000,6 +1053,7 @@ test "man page escapes roff control characters and wraps source lines" {
     try std.testing.expect(std.mem.indexOf(u8, text, ".SS godot\\-cli scene node add") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "\\fB\\-\\-dry\\-run\\fR") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "(default: a)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, ".TP\n\\fIfile\\fR\nScene file\n") != null);
 
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line| {

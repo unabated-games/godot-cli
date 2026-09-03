@@ -1,5 +1,6 @@
 const std = @import("std");
 const spec = @import("../cli/spec.zig");
+const pos = @import("positionals.zig");
 const app_mod = @import("../cli/app.zig");
 const resource_uid = @import("../godot/resource_uid.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
@@ -1791,6 +1792,7 @@ pub fn uidCacheCommands() spec.CommandSpec {
                 .summary = "Resolve uid:// text to path or path to uid:// text",
                 .options = &.{project_root_opt},
                 .handler = uidCacheLookupHandler,
+                .positionals = &pos.uid_query,
             },
         },
     };
@@ -1990,6 +1992,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "With --project-root, resolves res:// paths to filesystem paths and reports whether each file exists.",
                 .options = &refs_options,
                 .handler = sceneRefsHandler,
+                .positionals = &pos.scene_file,
             },
             .{
                 .name = "ext",
@@ -2001,6 +2004,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Inserts before node sections and assigns a Godot-style id (e.g. 1_ab12c).",
                         .options = &ext_add_options,
                         .handler = sceneExtAddHandler,
+                        .positionals = &pos.file,
                     },
                     .{
                         .name = "remove",
@@ -2008,6 +2012,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.",
                         .options = &resource_remove_options,
                         .handler = sceneExtRemoveHandler,
+                        .positionals = &pos.file_and_resource_id,
                     },
                 },
             },
@@ -2021,6 +2026,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Inserts before node sections and assigns a Godot-style id (e.g. CapsuleShape3D_ab12c).",
                         .options = &sub_add_options,
                         .handler = sceneSubAddHandler,
+                        .positionals = &pos.file,
                     },
                     .{
                         .name = "remove",
@@ -2028,6 +2034,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Takes the scene path and the resource id (e.g. 1_abc12). Fails with referrer list if the id is still referenced in property text.",
                         .options = &resource_remove_options,
                         .handler = sceneSubRemoveHandler,
+                        .positionals = &pos.file_and_resource_id,
                     },
                 },
             },
@@ -2037,6 +2044,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Reads section headers, parsed properties (with --json), and runs ID validation. Pass --project-root to check uids against uid_cache.bin.",
                 .options = &inspect_options,
                 .handler = sceneInspectHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "node",
@@ -2047,6 +2055,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .summary = "List all nodes in a scene with paths and section lines",
                         .options = &node_list_options,
                         .handler = sceneNodeListHandler,
+                        .positionals = &pos.scene_file,
                     },
                     .{
                         .name = "get",
@@ -2054,6 +2063,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Pass file and node path (e.g. /root/Root/Player), or use --node-name with optional --parent.",
                         .options = &node_get_options,
                         .handler = sceneNodeGetHandler,
+                        .positionals = &pos.file_and_node_optional,
                     },
                     .{
                         .name = "add",
@@ -2061,6 +2071,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Requires --parent, --name, and --type. Assigns unique_id on save via save preparation.",
                         .options = &node_edit_options,
                         .handler = sceneNodeAddHandler,
+                        .positionals = &pos.scene_file,
                     },
                     .{
                         .name = "remove",
@@ -2068,6 +2079,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Takes the scene path and the node's viewport path (e.g. /root/Main/Player). Fails if the node has children unless --recursive is set.",
                         .options = &node_remove_options,
                         .handler = sceneNodeRemoveHandler,
+                        .positionals = &pos.file_and_node,
                     },
                     .{
                         .name = "rename",
@@ -2075,6 +2087,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Takes the scene path and the node's viewport path: scene node rename main.tscn /root/Main/Player --name Hero. Connections from or to the node follow the rename.",
                         .options = &node_rename_options,
                         .handler = sceneNodeRenameHandler,
+                        .positionals = &pos.file_and_node,
                     },
                     .{
                         .name = "reparent",
@@ -2082,6 +2095,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .summary = "Move a node under a new parent path",
                         .options = &node_reparent_options,
                         .handler = sceneNodeReparentHandler,
+                        .positionals = &pos.file_and_node,
                     },
                 },
             },
@@ -2094,6 +2108,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .name = "list",
                         .summary = "List signal connections with from/to as viewport paths",
                         .handler = sceneConnectionListHandler,
+                        .positionals = &pos.scene_file,
                     },
                     .{
                         .name = "add",
@@ -2101,12 +2116,14 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Both nodes must exist. Fails with DuplicateConnection if the same signal, nodes, and method are already connected.",
                         .options = &connection_add_options,
                         .handler = sceneConnectionAddHandler,
+                        .positionals = &pos.scene_file,
                     },
                     .{
                         .name = "remove",
                         .summary = "Remove a signal connection",
                         .options = &connection_remove_options,
                         .handler = sceneConnectionRemoveHandler,
+                        .positionals = &pos.scene_file,
                     },
                 },
             },
@@ -2120,6 +2137,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Adds ext_resource type=PackedScene and a node with instance=ExtResource(...). Use --scene or --catalog-id (project entries only).",
                         .options = &instance_add_options,
                         .handler = sceneInstanceAddHandler,
+                        .positionals = &pos.scene_file,
                     },
                 },
             },
@@ -2139,6 +2157,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Like scene inspect + node list for a built-in template. Use --content for raw .tscn text.",
                         .options = &template_options,
                         .handler = sceneTemplateShowHandler,
+                        .positionals = &pos.template,
                     },
                     .{
                         .name = "copy",
@@ -2146,6 +2165,7 @@ pub fn sceneCommands() spec.CommandSpec {
                         .description = "Requires --output. Optional --rename-node and --set-property apply edits before save preparation.",
                         .options = &template_copy_options,
                         .handler = sceneTemplateCopyHandler,
+                        .positionals = &pos.template,
                     },
                 },
             },
@@ -2155,6 +2175,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Accepts --intent or --patch. Optional scene path positional dry-runs the patch. See docs/agent_scene_authoring.md.",
                 .options = &plan_options,
                 .handler = scenePlanHandler,
+                .positionals = &pos.file_optional,
             },
             .{
                 .name = "apply",
@@ -2162,6 +2183,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Batch node/resource/instance edits. Use --patch or --intent. See docs/agent_scene_authoring.md.",
                 .options = &apply_options,
                 .handler = sceneApplyHandler,
+                .positionals = &pos.scene_file,
             },
             .{
                 .name = "diff",
@@ -2169,6 +2191,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Reports added, removed, and type-changed nodes. Use --properties for property-level diff.",
                 .options = &diff_options,
                 .handler = sceneDiffHandler,
+                .positionals = &pos.two_files,
             },
             .{
                 .name = "restore",
@@ -2176,18 +2199,21 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Copies --from snapshot over the target scene (full file restore).",
                 .options = &restore_options,
                 .handler = sceneRestoreHandler,
+                .positionals = &pos.scene_file,
             },
             .{
                 .name = "validate",
                 .summary = "Validate scene IDs and references (fails on errors)",
                 .options = &.{project_root_opt},
                 .handler = sceneValidateHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "validate-batch",
                 .summary = "Validate multiple scene files (aggregated JSON, exit 1 on any error)",
                 .options = &batch_options,
                 .handler = sceneValidateBatchHandler,
+                .positionals = &pos.files,
             },
             .{
                 .name = "set-property",
@@ -2195,6 +2221,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Target a node with --node (viewport path) or --node-name, or a section with --section-line. Value is written verbatim after =.",
                 .options = &set_property_options,
                 .handler = sceneSetPropertyHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "normalize",
@@ -2202,18 +2229,21 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Runs Godot-compatible save preparation without editing properties.",
                 .options = &save_options,
                 .handler = sceneNormalizeHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "retarget-ext",
                 .summary = "Replace ext_resource paths across one or more files",
                 .options = &retarget_options,
                 .handler = sceneRetargetExtHandler,
+                .positionals = &pos.files,
             },
             .{
                 .name = "round-trip",
                 .summary = "Parse and rewrite a scene; fail if structure is not preserved",
                 .options = &roundtrip_options,
                 .handler = sceneRoundTripHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "compare-godot",
@@ -2221,6 +2251,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description = "Ignores ext_resource id suffixes and default sub_resource fields stripped by Godot.",
                 .options = &compare_godot_options,
                 .handler = sceneCompareGodotHandler,
+                .positionals = &pos.file_and_reference,
             },
         },
     };
@@ -2310,16 +2341,16 @@ pub fn resourceCommands() spec.CommandSpec {
                 .name = "sub",
                 .summary = "Sub-resources embedded in a .tres",
                 .children = &.{
-                    .{ .name = "add", .summary = "Add a sub_resource; reference it as SubResource(\"<id>\")", .options = &resource_sub_add_options, .handler = sceneSubAddHandler },
-                    .{ .name = "remove", .summary = "Remove a sub_resource by id", .description = "Takes the file path and the resource id. Fails with referrer list if the id is still referenced.", .options = &save_options, .handler = sceneSubRemoveHandler },
+                    .{ .name = "add", .summary = "Add a sub_resource; reference it as SubResource(\"<id>\")", .options = &resource_sub_add_options, .handler = sceneSubAddHandler, .positionals = &pos.file },
+                    .{ .name = "remove", .summary = "Remove a sub_resource by id", .description = "Takes the file path and the resource id. Fails with referrer list if the id is still referenced.", .options = &save_options, .handler = sceneSubRemoveHandler, .positionals = &pos.file_and_resource_id },
                 },
             },
             .{
                 .name = "ext",
                 .summary = "External resource references in a .tres",
                 .children = &.{
-                    .{ .name = "add", .summary = "Register an external file; reference it as ExtResource(\"<id>\")", .options = &resource_ext_add_options, .handler = sceneExtAddHandler },
-                    .{ .name = "remove", .summary = "Remove an ext_resource by id", .description = "Takes the file path and the resource id. Fails with referrer list if the id is still referenced.", .options = &save_options, .handler = sceneExtRemoveHandler },
+                    .{ .name = "add", .summary = "Register an external file; reference it as ExtResource(\"<id>\")", .options = &resource_ext_add_options, .handler = sceneExtAddHandler, .positionals = &pos.file },
+                    .{ .name = "remove", .summary = "Remove an ext_resource by id", .description = "Takes the file path and the resource id. Fails with referrer list if the id is still referenced.", .options = &save_options, .handler = sceneExtRemoveHandler, .positionals = &pos.file_and_resource_id },
                 },
             },
             .{
@@ -2328,48 +2359,56 @@ pub fn resourceCommands() spec.CommandSpec {
                 .description = "Reads section headers, parsed properties (with --json), and runs ID validation.",
                 .options = &inspect_options,
                 .handler = resourceInspectHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "validate",
                 .summary = "Validate resource IDs and references (fails on errors)",
                 .options = &.{project_root_opt},
                 .handler = resourceValidateHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "validate-batch",
                 .summary = "Validate multiple resource files (aggregated JSON, exit 1 on any error)",
                 .options = &batch_options,
                 .handler = resourceValidateBatchHandler,
+                .positionals = &pos.files,
             },
             .{
                 .name = "set-property",
                 .summary = "Set a property on a resource section and save",
                 .options = &set_property_options,
                 .handler = resourceSetPropertyHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "normalize",
                 .summary = "Repair scene-local IDs and sort ext_resource sections for save",
                 .options = &save_options,
                 .handler = resourceNormalizeHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "retarget-ext",
                 .summary = "Replace ext_resource paths across one or more files",
                 .options = &retarget_options,
                 .handler = resourceRetargetExtHandler,
+                .positionals = &pos.files,
             },
             .{
                 .name = "round-trip",
                 .summary = "Parse and rewrite a resource file; fail if structure is not preserved",
                 .options = &roundtrip_options,
                 .handler = resourceRoundTripHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "compare-godot",
                 .summary = "Compare a resource to a Godot headless save (semantic match)",
                 .options = &compare_godot_options,
                 .handler = resourceCompareGodotHandler,
+                .positionals = &pos.file_and_reference,
             },
         },
     };
