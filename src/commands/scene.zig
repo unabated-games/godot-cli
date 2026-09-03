@@ -1972,7 +1972,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot node class name (e.g. CharacterBody2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new node; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
     } ++ save_options;
@@ -2040,7 +2040,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves the scene path; needs the project root)" },
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the instance root (%Name from owner scripts)" },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value to set on the instance root (anchors, offsets, overrides)" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value to set on the instance root (anchors, offsets, overrides). Numbers and booleans are JSON; a string is Variant text and carries its own quotes" },
     } ++ save_options;
     // save_options carries an --output that defaults to overwriting the input,
     // which scene new redefines as required. Dropping it here keeps the option
@@ -2063,7 +2063,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. RectangleShape2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
     } ++ save_options;
     const resource_remove_options = save_options;
@@ -2413,7 +2413,7 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
         .{ .long = "no-uid", .kind = .flag, .description = "Do not stamp a uid=\"uid://...\" on the header" },
     } ++ withoutOption(&save_options, "output");
@@ -2421,7 +2421,7 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. StyleBoxFlat)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new sub-resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
     } ++ save_options;
     const resource_ext_add_options = [_]spec.OptionSpec{

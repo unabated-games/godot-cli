@@ -555,7 +555,7 @@ godot-cli scene sub add [options] <file>
 | `--type` | `<value>` | Godot resource class (e.g. RectangleShape2D) (required) | — |
 | `--property` | `<value>` | Property to set on the new resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
@@ -712,7 +712,7 @@ godot-cli scene node add [options] <file>
 | `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) (required) | — |
 | `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
@@ -963,7 +963,7 @@ godot-cli scene instance add [options] <file>
 | `--catalog-id` | `<value>` | Project catalog id (resolves the scene path; needs the project root) | — |
 | `--editable` | — | Mark the instance editable in the parent scene ([editable path=...]) | — |
 | `--unique-name` | — | Set unique_name_in_owner on the instance root (%Name from owner scripts) | — |
-| `--properties` | `<value>` | JSON object of property name to value to set on the instance root (anchors, offsets, overrides) | — |
+| `--properties` | `<value>` | JSON object of property name to value to set on the instance root (anchors, offsets, overrides). Numbers and booleans are JSON; a string is Variant text and carries its own quotes | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -1418,7 +1418,7 @@ godot-cli resource new [options]
 | `--type` | `<value>` | Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D) (required) | — |
 | `--property` | `<value>` | Property to set on the resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--no-uid` | — | Do not stamp a uid="uid://..." on the header | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
@@ -1466,7 +1466,7 @@ godot-cli resource sub add [options] <file>
 | `--type` | `<value>` | Godot resource class (e.g. StyleBoxFlat) (required) | — |
 | `--property` | `<value>` | Property to set on the new sub-resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
@@ -2054,7 +2054,7 @@ godot-cli project import [options]
 
 Run the game for a few frames and capture the last frame and the log
 
-Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range so movement and buttons can be exercised; the frame then shows the result. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
 
 ```
 godot-cli project run [options]
@@ -2069,12 +2069,13 @@ godot-cli project run [options]
 | `--scene` | `<value>` | Scene to run (res:// or project-relative); the main scene when omitted | — |
 | `--frames` | `<n>` | Frames to run before quitting; 60 is one second, 5 is enough for a static screen | `60` |
 | `--resolution` | `<value>` | Window size as WIDTHxHEIGHT; default is the project's display/window/size, else 640x360 | — |
-| `--capture-dir` | `<path>` | Folder under the project for the frame and log; created with a .gdignore | `capture` |
+| `--capture-dir` | `<path>` | Folder under the project for the frame and log; the default is under .godot/, which Godot never imports | `.godot/godot-cli` |
 | `--no-import` | — | Skip the headless import pass that assigns UIDs to new files | — |
 | `--keep-frames` | — | Keep every frame and the .wav; the default keeps only the last frame | — |
 | `--headless` | — | No window and no frames, only the log; for machines without a display | — |
 | `--user-arg` | `<value>` | Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable | — |
-| `--press` | `<value>` | Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Runs through a generated SceneTree script so the scene loads the same way | — |
+| `--press` | `<value>` | Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it | — |
+| `--click` | `<value>` | Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this | — |
 
 ### `godot-cli project show`
 

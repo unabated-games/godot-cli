@@ -11,6 +11,30 @@ pub const Error = error{
 };
 
 /// Best-effort UID for an `ext_resource` path. Returns null when unknown.
+/// The uid Godot itself recorded for a path: a scene or resource header, a
+/// `.uid` sidecar, or a `.import` file. Null when none exists, with no guess.
+pub fn resolveRecordedExtResourceUid(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    res_path: []const u8,
+) Error!?[]const u8 {
+    if (std.mem.endsWith(u8, res_path, ".tscn") or std.mem.endsWith(u8, res_path, ".tres")) {
+        return scene_instance.readSceneUidFromResPath(allocator, io, project_root, res_path) catch return null;
+    }
+    const fs_path = try project_config.resPathToFilesystem(allocator, project_root, res_path) orelse return null;
+    defer allocator.free(fs_path);
+    // Godot 4.4+ keeps a script's UID in a `.uid` sidecar, assigned once and
+    // never recomputed, so it outranks anything derived from the file.
+    if (readSidecarUid(allocator, io, fs_path)) |uid| return uid;
+    if (readImportFileUid(allocator, io, fs_path)) |uid| return uid;
+    return null;
+}
+
+pub fn readSceneUidFromResPath(allocator: std.mem.Allocator, io: std.Io, project_root: []const u8, res_path: []const u8) Error!?[]const u8 {
+    return scene_instance.readSceneUidFromResPath(allocator, io, project_root, res_path) catch return null;
+}
+
 pub fn resolveExtResourceUid(
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -19,17 +43,11 @@ pub fn resolveExtResourceUid(
 ) Error!?[]const u8 {
     const root = project_root orelse return null;
 
-    if (std.mem.endsWith(u8, res_path, ".tscn") or std.mem.endsWith(u8, res_path, ".tres")) {
-        return scene_instance.readSceneUidFromResPath(allocator, io, root, res_path) catch return null;
-    }
+    if (try resolveRecordedExtResourceUid(allocator, io, root, res_path)) |uid| return uid;
+    if (std.mem.endsWith(u8, res_path, ".tscn") or std.mem.endsWith(u8, res_path, ".tres")) return null;
 
     const fs_path = try project_config.resPathToFilesystem(allocator, root, res_path) orelse return null;
     defer allocator.free(fs_path);
-
-    // Godot 4.4+ keeps a script's UID in a `.uid` sidecar, assigned once and
-    // never recomputed, so it outranks anything derived from the file.
-    if (readSidecarUid(allocator, io, fs_path)) |uid| return uid;
-    if (readImportFileUid(allocator, io, fs_path)) |uid| return uid;
 
     const cache_path = uid_cache.defaultCachePath(allocator, root) catch return null;
     defer allocator.free(cache_path);
@@ -75,13 +93,21 @@ pub fn refreshExtResourceUids(
     var changed: usize = 0;
     for (doc.sections.items) |*section| {
         if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
-        const declared = section.header.getString("uid") orelse continue;
         const res_path = section.header.getString("path") orelse continue;
-        const current = (try resolveExtResourceUid(allocator, io, project_root, res_path)) orelse continue;
-        defer allocator.free(current);
-        if (std.mem.eql(u8, declared, current)) continue;
-        section.header.setStringField(allocator, "uid", current) catch return error.OutOfMemory;
-        changed += 1;
+        if (section.header.getString("uid")) |declared| {
+            const current = (try resolveExtResourceUid(allocator, io, project_root, res_path)) orelse continue;
+            defer allocator.free(current);
+            if (std.mem.eql(u8, declared, current)) continue;
+            section.header.setStringField(allocator, "uid", current) catch return error.OutOfMemory;
+            changed += 1;
+        } else {
+            // The editor writes a uid on every reference whose target has one.
+            // Only a recorded uid is added; a derived guess is not.
+            const known = (try resolveRecordedExtResourceUid(allocator, io, project_root, res_path)) orelse continue;
+            defer allocator.free(known);
+            section.header.setStringField(allocator, "uid", known) catch return error.OutOfMemory;
+            changed += 1;
+        }
     }
     return changed;
 }

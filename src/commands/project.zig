@@ -121,6 +121,16 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         try presses.append(cli.allocator, press);
     }
 
+    const click_texts = try inv.getOptionAll(cli.allocator, "click");
+    var clicks: std.ArrayList(godot_run.Click) = .empty;
+    for (click_texts) |text| {
+        const click = godot_run.parseClick(text) orelse {
+            error_details.record(.{ .field = "click", .value = text, .hint = "write <node path>@<frame>, e.g. /root/Main/HUD/PauseButton@20" });
+            return error.InvalidPropertyValue;
+        };
+        try clicks.append(cli.allocator, click);
+    }
+
     // The project's own window size is the right default; a fixed one would
     // silently run a 1280x720 project at 640x360.
     var main_scene: ?[]const u8 = null;
@@ -144,12 +154,13 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .scene = inv.getOption("scene"),
         .frames = frames,
         .resolution = inv.getOption("resolution") orelse project_resolution orelse "640x360",
-        .capture_dir = inv.getOption("capture-dir") orelse "capture",
+        .capture_dir = inv.getOption("capture-dir") orelse godot_run.default_capture_dir,
         .import = !inv.flag("no-import"),
         .keep_frames = inv.flag("keep-frames"),
         .headless = inv.flag("headless"),
         .user_args = user_args,
         .presses = presses.items,
+        .clicks = clicks.items,
         .main_scene = main_scene,
     });
 
@@ -160,6 +171,7 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "frames_written", .{ .integer = @intCast(run.frames_written) });
     if (run.frame) |frame| try data.put(cli.allocator, "frame", .{ .string = frame });
     try data.put(cli.allocator, "presses", .{ .integer = @intCast(presses.items.len) });
+    try data.put(cli.allocator, "clicks", .{ .integer = @intCast(clicks.items.len) });
     if (run.driver_script) |script| try data.put(cli.allocator, "driver_script", .{ .string = script });
     if (run.log_tail.len != 0) try data.put(cli.allocator, "log_tail", .{ .string = run.log_tail });
 
@@ -1105,12 +1117,13 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "scene", .kind = .string, .description = "Scene to run (res:// or project-relative); the main scene when omitted" },
     .{ .long = "frames", .kind = .integer, .description = "Frames to run before quitting; 60 is one second, 5 is enough for a static screen", .default_value = "60" },
     .{ .long = "resolution", .kind = .string, .description = "Window size as WIDTHxHEIGHT; default is the project's display/window/size, else 640x360" },
-    .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; created with a .gdignore", .default_value = "capture" },
+    .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; the default is under .godot/, which Godot never imports", .default_value = ".godot/godot-cli" },
     .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },
     .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
     .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display" },
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
-    .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Runs through a generated SceneTree script so the scene loads the same way", .repeatable = true },
+    .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
+    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this", .repeatable = true },
 };
 
 pub fn commands() spec.CommandSpec {
@@ -1183,7 +1196,7 @@ pub fn commands() spec.CommandSpec {
                 .name = "run",
                 .summary = "Run the game for a few frames and capture the last frame and the log",
                 .description =
-                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range so movement and buttons can be exercised; the frame then shows the result. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
                 ,
                 .options = &run_options,
                 .handler = runHandler,

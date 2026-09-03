@@ -189,6 +189,24 @@ fn checkExtResourceStaleUid(
 
     const declared = resource_uid.textToId(uid_text);
 
+    // A scene or resource carries its uid in its own header; that is the
+    // value to compare, never a hash of the file. `scene new` stamps a random
+    // one, as the editor does, so a hash would always disagree.
+    if (std.mem.endsWith(u8, res_path, ".tscn") or std.mem.endsWith(u8, res_path, ".tres")) {
+        const header_uid = (resource_uid_lookup.readSceneUidFromResPath(allocator, io, project_root, res_path) catch null) orelse return;
+        defer allocator.free(header_uid);
+        if (declared != resource_uid.textToId(header_uid)) {
+            try report.add(
+                allocator,
+                .warning,
+                "stale_uid_for_path",
+                "ext_resource uid does not match the uid in the referenced file's header; scene normalize repairs it",
+                line,
+            );
+        }
+        return;
+    }
+
     // A `.uid` sidecar is the UID Godot assigned and will keep; the file's
     // bytes changing afterwards does not change it. Only without a sidecar is
     // the derived value the right comparison.

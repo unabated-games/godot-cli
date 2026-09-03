@@ -294,7 +294,9 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value
+as \-\-property/\-\-value. Numbers and booleans are JSON; a
+string is Variant text and carries its own quotes ("text":
+"\e"Score\e"")
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -445,7 +447,9 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value
+as \-\-property/\-\-value. Numbers and booleans are JSON; a
+string is Variant text and carries its own quotes ("text":
+"\e"Score\e"")
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -760,7 +764,8 @@ scripts)
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value to set on the instance
-root (anchors, offsets, overrides)
+root (anchors, offsets, overrides). Numbers and booleans are
+JSON; a string is Variant text and carries its own quotes
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -1241,7 +1246,9 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value
+as \-\-property/\-\-value. Numbers and booleans are JSON; a
+string is Variant text and carries its own quotes ("text":
+"\e"Score\e"")
 .TP
 \fB\-\-raw\-value\fR
 Write property values verbatim
@@ -1293,7 +1300,9 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value
+as \-\-property/\-\-value. Numbers and booleans are JSON; a
+string is Variant text and carries its own quotes ("text":
+"\e"Score\e"")
 .TP
 \fB\-\-raw\-value\fR
 Write property values verbatim
@@ -1824,11 +1833,11 @@ the log and its last 40 lines, and every ERROR or SCRIPT ERROR
 line with its backtrace; it fails (exit 1) when Godot did not
 exit cleanly or the log holds an error, so the change is not
 done until this passes. \-\-press move_right@10..40 holds an
-input action over a frame range so movement and buttons can
-be exercised; the frame then shows the result. Frames other
-than the last, and the .wav Godot writes, are deleted unless
-\-\-keep\-frames. Over MCP the frame is also returned as an
-image.
+input action over a frame range and \-\-click /root/Main/HUD/PauseButton@20
+clicks a node, so movement and buttons can be exercised; the
+frame then shows the result. Frames other than the last, and
+the .wav Godot writes, are deleted unless \-\-keep\-frames.
+Over MCP the frame is also returned as an image.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)
@@ -1850,8 +1859,8 @@ Window size as WIDTHxHEIGHT; default is the project's display/window/size,
 else 640x360
 .TP
 \fB\-\-capture\-dir\fR \fIpath\fR
-Folder under the project for the frame and log; created with
-a .gdignore (default: capture)
+Folder under the project for the frame and log; the default
+is under .godot/, which Godot never imports (default: \&.godot/godot\-cli)
 .TP
 \fB\-\-no\-import\fR
 Skip the headless import pass that assigns UIDs to new files
@@ -1870,8 +1879,13 @@ repeatable
 .TP
 \fB\-\-press\fR \fIvalue\fR
 Hold an input action over physics frames, e.g. move_right@10..40
-or ui_accept@5; repeatable. Runs through a generated SceneTree
-script so the scene loads the same way
+or ui_accept@5; repeatable. Sent as a real InputEventAction
+and as polled action state, so a focused Control and Input.get_vector
+both see it
+.TP
+\fB\-\-click\fR \fIvalue\fR
+Left\-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20;
+repeatable. A Button's pressed signal fires from this
 .SS godot\-cli project show
 Summarize key project.godot configuration
 .TP

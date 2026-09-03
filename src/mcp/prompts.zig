@@ -32,8 +32,9 @@ pub const rules =
     \\6. Move files with project_move, never mv; a plain move leaves every res://
     \\   reference stale.
     \\7. Validate after every edit with scene_validate, then project_run and read
-    \\   data.frame (the last PNG) and data.errors before reporting done. It fails
-    \\   when the log holds an ERROR or SCRIPT ERROR line.
+    \\   the returned image, data.log_tail, and data.errors before reporting done.
+    \\   It fails when the log holds an ERROR or SCRIPT ERROR line. Prove behaviour
+    \\   with press (move_right@5..40) and click (/root/Main/HUD/PauseButton@20).
     \\
     \\Workflow: scene_node_list, catalog_list, edit with one tool call per change
     \\(or scene_apply with an intent for several), scene_validate, then project_run

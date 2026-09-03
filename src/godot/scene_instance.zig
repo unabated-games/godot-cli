@@ -125,7 +125,8 @@ pub fn readSceneUidFromResPath(
     defer parsed.deinit(allocator);
     if (parsed.sections.items.len == 0) return null;
     const header = &parsed.sections.items[0].header;
-    if (!std.mem.eql(u8, header.name, "gd_scene")) return null;
+    // Scenes and resources both carry their uid in the first header.
+    if (!std.mem.eql(u8, header.name, "gd_scene") and !std.mem.eql(u8, header.name, "gd_resource")) return null;
     if (header.getString("uid")) |uid_text| return try allocator.dupe(u8, uid_text);
     return null;
 }

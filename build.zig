@@ -742,10 +742,13 @@ pub fn build(b: *std.Build) void {
         \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/project --godot "$GODOT" --scene sample.tscn --frames 3 --headless --json || true) &&
         \\echo "$out" | grep -q '"import_exit":0' && echo "$out" | grep -q '"error_count":' && echo "$out" | grep -q '"log_tail":' &&
         \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/project --godot "$GODOT" --scene sample.tscn --frames 4 --headless --no-import --press ui_accept@1..2 --json || true) &&
-        \\echo "$out" | grep -q '"presses":1' && test -f test_fixtures/project/capture/godot_cli_run.gd &&
-        \\test -f test_fixtures/project/capture/.gdignore && test -f test_fixtures/project/capture/godot.log &&
+        \\echo "$out" | grep -q '"presses":1' && test -f test_fixtures/project/.godot/godot-cli/godot_cli_run.gd &&
+        \\grep -q 'InputEventAction' test_fixtures/project/.godot/godot-cli/godot_cli_run.gd &&
+        \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/project --godot "$GODOT" --scene sample.tscn --frames 4 --headless --no-import --click /root/Root@2 --json || true) &&
+        \\echo "$out" | grep -q '"clicks":1' &&
+        \\test -f test_fixtures/project/.godot/godot-cli/godot.log &&
         \\./zig-out/bin/godot-cli project import --project-root test_fixtures/project --godot "$GODOT" --json | grep -q '"ok":true' &&
-        \\rm -rf test_fixtures/project/capture
+        \\rm -rf test_fixtures/project/.godot/godot-cli
     });
     run_smoke.setCwd(b.path("."));
     run_smoke.setEnvironmentVariable("GODOT", godot_bin);

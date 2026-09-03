@@ -16,8 +16,9 @@ pub const Options = struct {
     scene: ?[]const u8 = null,
     frames: u32 = 60,
     resolution: []const u8 = "640x360",
-    /// Relative to the project root. Created with a `.gdignore` if missing.
-    capture_dir: []const u8 = "capture",
+    /// Relative to the project root. The default sits under `.godot/`, which
+    /// Godot never imports and projects already ignore.
+    capture_dir: []const u8 = default_capture_dir,
     import: bool = true,
     /// Keep every frame; the default keeps only the last and drops the .wav.
     keep_frames: bool = false,
@@ -33,7 +34,24 @@ pub const Options = struct {
     /// The main scene from project.godot, needed by the press script when
     /// `scene` is null. Resolved by the caller.
     main_scene: ?[]const u8 = null,
+    /// Mouse clicks on a node, by viewport path, on a physics frame.
+    clicks: []const Click = &.{},
 };
+
+pub const Click = struct {
+    node_path: []const u8,
+    frame: u32,
+};
+
+/// `/root/Main/HUD/PauseButton@20`: left-click the centre of that node on
+/// frame 20 (press) and release on the next.
+pub fn parseClick(text: []const u8) ?Click {
+    const at = std.mem.lastIndexOfScalar(u8, text, '@') orelse return null;
+    if (at == 0) return null;
+    const frame = std.fmt.parseInt(u32, text[at + 1 ..], 10) catch return null;
+    if (frame == 0) return null;
+    return .{ .node_path = text[0..at], .frame = frame };
+}
 
 pub const Press = struct {
     action: []const u8,
@@ -86,6 +104,7 @@ pub const Error = error{
 };
 
 const macos_default = "/Applications/Godot.app/Contents/MacOS/Godot";
+pub const default_capture_dir = ".godot/godot-cli";
 
 /// The binary: an explicit path, then `$GODOT`, then `godot` on `$PATH`,
 /// then the macOS app bundle.
@@ -176,7 +195,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     var argv: std.ArrayList([]const u8) = .empty;
     argv.appendSlice(allocator, &.{ godot, "--path", "." }) catch return error.OutOfMemory;
     if (options.headless) argv.append(allocator, "--headless") catch return error.OutOfMemory;
-    if (options.presses.len != 0) {
+    if (options.presses.len != 0 or options.clicks.len != 0) {
         const script_relative = try writeDriverScript(allocator, io, options);
         result.driver_script = std.fs.path.join(allocator, &.{ options.project_root, script_relative }) catch return error.OutOfMemory;
         argv.appendSlice(allocator, &.{ "--script", script_relative }) catch return error.OutOfMemory;
@@ -225,6 +244,14 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
     for (options.presses, 0..) |press, i| {
         w.print("{s}[\"{s}\", {d}, {d}]", .{ if (i == 0) "" else ", ", press.action, press.start, press.end }) catch return error.OutOfMemory;
     }
+    w.writeAll("]\nconst CLICKS := [") catch return error.OutOfMemory;
+    for (options.clicks, 0..) |click, i| {
+        w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", click.node_path, click.frame }) catch return error.OutOfMemory;
+    }
+    // Presses go through parse_input_event as well as the polled action
+    // state, so Controls (a focused Button on ui_accept) and scripts polling
+    // Input.get_vector both see them. Clicks are a mouse press at the node's
+    // centre, released on the next frame, which is what a Button needs.
     w.writeAll(
         \\]
         \\var _frame := 0
@@ -238,15 +265,57 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\    root.add_child(packed.instantiate())
         \\    physics_frame.connect(_tick)
         \\
+        \\func _action(name: String, pressed: bool) -> void:
+        \\    if not InputMap.has_action(name):
+        \\        push_error("godot-cli: no input action named " + name)
+        \\        return
+        \\    var event := InputEventAction.new()
+        \\    event.action = name
+        \\    event.pressed = pressed
+        \\    event.strength = 1.0 if pressed else 0.0
+        \\    Input.parse_input_event(event)
+        \\    if pressed:
+        \\        Input.action_press(name)
+        \\    else:
+        \\        Input.action_release(name)
+        \\
+        \\func _click(path: String, pressed: bool) -> void:
+        \\    var node := root.get_node_or_null(NodePath(path))
+        \\    if node == null:
+        \\        push_error("godot-cli: no node at " + path + " to click")
+        \\        return
+        \\    var at := Vector2.ZERO
+        \\    if node is Control:
+        \\        at = (node as Control).get_global_rect().get_center()
+        \\    elif node is Node2D:
+        \\        at = (node as Node2D).get_global_transform_with_canvas().origin
+        \\    else:
+        \\        push_error("godot-cli: " + path + " is not a Control or Node2D")
+        \\        return
+        \\    var event := InputEventMouseButton.new()
+        \\    event.button_index = MOUSE_BUTTON_LEFT
+        \\    event.pressed = pressed
+        \\    event.position = at
+        \\    event.global_position = at
+        \\    if pressed:
+        \\        var motion := InputEventMouseMotion.new()
+        \\        motion.position = at
+        \\        motion.global_position = at
+        \\        Input.parse_input_event(motion)
+        \\    Input.parse_input_event(event)
+        \\
         \\func _tick() -> void:
         \\    _frame += 1
         \\    for press in PRESSES:
         \\        if _frame == press[1]:
-        \\            if not InputMap.has_action(press[0]):
-        \\                push_error("godot-cli: no input action named " + press[0])
-        \\            Input.action_press(press[0])
+        \\            _action(press[0], true)
         \\        if _frame == press[2] + 1:
-        \\            Input.action_release(press[0])
+        \\            _action(press[0], false)
+        \\    for click in CLICKS:
+        \\        if _frame == click[1]:
+        \\            _click(click[0], true)
+        \\        if _frame == click[1] + 1:
+        \\            _click(click[0], false)
         \\
     ) catch return error.OutOfMemory;
 
@@ -381,6 +450,14 @@ test "press syntax" {
     try std.testing.expect(parsePress("nope") == null);
     try std.testing.expect(parsePress("x@0") == null);
     try std.testing.expect(parsePress("x@9..3") == null);
+}
+
+test "click syntax" {
+    const click = parseClick("/root/Main/HUD/PauseButton@20").?;
+    try std.testing.expectEqualStrings("/root/Main/HUD/PauseButton", click.node_path);
+    try std.testing.expectEqual(@as(u32, 20), click.frame);
+    try std.testing.expect(parseClick("@3") == null);
+    try std.testing.expect(parseClick("/root/X") == null);
 }
 
 test "tail keeps the last lines" {
