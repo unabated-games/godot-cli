@@ -302,17 +302,26 @@ fn nodeSectionToAddOp(
     };
 
     var obj: std.json.ObjectMap = .{};
-    try obj.put(allocator, "op", .{ .string = "node_add" });
+    // An instanced node is re-created as an instance of its scene; a plain
+    // node_add with an empty type could not bring it back.
+    if (node.instance_path) |scene_path| {
+        try obj.put(allocator, "op", .{ .string = "instance_add" });
+        try obj.put(allocator, "scene", .{ .string = try allocator.dupe(u8, scene_path) });
+    } else {
+        try obj.put(allocator, "op", .{ .string = "node_add" });
+        try obj.put(allocator, "type", .{ .string = try allocator.dupe(u8, node_type) });
+    }
     try obj.put(allocator, "parent", .{ .string = try allocator.dupe(u8, parent_path) });
     try obj.put(allocator, "name", .{ .string = try allocator.dupe(u8, name) });
-    try obj.put(allocator, "type", .{ .string = try allocator.dupe(u8, node_type) });
 
     if (section.properties.items.len > 0) {
         var props: std.json.ObjectMap = .{};
         for (section.properties.items) |prop| {
             const prop_name = propertyName(prop.raw) orelse continue;
             const prop_value = propertyValue(prop.raw) orelse continue;
-            try props.put(allocator, prop_name, .{ .string = try allocator.dupe(u8, prop_value) });
+            // The key is copied too: the section's text is freed by the
+            // removal this op undoes, and a borrowed key came back as garbage.
+            try props.put(allocator, try allocator.dupe(u8, prop_name), .{ .string = try allocator.dupe(u8, prop_value) });
         }
         try obj.put(allocator, "properties", .{ .object = props });
     }

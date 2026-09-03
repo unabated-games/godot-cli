@@ -112,7 +112,7 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
             var items: std.json.ObjectMap = .{};
             try items.put(allocator, "type", .{ .string = "string" });
             try prop.put(allocator, "items", .{ .object = items });
-        } else if (acceptsJson(opt.long)) {
+        } else if (acceptsJson(opt)) {
             // The CLI takes the document as text; an agent may send the object.
             var types: std.json.Array = .init(allocator);
             try types.append(.{ .string = "object" });
@@ -159,8 +159,9 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
 
 /// Options that carry a JSON document: `--intent-json`, `--patch-json`,
 /// `--json-body`, `--properties`. An object argument is serialised for them.
-pub fn acceptsJson(long: []const u8) bool {
-    return std.mem.endsWith(u8, long, "-json") or std.mem.eql(u8, long, "json-body") or std.mem.eql(u8, long, "properties");
+pub fn acceptsJson(opt: spec.OptionSpec) bool {
+    if (opt.kind == .flag) return false;
+    return std.mem.endsWith(u8, opt.long, "-json") or std.mem.eql(u8, opt.long, "json-body") or std.mem.eql(u8, opt.long, "properties");
 }
 
 fn describe(allocator: std.mem.Allocator, text: []const u8, kind: spec.ValueKind, pinned: bool) ![]const u8 {
@@ -229,7 +230,7 @@ pub fn buildArgv(
                         try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}={s}", .{ opt.long, text }));
                     }
                 } else {
-                    const text = if (acceptsJson(opt.long) and (value == .object or value == .array))
+                    const text = if (acceptsJson(opt) and (value == .object or value == .array))
                         try jsonText(allocator, value)
                     else
                         scalarText(allocator, value) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a string", .{opt.long}) };

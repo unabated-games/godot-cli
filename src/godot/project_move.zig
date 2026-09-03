@@ -86,16 +86,17 @@ pub fn moveResource(
     if (!dry_run) {
         if (std.fs.path.dirname(to_fs)) |parent| std.Io.Dir.cwd().createDirPath(io, parent) catch {};
         std.Io.Dir.cwd().rename(from_fs, std.Io.Dir.cwd(), to_fs, io) catch return error.Io;
-        // The UID sidecar and import metadata belong to the file and go with it.
-        for ([_][]const u8{ ".uid", ".import" }) |suffix| {
-            const old_side = try std.fmt.allocPrint(allocator, "{s}{s}", .{ from_fs, suffix });
-            defer allocator.free(old_side);
-            const new_side = try std.fmt.allocPrint(allocator, "{s}{s}", .{ to_fs, suffix });
-            defer allocator.free(new_side);
-            std.Io.Dir.cwd().access(io, old_side, .{}) catch continue;
-            std.Io.Dir.cwd().rename(old_side, std.Io.Dir.cwd(), new_side, io) catch continue;
-            sidecars_moved += 1;
-        }
+    }
+    // The UID sidecar and import metadata belong to the file and go with it.
+    // Counted on a dry run too, so the preview matches the move.
+    for ([_][]const u8{ ".uid", ".import" }) |suffix| {
+        const old_side = try std.fmt.allocPrint(allocator, "{s}{s}", .{ from_fs, suffix });
+        defer allocator.free(old_side);
+        const new_side = try std.fmt.allocPrint(allocator, "{s}{s}", .{ to_fs, suffix });
+        defer allocator.free(new_side);
+        std.Io.Dir.cwd().access(io, old_side, .{}) catch continue;
+        if (!dry_run) std.Io.Dir.cwd().rename(old_side, std.Io.Dir.cwd(), new_side, io) catch continue;
+        sidecars_moved += 1;
     }
 
     // Every scene and resource that referenced the old path.

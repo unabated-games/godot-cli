@@ -3,6 +3,8 @@ const spec = @import("../cli/spec.zig");
 const pos = @import("positionals.zig");
 const app_mod = @import("../cli/app.zig");
 const resource_uid = @import("../godot/resource_uid.zig");
+const scene_extract = @import("../godot/scene_extract.zig");
+const catalog_add = @import("../godot/catalog_add.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
 const text_format = @import("../godot/text_format/root.zig");
 const id_validate = @import("../godot/id_validate.zig");
@@ -612,6 +614,9 @@ fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
         }
     }
     try data.put(cli.allocator, "connections", .{ .array = connection_rows });
+    // "What is on this node" is the first question about an existing scene.
+    const node_section = doc.sections.items[node.section_index];
+    try data.put(cli.allocator, "properties", .{ .array = try variant.property_line.buildPropertiesJson(cli.allocator, node_section.properties.items) });
 
     const summary = try std.fmt.allocPrint(cli.allocator, "{s} ({s})", .{ node.name, node.path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
@@ -1496,6 +1501,82 @@ fn sceneRecipesHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     return .{ .data = .{ .object = data } };
 }
 
+fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const node_path = inv.positionals[1];
+    const output_path = inv.getOption("output") orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    defer doc.deinit(cli.allocator);
+
+    var extracted = scene_extract.extractSubtree(cli.allocator, &doc, node_path) catch |err| switch (err) {
+        error.NodeNotFound => {
+            error_details.record(.{ .field = "node", .value = node_path, .hint = "no node at this viewport path; scene node list shows them" });
+            return error.NodeNotFound;
+        },
+        error.CannotExtractRoot => {
+            error_details.record(.{ .field = "node", .value = node_path, .hint = "the scene root cannot be extracted; pick a child node" });
+            return error.InvalidPropertyValue;
+        },
+        else => return err,
+    };
+    defer extracted.new_doc.deinit(cli.allocator);
+    const uid_text = try stampHeaderUid(cli, inv, &extracted.new_doc);
+
+    // --output is a project-relative path: it names the res:// path of the new
+    // scene, and the file goes under the project root when one is given.
+    const output_rel = std.mem.trimStart(u8, if (std.mem.startsWith(u8, output_path, "res://")) output_path["res://".len..] else output_path, "./");
+    const scene_res_path = try std.fmt.allocPrint(cli.allocator, "res://{s}", .{output_rel});
+    const output_fs = if (projectRootFrom(inv)) |root| try std.fs.path.join(cli.allocator, &.{ root, output_rel }) else output_rel;
+    if (std.fs.path.dirname(output_fs)) |parent| std.Io.Dir.cwd().createDirPath(cli.io, parent) catch {};
+
+    const seed_path = try saveSeedPath(cli, inv, input_path);
+    defer cli.allocator.free(seed_path);
+    var added = try scene_instance.addPackedSceneInstance(cli.allocator, &doc, seed_path, extracted.parent_path, extracted.name, scene_res_path, uid_text, false);
+    defer added.deinit(cli.allocator);
+
+    var messages: std.ArrayList([]const u8) = .empty;
+    for (extracted.dropped_connections) |dropped| {
+        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "connection {s} crossed the boundary and was dropped; connect the instance from the parent scene with scene connection add, or add a signal to the new scene's root", .{dropped}));
+    }
+    try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{scene_res_path}));
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_fs, &extracted.new_doc);
+        try writeWithPrepare(cli, inv, input_path, &doc);
+        if (inv.getOption("catalog-id")) |id| {
+            const root = projectRootFrom(inv) orelse return error.Usage;
+            var manifest = try catalog_add.addManifest(cli.allocator, cli.io, root, .{
+                .scene = scene_res_path,
+                .id = id,
+                .summary = inv.getOption("summary"),
+                .update = true,
+            });
+            manifest.deinit(cli.allocator);
+        }
+    }
+
+    var dropped_json: std.json.Array = .init(cli.allocator);
+    for (extracted.dropped_connections) |dropped| try dropped_json.append(.{ .string = dropped });
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, input_path) });
+    try data.put(cli.allocator, "output", .{ .string = try cli.allocator.dupe(u8, output_fs) });
+    try data.put(cli.allocator, "scene", .{ .string = scene_res_path });
+    if (uid_text) |uid| try data.put(cli.allocator, "uid", .{ .string = uid });
+    try data.put(cli.allocator, "instance_path", .{ .string = try cli.allocator.dupe(u8, added.path) });
+    try data.put(cli.allocator, "moved_nodes", .{ .integer = @intCast(extracted.moved_nodes) });
+    try data.put(cli.allocator, "moved_ext_resources", .{ .integer = @intCast(extracted.moved_ext) });
+    try data.put(cli.allocator, "moved_sub_resources", .{ .integer = @intCast(extracted.moved_sub) });
+    try data.put(cli.allocator, "moved_connections", .{ .integer = @intCast(extracted.moved_connections) });
+    try data.put(cli.allocator, "dropped_connections", .{ .array = dropped_json });
+    if (inv.getOption("catalog-id")) |id| try data.put(cli.allocator, "catalog_id", .{ .string = id });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "moved {d} node(s) from {s} into {s} and instanced it at {s}", .{ extracted.moved_nodes, node_path, output_path, added.path }) });
+    return .{ .data = .{ .object = data }, .messages = try messages.toOwnedSlice(cli.allocator) };
+}
+
 fn scenePlanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
     const source = try readPatchOrIntent(cli, inv);
@@ -2033,6 +2114,12 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "snapshot", .kind = .path, .description = "Alias for --from" },
         .{ .long = "dry-run", .kind = .flag, .description = "Report restore without writing" },
     };
+    const extract_options = [_]spec.OptionSpec{
+        .{ .long = "output", .kind = .path, .description = "Path of the new scene, relative to the project root (becomes res://<output>)", .required = true },
+        .{ .long = "catalog-id", .kind = .string, .description = "Also register the new scene in the project catalog under this id (needs the project root)" },
+        .{ .long = "summary", .kind = .string, .description = "Catalog summary for the new entry" },
+        .{ .long = "no-uid", .kind = .flag, .description = "Do not stamp a uid=\"uid://...\" on the new scene's header" },
+    } ++ withoutOption(&save_options, "output");
     const instance_add_options = [_]spec.OptionSpec{
         .{ .long = "parent", .kind = .string, .description = "Viewport parent path (e.g. /root/Main)", .required = true },
         .{ .long = "name", .kind = .string, .description = "Node name for the new instance", .required = true },
@@ -2235,6 +2322,14 @@ pub fn sceneCommands() spec.CommandSpec {
                         .positionals = &pos.scene_file,
                     },
                 },
+            },
+            .{
+                .name = "extract",
+                .summary = "Move a subtree into its own scene and instance it back in place",
+                .description = "The editor's Save Branch as Scene. The node and its descendants move to --output with their properties and unique ids; resources they use are copied across and pruned from the source when nothing else needs them; connections and editable-children sections inside the subtree move with paths rewritten; a connection that crosses the boundary is dropped and listed in messages, since the parent scene must connect to the instance instead. The source gets an instance of the new scene at the same place. With --catalog-id the new scene is registered as a catalog entry.",
+                .options = extract_options,
+                .positionals = &pos.file_and_node,
+                .handler = sceneExtractHandler,
             },
             .{
                 .name = "instance",

@@ -193,6 +193,16 @@ pub fn build(b: *std.Build) void {
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"camera_2d","parent":"/root/Main","name":"Cam"},{"recipe":"assign_ext","path":"/root/Main","property":"script"}]}' --json | grep -q '"step":1' &&
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"assign_ext","path":"/root/Main","property":"script","res_path":"res://scripts/main.gd"}]}' --json | grep -q '\\"ext_type\\": \\"Script\\"' &&
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"camera_2d","parent":"/root/Main","name":"Cam","position":"Vector2(320, 180)"}]}' --json | grep -q 'Vector2(320, 180)' &&
+        \\./zig-out/bin/godot-cli scene apply "$t/main.tscn" --intent-json '{"steps":[{"recipe":"add_node","parent":"/root/Main","name":"HUD","type":"CanvasLayer"},{"recipe":"add_node","parent":"/root/Main/HUD","name":"Score","type":"Label","properties":{"text":"\"0\"","offset_left":8.0}},{"recipe":"add_node","parent":"/root/Main/HUD","name":"Go","type":"Button"},{"recipe":"connect","from":"/root/Main/HUD/Go","signal":"pressed","to":"/root/Main/HUD","method":"_on_go"},{"recipe":"connect","from":"/root/Main/HUD/Go","signal":"pressed","to":"/root/Main","method":"_on_main_go"}]}' --project-root "$t" --json | grep -q '"ok":true' &&
+        \\out=$(./zig-out/bin/godot-cli scene extract "$t/main.tscn" /root/Main/HUD --output ui/hud.tscn --project-root "$t" --json) &&
+        \\echo "$out" | grep -q '"moved_nodes":3' && echo "$out" | grep -q '"moved_connections":1' && echo "$out" | grep -q 'crossed the boundary' &&
+        \\grep -q 'name="Score" type="Label" parent="."' "$t/ui/hud.tscn" && grep -q 'from="Go" to="."' "$t/ui/hud.tscn" && grep -q 'offset_left = 8.0' "$t/ui/hud.tscn" &&
+        \\grep -q 'name="HUD" parent="." instance=ExtResource' "$t/main.tscn" && ! grep -q 'name="Score"' "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene validate "$t/ui/hud.tscn" --project-root "$t" --json | grep -q '"ok":true' &&
+        \\./zig-out/bin/godot-cli scene validate "$t/main.tscn" --project-root "$t" --json | grep -q '"ok":true' &&
+        \\./zig-out/bin/godot-cli scene node get "$t/ui/hud.tscn" /root/HUD/Score --json | grep -q '"properties"' &&
+        \\out=$(./zig-out/bin/godot-cli scene apply "$t/main.tscn" --patch-json '{"ops":[{"op":"node_remove","path":"/root/Main/HUD","recursive":true}]}' --write-undo-patch "$t/undo.json" --project-root "$t" --json) &&
+        \\echo "$out" | grep -q '"ok":true' && grep -q '"instance_add"' "$t/undo.json" && grep -q '"scene": "res://ui/hud.tscn"' "$t/undo.json" &&
         \\! ./zig-out/bin/godot-cli project new --project-root "$t/n" --name N --width abc --json >/dev/null 2>&1 &&
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"instance_catalog","parent":"/root/Root","name":"Btn","catalog_id":"ui/button","properties":{"visible":false}}]}' --project-root test_fixtures/project --json | grep -q 'visible' &&
         \\./zig-out/bin/godot-cli scene instance add "$t/main.tscn" --parent /root/Main --name Btn --scene res://main.tscn --properties '{"visible":false}' --project-root "$t" --json | grep -q '"ok":true' &&

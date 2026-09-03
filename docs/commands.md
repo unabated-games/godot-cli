@@ -63,6 +63,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli scene connection list`](#godot-cli-scene-connection-list) | List signal connections with from/to as viewport paths |
 | [`godot-cli scene connection add`](#godot-cli-scene-connection-add) | Connect a signal from one node to a method on another |
 | [`godot-cli scene connection remove`](#godot-cli-scene-connection-remove) | Remove a signal connection |
+| [`godot-cli scene extract`](#godot-cli-scene-extract) | Move a subtree into its own scene and instance it back in place |
 | [`godot-cli scene instance`](#godot-cli-scene-instance) | Add instanced PackedScene nodes |
 | [`godot-cli scene instance add`](#godot-cli-scene-instance-add) | Instance a PackedScene under a parent node |
 | [`godot-cli scene template`](#godot-cli-scene-template) | Built-in scene templates for scaffolding |
@@ -375,6 +376,7 @@ godot-cli scene [options]
 | [`inspect`](#godot-cli-scene-inspect) | Parse a .tscn file and report structure and ID issues |
 | [`node`](#godot-cli-scene-node) | List and query scene node tree |
 | [`connection`](#godot-cli-scene-connection) | Signal connections stored in the scene ([connection] sections) |
+| [`extract`](#godot-cli-scene-extract) | Move a subtree into its own scene and instance it back in place |
 | [`instance`](#godot-cli-scene-instance) | Add instanced PackedScene nodes |
 | [`template`](#godot-cli-scene-template) | Built-in scene templates for scaffolding |
 | [`recipes`](#godot-cli-scene-recipes) | List the intent recipes and the fields each takes |
@@ -917,6 +919,40 @@ godot-cli scene connection remove [options] <file>
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli scene extract`
+
+Move a subtree into its own scene and instance it back in place
+
+The editor's Save Branch as Scene. The node and its descendants move to --output with their properties and unique ids; resources they use are copied across and pruned from the source when nothing else needs them; connections and editable-children sections inside the subtree move with paths rewritten; a connection that crosses the boundary is dropped and listed in messages, since the parent scene must connect to the instance instead. The source gets an instance of the new scene at the same place. With --catalog-id the new scene is registered as a catalog entry.
+
+```
+godot-cli scene extract [options] <file> <node>
+```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<node>` | Node by viewport path, e.g. /root/Main/Player |
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--output` | `<path>` | Path of the new scene, relative to the project root (becomes res://&lt;output&gt;) (required) | — |
+| `--catalog-id` | `<value>` | Also register the new scene in the project catalog under this id (needs the project root) | — |
+| `--summary` | `<value>` | Catalog summary for the new entry | — |
+| `--no-uid` | — | Do not stamp a uid="uid://..." on the new scene's header | — |
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
@@ -2054,7 +2090,7 @@ godot-cli project import [options]
 
 Run the game for a few frames and capture the last frame and the log
 
-Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result, with the clicked node in its hover style since the cursor stays over it. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result, with the clicked node in its hover style since the cursor stays over it. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
 
 ```
 godot-cli project run [options]

@@ -15,6 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **`scene extract <scene> <node> --output <new.tscn>`**: the editor's Save Branch as Scene. The subtree moves with its properties, unique ids, the resources it uses, and the connections inside it, rewritten relative to the new root; the source gets an instance in its place; `--catalog-id` registers the new scene. Connections that cross the boundary are dropped and listed. Trial 17 rebuilt a HUD by hand from inspected JSON, transcribing 23 properties, because nothing did this.
+- `scene node get` returns the node's parsed properties; the trial had to inspect the whole file to learn what was on one node.
+
+### Fixed
+
+- **Undo patches for a recursive `node remove` held freed memory.** The property names in the recorded `node_add` ops pointed into the section text that the removal then freed, so the undo file held garbage keys, and a removed instance was recorded as a typeless node. The Debug guard caught it in trial 17. Keys are copied and instances are recorded as `instance_add` now.
+- `scene diff --properties` is a flag, but the MCP schema typed it as an object because its name matched the `properties` option elsewhere; flags are never JSON-typed now.
+- `project move --dry-run` reports the sidecars a real move would carry, and a real move says that `uid_cache.bin` is stale until the next import.
+- The basics doc says why a Control under a Node2D draws nothing, and `project run` says a passing run can still show a wrong layout.
+
 ## [0.11.0] — 2026-09-03
 
 ### Added

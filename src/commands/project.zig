@@ -903,6 +903,9 @@ fn moveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "settings_updated", .{ .integer = @intCast(result.settings_updated) });
     try data.put(cli.allocator, "changed_files", .{ .array = files });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    if (!inv.flag("dry-run")) {
+        try data.put(cli.allocator, "note", .{ .string = "Godot's uid_cache.bin still maps the old path until the next import; scene validate reports uid_path_mismatch until project import (or project run) has run" });
+    }
     const summary = try std.fmt.allocPrint(cli.allocator, "moved {s} to {s}; retargeted {d} reference(s) in {d} file(s), {d} manifest(s), {d} setting(s)", .{ result.from, result.to, result.references_retargeted, result.files_changed, result.manifests_updated, result.settings_updated });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1196,7 +1199,7 @@ pub fn commands() spec.CommandSpec {
                 .name = "run",
                 .summary = "Run the game for a few frames and capture the last frame and the log",
                 .description =
-                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result, with the clicked node in its hover style since the cursor stays over it. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result, with the clicked node in its hover style since the cursor stays over it. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
                 ,
                 .options = &run_options,
                 .handler = runHandler,

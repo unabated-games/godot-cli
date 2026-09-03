@@ -690,6 +690,37 @@
       }
     },
     {
+      "name": "scene_extract",
+      "argv": [
+        "scene",
+        "extract",
+        "<scene>",
+        "<node-path>",
+        "--output",
+        "<new.tscn>",
+        "--catalog-id",
+        "<id>",
+        "--project-root",
+        "<path>"
+      ],
+      "description": "Move a subtree into its own scene, instance it back in place, and optionally register it in the catalog.",
+      "json_request": {
+        "argv": [
+          "scene",
+          "extract",
+          "scenes/main.tscn",
+          "/root/Main/HUD",
+          "--output",
+          "ui/hud.tscn",
+          "--catalog-id",
+          "ui/hud",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
       "name": "scene_instance_add",
       "argv": [
         "scene",

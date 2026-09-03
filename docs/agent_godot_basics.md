@@ -16,6 +16,8 @@ Things Godot assumes that an agent often does not know:
 - After adding scripts or scenes from outside the editor, run `godot --headless --path . --import --quit` once so Godot assigns UIDs; then run the game and read the frame and the log (below).
 
 
+A screen or menu that is a `Control` must sit under a `CanvasLayer` (or another Control), never directly under a `Node2D`: a Control whose parent is a Node2D has no rect to anchor to, so full-rect anchors give it zero size and it draws nothing. `instance_catalog` and `instance_scene` steps for UI go under the HUD's CanvasLayer or one of their own.
+
 ## Seeing movement
 
 A `Camera2D` under the player follows it, so the player stays centred and the world slides. If nothing else is drawn, that looks like nothing happening. Give walls and floors something visible: the `static_body_2d` recipe takes `"color": "Color(0.3, 0.5, 0.8, 1)"` for a filled polygon the size of the collision box, or `"texture"` for a tiled sprite. Or put the camera under the root while testing; a root camera sits at the origin unless the recipe's `position` puts it where the player starts. Input actions bound with `physical: true` are the keyboard positions of W, A, S, D, not the arrow keys.

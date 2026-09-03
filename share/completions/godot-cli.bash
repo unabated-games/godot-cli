@@ -21,7 +21,7 @@ _godot_cli_children() {
             echo "import"
             ;;
         'scene')
-            echo "new refs ext sub inspect node connection instance template recipes plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
+            echo "new refs ext sub inspect node connection extract instance template recipes plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
             ;;
         'scene ext')
             echo "add remove"
@@ -141,6 +141,9 @@ _godot_cli_options() {
             ;;
         'scene connection remove')
             echo "--from --signal --to --method --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'scene extract')
+            echo "--output --catalog-id --summary --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene instance add')
             echo "--parent --name --scene --catalog-id --editable --unique-name --properties --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -384,6 +387,7 @@ _godot_cli_takes_args() {
         'scene connection list') return 0 ;;
         'scene connection add') return 0 ;;
         'scene connection remove') return 0 ;;
+        'scene extract') return 0 ;;
         'scene instance add') return 0 ;;
         'scene template list') return 0 ;;
         'scene template show') return 0 ;;

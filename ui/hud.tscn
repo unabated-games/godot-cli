@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://dhpq5hpb4c1n8"]
+
+[node name="HUD" type="CanvasLayer" unique_id=123760489]
+
+[node name="Score" type="Label" parent="." unique_id=2086014595]
+text = "0"
+offset_left = 8.0
+
+[node name="Go" type="Button" parent="." unique_id=699272676]
+
+[connection signal="pressed" from="Go" to="." method="_on_go"]

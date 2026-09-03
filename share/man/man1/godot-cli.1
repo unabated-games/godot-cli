@@ -731,6 +731,64 @@ properties
 .TP
 \fB\-\-normalize\-properties\fR
 Rewrite property values through Variant parse/format
+.SS godot\-cli scene extract
+Move a subtree into its own scene and instance it back in place
+.PP
+The editor's Save Branch as Scene. The node and its descendants
+move to \-\-output with their properties and unique ids; resources
+they use are copied across and pruned from the source when
+nothing else needs them; connections and editable\-children
+sections inside the subtree move with paths rewritten; a connection
+that crosses the boundary is dropped and listed in messages,
+since the parent scene must connect to the instance instead.
+The source gets an instance of the new scene at the same place.
+With \-\-catalog\-id the new scene is registered as a catalog
+entry.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fInode\fR
+Node by viewport path, e.g. /root/Main/Player
+.TP
+\fB\-\-output\fR \fIpath\fR
+Path of the new scene, relative to the project root (becomes
+res://<output>)
+.TP
+\fB\-\-catalog\-id\fR \fIvalue\fR
+Also register the new scene in the project catalog under this
+id (needs the project root)
+.TP
+\fB\-\-summary\fR \fIvalue\fR
+Catalog summary for the new entry
+.TP
+\fB\-\-no\-uid\fR
+Do not stamp a uid="uid://..." on the new scene's header
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides the project root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
 .SS godot\-cli scene instance
 Add instanced PackedScene nodes
 .SS godot\-cli scene instance add
@@ -1832,8 +1890,9 @@ Imports (unless \-\-no\-import), then runs the main scene or
 the log and its last 40 lines, and every ERROR or SCRIPT ERROR
 line with its backtrace; it fails (exit 1) when Godot did not
 exit cleanly or the log holds an error, so the change is not
-done until this passes. \-\-press move_right@10..40 holds an
-input action over a frame range and \-\-click /root/Main/HUD/PauseButton@20
+done until this passes. A run can pass with a wrong layout,
+so read the frame as well as the log. \-\-press move_right@10..40
+holds an input action over a frame range and \-\-click /root/Main/HUD/PauseButton@20
 clicks a node, so movement and buttons can be exercised; the
 frame then shows the result, with the clicked node in its hover
 style since the cursor stays over it. Result data: frame (path
