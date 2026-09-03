@@ -107,6 +107,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli catalog export`](#godot-cli-catalog-export) | Export agent digest markdown |
 | [`godot-cli batch`](#godot-cli-batch) | Run multiple CLI commands in one invocation |
 | [`godot-cli project`](#godot-cli-project) | Read and write Godot project.godot settings |
+| [`godot-cli project new`](#godot-cli-project-new) | Create a project.godot in a new or empty folder |
 | [`godot-cli project show`](#godot-cli-project-show) | Summarize key project.godot configuration |
 | [`godot-cli project move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`godot-cli project apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
@@ -549,6 +550,7 @@ godot-cli scene sub add [options] <file>
 | `--type` | `<value>` | Godot resource class (e.g. RectangleShape2D) | — |
 | `--property` | `<value>` | Property to set on the new resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
@@ -705,6 +707,7 @@ godot-cli scene node add [options] <file>
 | `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) | — |
 | `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
@@ -1076,6 +1079,8 @@ godot-cli scene plan [options] [file]
 |--------|-------|-------------|---------|
 | `--intent` | `<path>` | Intent JSON with steps/recipes (expands to patch ops) | — |
 | `--patch` | `<path>` | Existing patch JSON to validate and preview | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of --intent | — |
+| `--patch-json` | `<value>` | The patch JSON itself, instead of --patch | — |
 | `--write-patch` | `<path>` | Write expanded patch JSON to this path | — |
 | `--project-root` | `<path>` | Godot project root for uid_cache lookup and res:// seed path | — |
 
@@ -1100,6 +1105,8 @@ godot-cli scene apply [options] <file>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--patch` | `<path>` | JSON patch file with { "ops": [ … ] } | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of --intent | — |
+| `--patch-json` | `<value>` | The patch JSON itself, instead of --patch | — |
 | `--intent` | `<path>` | Intent JSON (expands to patch ops via scene plan) | — |
 | `--snapshot` | `<path>` | Copy scene to this path before applying | — |
 | `--auto-snapshot` | — | Save snapshot to &lt;scene&gt;.godot-cli-snapshot before apply | — |
@@ -1389,6 +1396,7 @@ godot-cli resource new [options]
 | `--type` | `<value>` | Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D) | — |
 | `--property` | `<value>` | Property to set on the resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
@@ -1435,6 +1443,7 @@ godot-cli resource sub add [options] <file>
 | `--type` | `<value>` | Godot resource class (e.g. StyleBoxFlat) | — |
 | `--property` | `<value>` | Property to set on the new sub-resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
@@ -1960,6 +1969,7 @@ godot-cli project [options]
 
 | Subcommand | Summary |
 |------------|---------|
+| [`new`](#godot-cli-project-new) | Create a project.godot in a new or empty folder |
 | [`show`](#godot-cli-project-show) | Summarize key project.godot configuration |
 | [`move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
@@ -1975,6 +1985,27 @@ godot-cli project [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
+
+### `godot-cli project new`
+
+Create a project.godot in a new or empty folder
+
+Writes the header the project manager writes, config_version=5, and [application] config/name, plus the main scene and window size when given. Refuses to overwrite an existing project.godot; change that with project settings set or project apply.
+
+```
+godot-cli project new [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Folder to create the project in (default: current directory) | — |
+| `--name` | `<value>` | Project name (application/config/name) | — |
+| `--main-scene` | `<value>` | Main scene as a res:// path (application/run/main_scene) | — |
+| `--width` | `<value>` | Viewport width in pixels (display/window/size/viewport_width) | — |
+| `--height` | `<value>` | Viewport height in pixels (display/window/size/viewport_height) | — |
+| `--dry-run` | — | Report what would be written without creating the file | — |
 
 ### `godot-cli project show`
 
@@ -2023,6 +2054,7 @@ godot-cli project apply [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 | `--intent` | `<path>` | Intent JSON file | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
 
@@ -2070,6 +2102,7 @@ godot-cli project input apply [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 | `--intent` | `<path>` | Intent JSON file | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
 
@@ -2169,6 +2202,7 @@ godot-cli project settings apply [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 | `--intent` | `<path>` | Intent JSON file | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
 
@@ -2231,6 +2265,7 @@ godot-cli project autoload apply [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 | `--intent` | `<path>` | Intent JSON file | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
 
@@ -2328,6 +2363,7 @@ godot-cli project plugins apply [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 | `--intent` | `<path>` | Intent JSON file | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
 
@@ -2389,6 +2425,7 @@ godot-cli project rendering apply [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 | `--intent` | `<path>` | Intent JSON file | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
 
@@ -2450,6 +2487,7 @@ godot-cli project physics apply [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
 | `--intent` | `<path>` | Intent JSON file | — |
+| `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
 

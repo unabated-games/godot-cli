@@ -77,7 +77,7 @@ pub fn emitSuccess(
 }
 
 pub fn emitFailure(
-    _: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     io: std.Io,
     stdout_buffer: []u8,
     stderr_buffer: []u8,
@@ -87,6 +87,26 @@ pub fn emitFailure(
 ) std.Io.Writer.Error!void {
     var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), io, stdout_buffer);
     const stdout = &stdout_file_writer.interface;
+
+    // Failure details are recorded deep in handlers and can borrow memory a
+    // caller frees on the way out; Debug builds refuse to print them.
+    if (builtin.mode == .Debug) {
+        if (firstInvalidString(failure.details)) |bad| {
+            var stderr_buffer_local: [512]u8 = undefined;
+            var stderr_local = std.Io.File.Writer.initStreaming(std.Io.File.stderr(), io, &stderr_buffer_local);
+            try stderr_local.interface.print("internal: failure details contain invalid UTF-8 at {s} (freed memory serialised?)\n", .{bad});
+            try stderr_local.interface.flush();
+            var details: std.json.ObjectMap = .{};
+            details.put(allocator, "at", .{ .string = bad }) catch {};
+            const internal = Failure{ .kind = "internal_invalid_output", .message = "failure details contained invalid UTF-8; this is a godot-cli bug", .details = .{ .object = details } };
+            if (json_output) {
+                try writeFailureEnvelope(stdout, path, internal);
+                try stdout.writeAll("\n");
+                try stdout.flush();
+                return;
+            }
+        }
+    }
 
     if (json_output) {
         try writeFailureEnvelope(stdout, path, failure);
@@ -204,7 +224,7 @@ fn writeJsonValue(writer: *std.Io.Writer, value: std.json.Value) std.Io.Writer.E
 }
 
 /// The JSON path of the first string that is not valid UTF-8, or null.
-fn firstInvalidString(value: std.json.Value) ?[]const u8 {
+pub fn firstInvalidString(value: std.json.Value) ?[]const u8 {
     return switch (value) {
         .string, .number_string => |text| if (std.unicode.utf8ValidateSlice(text)) null else "data",
         .array => |arr| blk: {
@@ -223,7 +243,7 @@ fn firstInvalidString(value: std.json.Value) ?[]const u8 {
     };
 }
 
-fn firstInvalidStringIn(messages: []const []const u8) ?[]const u8 {
+pub fn firstInvalidStringIn(messages: []const []const u8) ?[]const u8 {
     for (messages) |message| if (!std.unicode.utf8ValidateSlice(message)) return "messages";
     return null;
 }

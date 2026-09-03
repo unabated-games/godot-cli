@@ -151,7 +151,19 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         }));
         if (step.get("properties")) |props| {
             const last = &ops.items[ops.items.len - 1];
-            try last.object.put(ops_alloc, "properties", props);
+            if (readBool(step.get("unique_name")) orelse false) {
+                // Trial 9 lost `%Score`: the user's properties replaced the
+                // synthesised unique_name_in_owner instead of joining it.
+                var merged: std.json.ObjectMap = .{};
+                if (props == .object) {
+                    var it = props.object.iterator();
+                    while (it.next()) |entry| try merged.put(ops_alloc, entry.key_ptr.*, entry.value_ptr.*);
+                }
+                try merged.put(ops_alloc, "unique_name_in_owner", .{ .bool = true });
+                try last.object.put(ops_alloc, "properties", .{ .object = merged });
+            } else {
+                try last.object.put(ops_alloc, "properties", props);
+            }
         } else if (readBool(step.get("unique_name")) orelse false) {
             var props: std.json.ObjectMap = .{};
             try props.put(ops_alloc, "unique_name_in_owner", .{ .bool = true });

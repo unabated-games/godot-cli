@@ -257,7 +257,11 @@ fn argvToString(allocator: std.mem.Allocator, argv: []const []const u8) Error![]
 }
 
 test "batch stop mode stops on first failure" {
-    const allocator = std.testing.allocator;
+    // An arena, as every real caller provides: `invoke` keeps each step's
+    // invocation alive because handlers borrow from it.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
     const commands = @import("../commands.zig");
     const app = app_mod.App{
         .root = &commands.root,

@@ -303,7 +303,7 @@ Godot `.tscn` string properties need Godot-quoted values in patch/intent `value`
 { "recipe": "instance_override", "path": "/root/Main/HUD/ScoreCell", "property": "label", "value": "\"Score\"" }
 ```
 
-Bare `Score` corrupts or mis-parses text properties. In `node_add` / `properties` objects, JSON strings are formatted automatically (`"text": "Score: 0"` is fine).
+Bare `Score` corrupts or mis-parses text properties. The same rule applies in `node_add` / `properties` objects: a string value carries its own quotes, `"text": "\"Score: 0\""`, and a bare `"Score: 0"` is rejected with `invalid_property_value` before anything is written. Numbers and booleans are plain JSON (`"visible": false`, `"offset_left": 8.0`).
 
 ---
 

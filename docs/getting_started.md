@@ -44,7 +44,7 @@ man godot-cli
 Options worth knowing:
 
 ```bash
-./install.sh --version 0.8.0     # pin a release
+./install.sh --version 0.9.0     # pin a release
 ./install.sh --prefix /opt/godot-cli
 ./install.sh --install-skill     # also install the agent skill
 ```
@@ -83,9 +83,11 @@ distribution. Windows has no `install.sh`; unpack the zip and put `bin\` on
 ## Author a scene
 
 Everything below runs inside a Godot project directory — the one holding
-`project.godot`.
+`project.godot`. Starting from an empty folder, `project new` writes that file
+the way the project manager would:
 
 ```bash
+godot-cli project new --name MyGame --main-scene res://level.tscn --width 640 --height 360
 godot-cli scene new --output level.tscn --root-name Level --root-type Node2D
 godot-cli scene node add level.tscn --parent /root/Level --name Player --type CharacterBody2D
 ```

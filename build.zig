@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.8.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.9.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
@@ -166,6 +166,32 @@ pub fn build(b: *std.Build) void {
     mcp_smoke.setCwd(b.path("."));
     mcp_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&mcp_smoke.step);
+
+    // Trial 9 and 10 fixes: inline intents, unique_name surviving a
+    // properties object, project new, --properties, and the freed-memory
+    // path through the in-process invoke that set-property tripped.
+    const batch_fixes_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"add_node","parent":"/root/Root","name":"Score","type":"Label","unique_name":true,"properties":{"visible":false}}]}' --json) &&
+        \\echo "$out" | grep -q 'unique_name_in_owner' && echo "$out" | grep -q '"intent":"inline"' &&
+        \\t=$(mktemp -d) &&
+        \\./zig-out/bin/godot-cli scene new --output "$t/main.tscn" --root-name Main --root-type Node2D --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene plan "$t/main.tscn" --intent share/examples/intents/hud_top_bar.json --json >/dev/null &&
+        \\./zig-out/bin/godot-cli project new --project-root "$t" --name Smoke --main-scene res://main.tscn --width 640 --height 360 --json | grep -q '"ok":true' &&
+        \\grep -q 'config/name="Smoke"' "$t/project.godot" && grep -q 'viewport_height=360' "$t/project.godot" &&
+        \\./zig-out/bin/godot-cli project show --project-root "$t" --json | grep -q '"ok":true' &&
+        \\! ./zig-out/bin/godot-cli project new --project-root "$t" --name Again --json >/dev/null &&
+        \\./zig-out/bin/godot-cli project show --project-root "$t/nope" --json | grep -q 'create one with' &&
+        \\./zig-out/bin/godot-cli project settings apply --project-root "$t" --intent-json '{"application":{"config/description":"hi there"}}' --json | grep -q '"ok":true' && grep -q 'config/description="hi there"' "$t/project.godot" &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Box --type Node2D --properties '{"visible":false,"position":"Vector2(1, 2)","z_index":3}' --json | grep -q '"ok":true' &&
+        \\grep -q 'z_index = 3' "$t/main.tscn" && grep -q 'position = Vector2(1, 2)' "$t/main.tscn" &&
+        \\out=$(./zig-out/bin/godot-cli batch --json-body "{\"steps\":[{\"argv\":[\"scene\",\"set-property\",\"$t/main.tscn\",\"--node\",\"/root/Main/Box\",\"--property\",\"z_index\",\"--value\",\"4\",\"--json\"]}]}" --json) &&
+        \\echo "$out" | grep -q '"property":"z_index"' &&
+        \\rm -rf "$t"
+    });
+    batch_fixes_smoke.setCwd(b.path("."));
+    batch_fixes_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&batch_fixes_smoke.step);
 
     const inspect_smoke = b.addSystemCommand(&.{
         "bash", "-ec",

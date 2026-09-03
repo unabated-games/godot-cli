@@ -15,6 +15,22 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-09-03
+
+### Added
+
+- **`project new --name`**: creates `project.godot` in an empty folder with the project manager's header, `config_version=5`, and the name, plus `--main-scene`, `--width`, and `--height`. Both agent trials that started from nothing had to hand-write the file, which the rules forbid, because nothing created it. It refuses to overwrite an existing file.
+- **Inline JSON for every intent and patch option.** `scene plan` and `scene apply` take `--intent-json` and `--patch-json`; every `project * apply` takes `--intent-json`. An agent working through MCP no longer needs a second tool to write a file into the project first, and the MCP schemas declare these as objects so the model sends JSON rather than a string of JSON.
+- **`--properties` on `scene node add`, `resource new`, and `sub add`**: one JSON object instead of parallel `--property` and `--value` lists that have to stay index-aligned. Strings are Variant text, numbers and booleans are formatted. The lists still work and the two can be combined.
+
+### Fixed
+
+- **Results borrowed from a freed invocation through `batch` and the MCP server.** `App.invoke` freed the parsed invocation before the result was serialised, so `scene set-property` returned its property name and value as freed bytes when called as a tool or a batch step. The invocation now lives as long as the arena every caller already provides, and the Debug invalid-UTF-8 guard runs on the server path too.
+- The `add_node` recipe dropped `unique_name: true` when the step also carried `properties`, so `%Name` lookups crashed at run time on a scene that validated clean. The two are merged now; the shipped `hud_top_bar.json` combined them.
+- The scene-authoring guide claimed strings in `properties` objects are quoted automatically, and `hud_top_bar.json` relied on it; the tool has always required the quotes. The guide and the example match the tool, and `zig build test` plans the example against a scene.
+- A missing `project.godot` or intent file failed with a bare `Io` and no path. Both name the path and, for the project file, say to run `project new`.
+- The quickstart's `--project-root` table had a paragraph inserted mid-table, which broke its last row.
+
 ## [0.8.0] — 2026-09-03
 
 ### Added

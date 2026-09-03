@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-03" "godot-cli 0.8.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-03" "godot-cli 0.9.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -289,6 +289,10 @@ for several
 \fB\-\-value\fR \fIvalue\fR
 Property value (Variant text), one per \-\-property
 .TP
+\fB\-\-properties\fR \fIvalue\fR
+JSON object of property name to value, instead of or as well
+as \-\-property/\-\-value
+.TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
 .TP
@@ -435,6 +439,10 @@ several
 .TP
 \fB\-\-value\fR \fIvalue\fR
 Property value (Variant text), one per \-\-property
+.TP
+\fB\-\-properties\fR \fIvalue\fR
+JSON object of property name to value, instead of or as well
+as \-\-property/\-\-value
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -867,6 +875,12 @@ Intent JSON with steps/recipes (expands to patch ops)
 \fB\-\-patch\fR \fIpath\fR
 Existing patch JSON to validate and preview
 .TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of \-\-intent
+.TP
+\fB\-\-patch\-json\fR \fIvalue\fR
+The patch JSON itself, instead of \-\-patch
+.TP
 \fB\-\-write\-patch\fR \fIpath\fR
 Write expanded patch JSON to this path
 .TP
@@ -883,6 +897,12 @@ Scene file (.tscn)
 .TP
 \fB\-\-patch\fR \fIpath\fR
 JSON patch file with { "ops": [ … ] }
+.TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of \-\-intent
+.TP
+\fB\-\-patch\-json\fR \fIvalue\fR
+The patch JSON itself, instead of \-\-patch
 .TP
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON (expands to patch ops via scene plan)
@@ -1167,6 +1187,10 @@ several
 \fB\-\-value\fR \fIvalue\fR
 Property value (Variant text), one per \-\-property
 .TP
+\fB\-\-properties\fR \fIvalue\fR
+JSON object of property name to value, instead of or as well
+as \-\-property/\-\-value
+.TP
 \fB\-\-raw\-value\fR
 Write property values verbatim
 .TP
@@ -1211,6 +1235,10 @@ for several
 .TP
 \fB\-\-value\fR \fIvalue\fR
 Property value (Variant text), one per \-\-property
+.TP
+\fB\-\-properties\fR \fIvalue\fR
+JSON object of property name to value, instead of or as well
+as \-\-property/\-\-value
 .TP
 \fB\-\-raw\-value\fR
 Write property values verbatim
@@ -1687,6 +1715,31 @@ physics, display, layer names.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
+.SS godot\-cli project new
+Create a project.godot in a new or empty folder
+.PP
+Writes the header the project manager writes, config_version=5,
+and [application] config/name, plus the main scene and window
+size when given. Refuses to overwrite an existing project.godot;
+change that with project settings set or project apply.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Folder to create the project in (default: current directory)
+.TP
+\fB\-\-name\fR \fIvalue\fR
+Project name (application/config/name)
+.TP
+\fB\-\-main\-scene\fR \fIvalue\fR
+Main scene as a res:// path (application/run/main_scene)
+.TP
+\fB\-\-width\fR \fIvalue\fR
+Viewport width in pixels (display/window/size/viewport_width)
+.TP
+\fB\-\-height\fR \fIvalue\fR
+Viewport height in pixels (display/window/size/viewport_height)
+.TP
+\fB\-\-dry\-run\fR
+Report what would be written without creating the file
 .SS godot\-cli project show
 Summarize key project.godot configuration
 .TP
@@ -1721,6 +1774,9 @@ Godot project root (directory containing project.godot)
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON file
 .TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of a file
+.TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
 .TP
@@ -1741,6 +1797,9 @@ Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON file
+.TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of a file
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -1803,6 +1862,9 @@ Godot project root (directory containing project.godot)
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON file
 .TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of a file
+.TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
 .TP
@@ -1831,6 +1893,9 @@ Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON file
+.TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of a file
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
@@ -1886,6 +1951,9 @@ Godot project root (directory containing project.godot)
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON file
 .TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of a file
+.TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
 .TP
@@ -1912,6 +1980,9 @@ Godot project root (directory containing project.godot)
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON file
 .TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of a file
+.TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent
 .TP
@@ -1937,6 +2008,9 @@ Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON file
+.TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent JSON itself, instead of a file
 .TP
 \fB\-\-file\fR \fIpath\fR
 Alias for \-\-intent

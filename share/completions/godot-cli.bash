@@ -54,7 +54,7 @@ _godot_cli_children() {
             echo "add relink scan list show validate search export"
             ;;
         'project')
-            echo "show move apply input settings autoload plugins rendering physics"
+            echo "new show move apply input settings autoload plugins rendering physics"
             ;;
         'project input')
             echo "list apply validate"
@@ -110,7 +110,7 @@ _godot_cli_options() {
             echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene sub add')
-            echo "--type --property --value --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene sub remove')
             echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -125,7 +125,7 @@ _godot_cli_options() {
             echo "--node-name --parent --project-root"
             ;;
         'scene node add')
-            echo "--parent --name --type --property --value --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--parent --name --type --property --value --properties --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node remove')
             echo "--recursive --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -155,10 +155,10 @@ _godot_cli_options() {
             echo "--templates-root --rename-node --set-property --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene plan')
-            echo "--intent --patch --write-patch --project-root"
+            echo "--intent --patch --intent-json --patch-json --write-patch --project-root"
             ;;
         'scene apply')
-            echo "--patch --intent --snapshot --auto-snapshot --record-undo --write-undo-patch --no-strict --preview-properties --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--patch --intent-json --patch-json --intent --snapshot --auto-snapshot --record-undo --write-undo-patch --no-strict --preview-properties --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene diff')
             echo "--properties --project-root"
@@ -188,10 +188,10 @@ _godot_cli_options() {
             echo "--reference"
             ;;
         'resource new')
-            echo "--output --type --property --value --raw-value --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--output --type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource sub add')
-            echo "--type --property --value --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource sub remove')
             echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -256,6 +256,9 @@ _godot_cli_options() {
         'project')
             echo "--project-root"
             ;;
+        'project new')
+            echo "--project-root --name --main-scene --width --height --dry-run"
+            ;;
         'project show')
             echo "--project-root"
             ;;
@@ -263,13 +266,13 @@ _godot_cli_options() {
             echo "--from --to --dry-run --project-root"
             ;;
         'project apply')
-            echo "--project-root --intent --file --dry-run"
+            echo "--project-root --intent --intent-json --file --dry-run"
             ;;
         'project input list')
             echo "--project-root"
             ;;
         'project input apply')
-            echo "--project-root --intent --file --dry-run"
+            echo "--project-root --intent --intent-json --file --dry-run"
             ;;
         'project input validate')
             echo "--project-root"
@@ -284,7 +287,7 @@ _godot_cli_options() {
             echo "--project-root --section --key --value --raw --dry-run"
             ;;
         'project settings apply')
-            echo "--project-root --intent --file --dry-run"
+            echo "--project-root --intent --intent-json --file --dry-run"
             ;;
         'project settings validate')
             echo "--project-root --section"
@@ -293,7 +296,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'project autoload apply')
-            echo "--project-root --intent --file --dry-run"
+            echo "--project-root --intent --intent-json --file --dry-run"
             ;;
         'project autoload validate')
             echo "--project-root"
@@ -308,7 +311,7 @@ _godot_cli_options() {
             echo "--project-root --plugin --path --dry-run"
             ;;
         'project plugins apply')
-            echo "--project-root --intent --file --dry-run"
+            echo "--project-root --intent --intent-json --file --dry-run"
             ;;
         'project plugins validate')
             echo "--project-root"
@@ -317,7 +320,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'project rendering apply')
-            echo "--project-root --intent --file --dry-run"
+            echo "--project-root --intent --intent-json --file --dry-run"
             ;;
         'project rendering validate')
             echo "--project-root"
@@ -326,7 +329,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'project physics apply')
-            echo "--project-root --intent --file --dry-run"
+            echo "--project-root --intent --intent-json --file --dry-run"
             ;;
         'project physics validate')
             echo "--project-root"
@@ -412,6 +415,7 @@ _godot_cli_takes_args() {
         'catalog search') return 0 ;;
         'catalog export') return 0 ;;
         'batch') return 0 ;;
+        'project new') return 0 ;;
         'project show') return 0 ;;
         'project move') return 0 ;;
         'project apply') return 0 ;;

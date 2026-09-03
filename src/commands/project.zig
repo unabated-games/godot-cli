@@ -2,6 +2,7 @@ const std = @import("std");
 const spec = @import("../cli/spec.zig");
 const app_mod = @import("../cli/app.zig");
 const project_godot = @import("../godot/project_godot.zig");
+const error_details = @import("../godot/error_details.zig");
 const project_input = @import("../godot/project_input.zig");
 const project_settings = @import("../godot/project_settings.zig");
 const project_autoload = @import("../godot/project_autoload.zig");
@@ -29,9 +30,115 @@ fn loadProject(cli: *const app_mod.App, inv: *const spec.Invocation) !struct {
 } {
     const root = projectRootFrom(inv) orelse return error.Usage;
     const path = try projectGodotPath(cli.allocator, root);
-    errdefer cli.allocator.free(path);
-    const doc = try project_godot.readFile(cli.allocator, cli.io, path);
+    const doc = project_godot.readFile(cli.allocator, cli.io, path) catch |err| switch (err) {
+        error.Io => {
+            // `path` is deliberately not freed here: the detail borrows it
+            // until the failure is serialised.
+            error_details.record(.{
+                .field = "project.godot",
+                .value = path,
+                .hint = "no readable project.godot at this path; create one with `project new`, or pass --project-root",
+            });
+            return error.FileNotFound;
+        },
+        else => {
+            cli.allocator.free(path);
+            return err;
+        },
+    };
     return .{ .path = path, .doc = doc };
+}
+
+const IntentSource = struct { label: []const u8, bytes: []const u8 };
+
+/// `--intent-json` carries the document itself; otherwise `--intent` (or the
+/// older `--file`) names a file. A missing file reports its path.
+fn readIntentSource(cli: *const app_mod.App, inv: *const spec.Invocation) !IntentSource {
+    if (inv.getOption("intent-json")) |text| {
+        return .{ .label = "inline", .bytes = try cli.allocator.dupe(u8, text) };
+    }
+    const path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
+    const bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited) catch {
+        error_details.record(.{
+            .field = "intent",
+            .value = path,
+            .hint = "intent file not found; pass a path relative to the working directory, or the JSON itself with --intent-json",
+        });
+        return error.FileNotFound;
+    };
+    return .{ .label = path, .bytes = bytes };
+}
+
+fn newHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse ".";
+    const name = inv.getOption("name") orelse return error.Usage;
+    const path = try projectGodotPath(cli.allocator, root);
+
+    if (std.Io.Dir.cwd().access(cli.io, path, .{})) |_| {
+        error_details.record(.{
+            .field = "project.godot",
+            .value = path,
+            .hint = "a project.godot already exists here; change it with `project settings set` or `project apply`",
+        });
+        return error.AlreadyExists;
+    } else |_| {}
+
+    // The header the project manager writes, then the sections in the order
+    // Godot saves them. Parsing it back and writing through the project.godot
+    // writer keeps the layout identical to what a later edit produces.
+    var text: std.Io.Writer.Allocating = .init(cli.allocator);
+    const w = &text.writer;
+    try w.writeAll(
+        \\; Engine configuration file.
+        \\; It's best edited using the editor UI and not directly,
+        \\; since the parameters that go here are not all obvious.
+        \\;
+        \\; Format:
+        \\;   [section] ; section goes between []
+        \\;   param=value ; assign values to parameters
+        \\
+        \\config_version=5
+        \\
+        \\[application]
+        \\
+        \\
+    );
+    const quoted_name = try project_godot.formatQuotedString(cli.allocator, name);
+    try w.print("config/name={s}\n", .{quoted_name});
+    if (inv.getOption("main-scene")) |main_scene| {
+        const quoted_scene = try project_godot.formatQuotedString(cli.allocator, main_scene);
+        try w.print("run/main_scene={s}\n", .{quoted_scene});
+    }
+    const width = inv.getOption("width");
+    const height = inv.getOption("height");
+    if (width != null or height != null) {
+        try w.writeAll("\n[display]\n\n");
+        if (width) |value| {
+            _ = std.fmt.parseInt(u32, value, 10) catch return error.InvalidValue;
+            try w.print("window/size/viewport_width={s}\n", .{value});
+        }
+        if (height) |value| {
+            _ = std.fmt.parseInt(u32, value, 10) catch return error.InvalidValue;
+            try w.print("window/size/viewport_height={s}\n", .{value});
+        }
+    }
+
+    var doc = try project_godot.parseBytes(cli.allocator, text.written());
+    defer doc.deinit(cli.allocator);
+
+    if (!inv.flag("dry-run")) {
+        std.Io.Dir.cwd().createDirPath(cli.io, root) catch {};
+        try project_godot.writeFile(cli.allocator, cli.io, path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = path });
+    try data.put(cli.allocator, "name", .{ .string = name });
+    if (inv.getOption("main-scene")) |main_scene| try data.put(cli.allocator, "main_scene", .{ .string = main_scene });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "created {s}", .{path}) });
+    return .{ .data = .{ .object = data } };
 }
 
 fn inputListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -80,8 +187,9 @@ fn inputApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     defer cli.allocator.free(loaded.path);
     defer loaded.doc.deinit(cli.allocator);
 
-    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
-    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    const intent_source = try readIntentSource(cli, inv);
+    const intent_path = intent_source.label;
+    const intent_bytes = intent_source.bytes;
     defer cli.allocator.free(intent_bytes);
 
     var applied = try project_input.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
@@ -240,8 +348,9 @@ fn settingsApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
     defer cli.allocator.free(loaded.path);
     defer loaded.doc.deinit(cli.allocator);
 
-    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
-    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    const intent_source = try readIntentSource(cli, inv);
+    const intent_path = intent_source.label;
+    const intent_bytes = intent_source.bytes;
     defer cli.allocator.free(intent_bytes);
 
     var applied = try project_settings.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
@@ -344,8 +453,9 @@ fn autoloadApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
     defer cli.allocator.free(loaded.path);
     defer loaded.doc.deinit(cli.allocator);
 
-    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
-    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    const intent_source = try readIntentSource(cli, inv);
+    const intent_path = intent_source.label;
+    const intent_bytes = intent_source.bytes;
     defer cli.allocator.free(intent_bytes);
 
     var applied = try project_autoload.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
@@ -491,8 +601,9 @@ fn pluginsApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     defer cli.allocator.free(loaded.path);
     defer loaded.doc.deinit(cli.allocator);
 
-    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
-    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    const intent_source = try readIntentSource(cli, inv);
+    const intent_path = intent_source.label;
+    const intent_bytes = intent_source.bytes;
     defer cli.allocator.free(intent_bytes);
 
     var applied = try project_plugins.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
@@ -585,8 +696,9 @@ fn renderingApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
     defer cli.allocator.free(loaded.path);
     defer loaded.doc.deinit(cli.allocator);
 
-    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
-    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    const intent_source = try readIntentSource(cli, inv);
+    const intent_path = intent_source.label;
+    const intent_bytes = intent_source.bytes;
     defer cli.allocator.free(intent_bytes);
 
     var applied = try project_rendering.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
@@ -703,8 +815,9 @@ fn projectApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     defer cli.allocator.free(loaded.path);
     defer loaded.doc.deinit(cli.allocator);
 
-    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
-    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    const intent_source = try readIntentSource(cli, inv);
+    const intent_path = intent_source.label;
+    const intent_bytes = intent_source.bytes;
     defer cli.allocator.free(intent_bytes);
 
     var applied = try project_unified.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
@@ -772,8 +885,9 @@ fn physicsApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     defer cli.allocator.free(loaded.path);
     defer loaded.doc.deinit(cli.allocator);
 
-    const intent_path = inv.getOption("intent") orelse inv.getOption("file") orelse return error.Usage;
-    const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path, cli.allocator, .unlimited) catch return error.Io;
+    const intent_source = try readIntentSource(cli, inv);
+    const intent_path = intent_source.label;
+    const intent_bytes = intent_source.bytes;
     defer cli.allocator.free(intent_bytes);
 
     var applied = try project_physics.applyIntentJson(cli.allocator, &loaded.doc, intent_bytes);
@@ -823,6 +937,15 @@ fn physicsValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     };
 }
 
+const new_options = [_]spec.OptionSpec{
+    .{ .long = "project-root", .kind = .path, .description = "Folder to create the project in (default: current directory)" },
+    .{ .long = "name", .kind = .string, .description = "Project name (application/config/name)" },
+    .{ .long = "main-scene", .kind = .string, .description = "Main scene as a res:// path (application/run/main_scene)" },
+    .{ .long = "width", .kind = .string, .description = "Viewport width in pixels (display/window/size/viewport_width)" },
+    .{ .long = "height", .kind = .string, .description = "Viewport height in pixels (display/window/size/viewport_height)" },
+    .{ .long = "dry-run", .kind = .flag, .description = "Report what would be written without creating the file" },
+};
+
 pub fn commands() spec.CommandSpec {
     const project_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
@@ -831,6 +954,7 @@ pub fn commands() spec.CommandSpec {
     const intent_apply_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
         .{ .long = "intent", .kind = .path, .description = "Intent JSON file" },
+        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of a file" },
         .{ .long = "file", .kind = .path, .description = "Alias for --intent" },
         .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
     };
@@ -874,6 +998,13 @@ pub fn commands() spec.CommandSpec {
         .description = "Project-level configuration: input, autoloads, plugins, rendering, physics, display, layer names.",
         .options = &project_options,
         .children = &.{
+            .{
+                .name = "new",
+                .summary = "Create a project.godot in a new or empty folder",
+                .description = "Writes the header the project manager writes, config_version=5, and [application] config/name, plus the main scene and window size when given. Refuses to overwrite an existing project.godot; change that with project settings set or project apply.",
+                .options = &new_options,
+                .handler = newHandler,
+            },
             .{
                 .name = "show",
                 .summary = "Summarize key project.godot configuration",

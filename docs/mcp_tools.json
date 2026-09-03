@@ -1,10 +1,15 @@
 {
   "name": "godot-cli",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "server": {
-    "command": ["godot-cli", "mcp", "--project-root", "."],
+    "command": [
+      "godot-cli",
+      "mcp",
+      "--project-root",
+      "."
+    ],
     "note": "Native MCP server over stdio; tool names below match its tools/list."
   },
   "request_envelope": {
@@ -2007,6 +2012,41 @@
           "validate",
           "--project-root",
           ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_new",
+      "argv": [
+        "project",
+        "new",
+        "--project-root",
+        "<dir>",
+        "--name",
+        "<name>",
+        "--main-scene",
+        "<res://path>",
+        "--width",
+        "<px>",
+        "--height",
+        "<px>"
+      ],
+      "description": "Create a project.godot in an empty folder: the project manager's header, config_version=5, the name, and optionally the main scene and window size. Refuses to overwrite one that exists.",
+      "json_request": {
+        "argv": [
+          "project",
+          "new",
+          "--project-root",
+          ".",
+          "--name",
+          "MyGame",
+          "--main-scene",
+          "res://scenes/main.tscn",
+          "--width",
+          "640",
+          "--height",
+          "360",
           "--json"
         ]
       }

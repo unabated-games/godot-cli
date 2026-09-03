@@ -29,15 +29,16 @@ The installer downloads the release archive for your platform, checks it against
 
 Add the `source` line to `~/.zshrc` or `~/.bashrc` to keep it.
 
-To pin a version, pass `--version 0.8.0`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
+To pin a version, pass `--version 0.9.0`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
 
 Windows has no installer script. Unpack the `.zip` from the [releases page](https://github.com/unabated-games/godot-cli/releases) and put `bin\` on `PATH`.
 
 ## Author a scene
 
-Run these from a Godot project directory, the one holding `project.godot`.
+Run these from a Godot project directory, the one holding `project.godot`. From an empty folder, `project new` writes that file the way the project manager would, with the name, the main scene, and the window size:
 
 ```bash
+godot-cli project new --name MyGame --main-scene res://level.tscn --width 640 --height 360
 godot-cli scene new --output level.tscn --root-name Level --root-type Node2D
 godot-cli scene node add level.tscn --parent /root/Level --name Player --type CharacterBody2D
 ```

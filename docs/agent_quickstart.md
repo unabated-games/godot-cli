@@ -10,7 +10,7 @@ source "$HOME/.godot-cli/env.sh"
 godot-cli ping --json
 ```
 
-`env.sh` puts `godot-cli` on `PATH` and sets `GODOT_CLI_HOME` (install root, docs and examples under it) and `GODOT_CLI_TEMPLATES_ROOT`. Work from the Godot project root, the folder holding `project.godot`. Pass `--json` on every command.
+`env.sh` puts `godot-cli` on `PATH` and sets `GODOT_CLI_HOME` (install root, docs and examples under it) and `GODOT_CLI_TEMPLATES_ROOT`. Work from the Godot project root, the folder holding `project.godot`. Pass `--json` on every command. In an empty folder, `project new --name <Name>` writes the `project.godot` the project manager would; nothing else creates it.
 
 ## When to pass `--project-root`
 
@@ -20,9 +20,9 @@ godot-cli ping --json
 | `scene validate`, `scene inspect`, `scene refs` | **Pass** : enables UID cache and `res://` resolution checks |
 | `project input *` | **Pass** : reads/writes `project.godot` under the project root |
 | `project settings *`, `project autoload *` | **Pass** : main scene, display, layer names, autoloads |
+| `scene node list`, `scene node get`, `scene diff` | **Optional** : accepted for uniformity; ignored (file-only reads) |
 
 Common `project.godot` keys: `application` → `run/main_scene`, `config/name`; `display` → `window/size/viewport_width`, `window/size/viewport_height`, `window/stretch/mode`; `rendering` and `physics` take the aliases in `project rendering apply` / `project physics apply`. `project apply` takes one intent with `settings`, `input`, `autoload`, `plugins`, `rendering`, and `physics` sections (`$GODOT_CLI_HOME/examples/intents/project_bootstrap.json`).
-| `scene node list`, `scene node get`, `scene diff` | **Optional** : accepted for uniformity; ignored (file-only reads) |
 
 Agents may pass `--project-root .` on all scene commands when working inside a Godot project; it is only *required* for writes, catalog, and validation that touches project paths.
 
@@ -51,12 +51,15 @@ Agents may pass `--project-root .` on all scene commands when working inside a G
 
 ```bash
 # create and build
+godot-cli project new --project-root . --name MyGame --main-scene res://scenes/main.tscn --width 640 --height 360
 godot-cli scene new --output scenes/main.tscn --root-name Main --root-type Node2D --project-root .
 godot-cli scene node add scenes/main.tscn --parent /root/Main --name HUD --type Control \
   --property anchors_preset --value 15 --property anchor_right --value 1.0 --property anchor_bottom --value 1.0 --project-root .
 godot-cli scene instance add scenes/main.tscn --parent /root/Main --name Btn --catalog-id ui/button --project-root .
 godot-cli scene connection add scenes/main.tscn --from /root/Main/Btn --signal pressed --to /root/Main --method _on_btn_pressed --project-root .
 godot-cli scene apply scenes/main.tscn --intent intents/hud.json --project-root . --json        # recipes: player_2d, static_body_2d, camera_2d, ui_panel, connect, ...
+godot-cli scene apply scenes/main.tscn --intent-json '{"steps":[...]}' --project-root . --json           # the same, inline; --patch-json for a patch
+godot-cli scene node add scenes/main.tscn --parent /root/Main --name Box --type Node2D --properties '{"visible":false,"z_index":3}' --project-root .
 godot-cli scene apply scenes/main.tscn --patch patch.json --dry-run --project-root . --json     # preview; --write-undo-patch undo.json to record the reverse
 
 # resources, project, files

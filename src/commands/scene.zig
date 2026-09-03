@@ -628,12 +628,11 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     defer doc.deinit(cli.allocator);
     const resource_index = doc.sections.items.len - 1;
 
-    const property_names = try inv.getOptionAll(cli.allocator, "property");
-    defer cli.allocator.free(property_names);
-    const property_values = try inv.getOptionAll(cli.allocator, "value");
-    defer cli.allocator.free(property_values);
-    if (property_names.len != property_values.len) return error.Usage;
-    for (property_names, property_values) |property_name, property_value| {
+    const property_pairs = try collectPropertyPairs(cli, inv);
+    defer cli.allocator.free(property_pairs);
+    for (property_pairs) |pair| {
+        const property_name = pair.name;
+        const property_value = pair.value;
         const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
         defer cli.allocator.free(written_value);
         try text_format.document.setSectionProperty(&doc, cli.allocator, resource_index, property_name, written_value);
@@ -646,7 +645,7 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
     try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, resource_type) });
-    try data.put(cli.allocator, "property_count", .{ .integer = @intCast(property_names.len) });
+    try data.put(cli.allocator, "property_count", .{ .integer = @intCast(property_pairs.len) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     const summary = try std.fmt.allocPrint(cli.allocator, "created {s} resource {s}", .{ resource_type, output_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
@@ -709,12 +708,11 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     var added = try scene_edit.addNode(cli.allocator, &doc, parent_path, node_name, node_type);
     defer added.deinit(cli.allocator);
 
-    const property_names = try inv.getOptionAll(cli.allocator, "property");
-    defer cli.allocator.free(property_names);
-    const property_values = try inv.getOptionAll(cli.allocator, "value");
-    defer cli.allocator.free(property_values);
-    if (property_names.len != property_values.len) return error.Usage;
-    for (property_names, property_values) |property_name, property_value| {
+    const property_pairs = try collectPropertyPairs(cli, inv);
+    defer cli.allocator.free(property_pairs);
+    for (property_pairs) |pair| {
+        const property_name = pair.name;
+        const property_value = pair.value;
         const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
         defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, property_name, written_value);
@@ -1032,12 +1030,11 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
         properties.deinit(cli.allocator);
     }
 
-    const property_names = try inv.getOptionAll(cli.allocator, "property");
-    defer cli.allocator.free(property_names);
-    const property_values = try inv.getOptionAll(cli.allocator, "value");
-    defer cli.allocator.free(property_values);
-    if (property_names.len != property_values.len) return error.Usage;
-    for (property_names, property_values) |property_name, property_value| {
+    const property_pairs = try collectPropertyPairs(cli, inv);
+    defer cli.allocator.free(property_pairs);
+    for (property_pairs) |pair| {
+        const property_name = pair.name;
+        const property_value = pair.value;
         const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
         errdefer cli.allocator.free(written_value);
         try properties.append(cli.allocator, .{ .name = property_name, .value = written_value });
@@ -1382,18 +1379,91 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
+const PatchOrIntent = struct { is_intent: bool, label: []const u8, bytes: []const u8 };
+
+/// Exactly one of --intent, --intent-json, --patch, --patch-json. Inline JSON
+/// is labelled "inline" in the result; a missing file reports its path.
+fn readPatchOrIntent(cli: *const app_mod.App, inv: *const spec.Invocation) !PatchOrIntent {
+    const intent_path = inv.getOption("intent");
+    const intent_json = inv.getOption("intent-json");
+    const patch_path = inv.getOption("patch");
+    const patch_json = inv.getOption("patch-json");
+    var given: usize = 0;
+    if (intent_path != null) given += 1;
+    if (intent_json != null) given += 1;
+    if (patch_path != null) given += 1;
+    if (patch_json != null) given += 1;
+    if (given != 1) return error.Usage;
+
+    if (intent_json) |text| return .{ .is_intent = true, .label = "inline", .bytes = try cli.allocator.dupe(u8, text) };
+    if (patch_json) |text| return .{ .is_intent = false, .label = "inline", .bytes = try cli.allocator.dupe(u8, text) };
+
+    const is_intent = intent_path != null;
+    const path = intent_path orelse patch_path.?;
+    const bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited) catch {
+        error_details.record(.{
+            .field = if (is_intent) "intent" else "patch",
+            .value = path,
+            .hint = "file not found; pass a path relative to the working directory, or the JSON itself with --intent-json or --patch-json",
+        });
+        return error.FileNotFound;
+    };
+    return .{ .is_intent = is_intent, .label = path, .bytes = bytes };
+}
+
+const PropertyPair = struct { name: []const u8, value: []const u8 };
+
+/// Repeated --property/--value pairs, then the entries of a --properties JSON
+/// object. Strings are Variant text and carry their own quotes; numbers and
+/// booleans are formatted. Values are validated later by the caller.
+fn collectPropertyPairs(cli: *const app_mod.App, inv: *const spec.Invocation) ![]PropertyPair {
+    var out: std.ArrayList(PropertyPair) = .empty;
+    errdefer out.deinit(cli.allocator);
+
+    const property_names = try inv.getOptionAll(cli.allocator, "property");
+    defer cli.allocator.free(property_names);
+    const property_values = try inv.getOptionAll(cli.allocator, "value");
+    defer cli.allocator.free(property_values);
+    if (property_names.len != property_values.len) {
+        error_details.record(.{ .field = "value", .hint = "give one --value per --property, or use --properties with a JSON object" });
+        return error.MissingPatchField;
+    }
+    for (property_names, property_values) |name, value| try out.append(cli.allocator, .{ .name = name, .value = value });
+
+    if (inv.getOption("properties")) |text| {
+        const parsed = std.json.parseFromSliceLeaky(std.json.Value, cli.allocator, text, .{}) catch {
+            error_details.record(.{ .field = "properties", .value = text, .hint = "must be a JSON object of property name to value" });
+            return error.InvalidPropertyValue;
+        };
+        if (parsed != .object) {
+            error_details.record(.{ .field = "properties", .value = text, .hint = "must be a JSON object of property name to value" });
+            return error.InvalidPropertyValue;
+        }
+        var it = parsed.object.iterator();
+        while (it.next()) |entry| {
+            const value: []const u8 = switch (entry.value_ptr.*) {
+                .string => |s| s,
+                .integer => |i| try std.fmt.allocPrint(cli.allocator, "{d}", .{i}),
+                .float => |f| try std.fmt.allocPrint(cli.allocator, "{d}", .{f}),
+                .number_string => |s| s,
+                .bool => |b| if (b) "true" else "false",
+                else => {
+                    error_details.record(.{ .field = entry.key_ptr.*, .hint = "a property value is a string of Variant text (strings carry their own quotes), a number, or a boolean" });
+                    return error.InvalidPropertyValue;
+                },
+            };
+            try out.append(cli.allocator, .{ .name = entry.key_ptr.*, .value = value });
+        }
+    }
+    return out.toOwnedSlice(cli.allocator);
+}
+
 fn scenePlanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
-    const intent_path = inv.getOption("intent");
-    const patch_path = inv.getOption("patch");
-    if ((intent_path == null and patch_path == null) or (intent_path != null and patch_path != null)) {
-        return error.Usage;
-    }
-
-    const input_bytes = blk: {
-        const path = intent_path orelse patch_path.?;
-        break :blk try std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited);
-    };
+    const source = try readPatchOrIntent(cli, inv);
+    const intent_path: ?[]const u8 = if (source.is_intent) source.label else null;
+    const patch_path: ?[]const u8 = if (source.is_intent) null else source.label;
+    const input_bytes = source.bytes;
     defer cli.allocator.free(input_bytes);
 
     const scene_path = if (inv.positionals.len > 0) inv.positionals[0] else null;
@@ -1474,11 +1544,10 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
     const input_path = inv.positionals[0];
-    const patch_path_opt = inv.getOption("patch");
-    const intent_path_opt = inv.getOption("intent");
-    if ((patch_path_opt == null and intent_path_opt == null) or (patch_path_opt != null and intent_path_opt != null)) {
-        return error.Usage;
-    }
+    const source = try readPatchOrIntent(cli, inv);
+    defer cli.allocator.free(source.bytes);
+    const patch_path_opt: ?[]const u8 = if (source.is_intent) null else source.label;
+    const intent_path_opt: ?[]const u8 = if (source.is_intent) source.label else null;
 
     var snapshot_path_owned: ?[]const u8 = null;
     defer if (snapshot_path_owned) |path| cli.allocator.free(path);
@@ -1512,18 +1581,12 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     const seed_path = try saveSeedPath(cli, inv, output_path);
     defer cli.allocator.free(seed_path);
 
-    var patch_file_bytes: ?[]const u8 = null;
-    defer if (patch_file_bytes) |bytes| cli.allocator.free(bytes);
     var planned_patch_bytes: ?[]const u8 = null;
     defer if (planned_patch_bytes) |bytes| cli.allocator.free(bytes);
 
     const patch_bytes: []const u8 = blk: {
-        if (patch_path_opt) |patch_path| {
-            patch_file_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, patch_path, cli.allocator, .unlimited) catch return error.Io;
-            break :blk patch_file_bytes.?;
-        }
-        const intent_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, intent_path_opt.?, cli.allocator, .unlimited) catch return error.Io;
-        defer cli.allocator.free(intent_bytes);
+        if (!source.is_intent) break :blk source.bytes;
+        const intent_bytes = source.bytes;
 
         var planned = try scene_plan.planFromInput(cli.allocator, intent_bytes, null, .{
             .seed_path = seed_path,
@@ -1871,6 +1934,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot node class name (e.g. CharacterBody2D)" },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new node; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
     } ++ save_options;
@@ -1886,11 +1950,15 @@ pub fn sceneCommands() spec.CommandSpec {
     const plan_options = [_]spec.OptionSpec{
         .{ .long = "intent", .kind = .path, .description = "Intent JSON with steps/recipes (expands to patch ops)" },
         .{ .long = "patch", .kind = .path, .description = "Existing patch JSON to validate and preview" },
+        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of --intent" },
+        .{ .long = "patch-json", .kind = .string, .description = "The patch JSON itself, instead of --patch" },
         .{ .long = "write-patch", .kind = .path, .description = "Write expanded patch JSON to this path" },
         project_root_opt,
     };
     const apply_options = [_]spec.OptionSpec{
         .{ .long = "patch", .kind = .path, .description = "JSON patch file with { \"ops\": [ … ] }" },
+        .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of --intent" },
+        .{ .long = "patch-json", .kind = .string, .description = "The patch JSON itself, instead of --patch" },
         .{ .long = "intent", .kind = .path, .description = "Intent JSON (expands to patch ops via scene plan)" },
         .{ .long = "snapshot", .kind = .path, .description = "Copy scene to this path before applying" },
         .{ .long = "auto-snapshot", .kind = .flag, .description = "Save snapshot to <scene>.godot-cli-snapshot before apply" },
@@ -1955,6 +2023,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. RectangleShape2D)" },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
     } ++ save_options;
     const resource_remove_options = save_options;
@@ -2288,12 +2357,14 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)" },
         .{ .long = "property", .kind = .string, .description = "Property to set on the resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
     } ++ withoutOption(&save_options, "output");
     const resource_sub_add_options = [_]spec.OptionSpec{
         .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. StyleBoxFlat)" },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new sub-resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
     } ++ save_options;
     const resource_ext_add_options = [_]spec.OptionSpec{

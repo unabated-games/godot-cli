@@ -131,8 +131,10 @@ pub const App = struct {
     }
 
     pub fn invoke(self: *const App, argv: []const []const u8, json_output: bool) anyerror!spec.Result {
+        // Not freed: handlers borrow option strings into their results (the
+        // MCP trial saw `scene set-property` return freed bytes), and every
+        // caller hands `invoke` an arena that is reset when the call is over.
         var invocation = try parser.parseArgv(self.allocator, self.root, argv);
-        defer invocation.deinit(self.allocator);
         invocation.global.json_output = json_output;
 
         if (invocation.path.len == 0) return error.Usage;
@@ -216,7 +218,7 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
     if (std.mem.eql(u8, name, "FileNotFound") or std.mem.eql(u8, name, "Io") or std.mem.eql(u8, name, "AccessDenied")) {
         if (error_details.takeJson(allocator) catch null) |details| {
             failure.kind = "io";
-            failure.message = "could not write the output file";
+            failure.message = "could not read or write a file";
             failure.details = .{ .object = details };
         }
     }

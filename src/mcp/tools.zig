@@ -11,6 +11,7 @@ const std = @import("std");
 const spec = @import("../cli/spec.zig");
 const app_mod = @import("../cli/app.zig");
 const emit = @import("../output/emit.zig");
+const builtin = @import("builtin");
 
 /// Commands that describe the CLI rather than edit a Godot file. Kept in step
 /// with the exclusion set in `tools/check_mcp_tools.sh`.
@@ -106,6 +107,12 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
             var items: std.json.ObjectMap = .{};
             try items.put(allocator, "type", .{ .string = "string" });
             try prop.put(allocator, "items", .{ .object = items });
+        } else if (acceptsJson(opt.long)) {
+            // The CLI takes the document as text; an agent may send the object.
+            var types: std.json.Array = .init(allocator);
+            try types.append(.{ .string = "object" });
+            try types.append(.{ .string = "string" });
+            try prop.put(allocator, "type", .{ .array = types });
         } else {
             try prop.put(allocator, "type", .{ .string = if (opt.kind == .flag) "boolean" else "string" });
         }
@@ -132,6 +139,12 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
     try row.put(allocator, "inputSchema", .{ .object = schema });
     try row.put(allocator, "annotations", .{ .object = annotations });
     return .{ .object = row };
+}
+
+/// Options that carry a JSON document: `--intent-json`, `--patch-json`,
+/// `--json-body`, `--properties`. An object argument is serialised for them.
+pub fn acceptsJson(long: []const u8) bool {
+    return std.mem.endsWith(u8, long, "-json") or std.mem.eql(u8, long, "json-body") or std.mem.eql(u8, long, "properties");
 }
 
 fn describe(allocator: std.mem.Allocator, text: []const u8, kind: spec.ValueKind, pinned: bool) ![]const u8 {
@@ -199,7 +212,10 @@ pub fn buildArgv(
                         try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}={s}", .{ opt.long, text }));
                     }
                 } else {
-                    const text = scalarText(allocator, value) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a string", .{opt.long}) };
+                    const text = if (acceptsJson(opt.long) and (value == .object or value == .array))
+                        try jsonText(allocator, value)
+                    else
+                        scalarText(allocator, value) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a string", .{opt.long}) };
                     if (opt.kind == .path) {
                         if (try outsideRoot(allocator, confinement, text)) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" resolves outside the project root: {s}", .{ opt.long, text }) };
                     }
@@ -244,6 +260,12 @@ fn isKnownArgument(tool: *const Tool, key: []const u8, pinned: bool) bool {
     return false;
 }
 
+fn jsonText(allocator: std.mem.Allocator, value: std.json.Value) ![]const u8 {
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    try std.json.Stringify.value(value, .{}, &out.writer);
+    return out.written();
+}
+
 fn scalarText(allocator: std.mem.Allocator, value: std.json.Value) ![]const u8 {
     return switch (value) {
         .string => |s| s,
@@ -280,6 +302,20 @@ pub fn call(allocator: std.mem.Allocator, app: *const app_mod.App, tool: *const 
         try emit.writeFailureEnvelope(&buffer.writer, tool.path, failure);
         return .{ .envelope = buffer.written(), .is_error = true };
     };
+    // The same Debug-build guard the CLI runs: a result carrying invalid
+    // UTF-8 is freed memory, and the smoke test should fail on it.
+    if (builtin.mode == .Debug) {
+        if (emit.firstInvalidString(result.data) orelse emit.firstInvalidStringIn(result.messages)) |bad| {
+            var details: std.json.ObjectMap = .{};
+            try details.put(allocator, "at", .{ .string = bad });
+            try emit.writeFailureEnvelope(&buffer.writer, tool.path, .{
+                .kind = "internal_invalid_output",
+                .message = "result contained invalid UTF-8; this is a godot-cli bug",
+                .details = .{ .object = details },
+            });
+            return .{ .envelope = buffer.written(), .is_error = true };
+        }
+    }
     try emit.writeSuccessEnvelope(&buffer.writer, tool.path, result);
     const failed = if (result.exit_code) |code| code != .success else false;
     return .{ .envelope = buffer.written(), .is_error = failed };
