@@ -363,7 +363,7 @@ mkdir -p "$BIN_DIR" "$TEMPLATES_DIR" "$DOCS_DIR" "$EXAMPLES_DIR" \
 
 install -m 755 "$SRC_BIN" "$BIN_DIR/godot-cli"
 cp -R "$SOURCE_ROOT/templates/." "$TEMPLATES_DIR/"
-for doc in agent_quickstart.md agent_scene_authoring.md agent_batch_commands.md commands.md mcp_tools.json; do
+for doc in agent_quickstart.md agent_godot_basics.md agent_scene_authoring.md agent_batch_commands.md commands.md mcp_tools.json; do
   [[ -f "$SOURCE_ROOT/docs/$doc" ]] && cp "$SOURCE_ROOT/docs/$doc" "$DOCS_DIR/"
 done
 cp -R "$SOURCE_ROOT/share/examples/." "$EXAMPLES_DIR/"

@@ -1,6 +1,6 @@
 {
   "name": "godot-cli",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "request_envelope": {

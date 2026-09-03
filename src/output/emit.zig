@@ -6,6 +6,7 @@
 //! redirect (`>` or `>>`) that overwrites the start of the target file.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const spec = @import("../cli/spec.zig");
 const version = @import("../version.zig");
 
@@ -21,10 +22,34 @@ pub fn emitSuccess(
     stdout_buffer: []u8,
     json_output: bool,
     path: []const []const u8,
-    result: spec.Result,
+    result_in: spec.Result,
 ) std.Io.Writer.Error!void {
     var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), io, stdout_buffer);
     const writer = &stdout_file_writer.interface;
+
+    // Three bugs in one day serialised freed memory (0xAA bytes) as JSON
+    // strings, and each was found by an agent reading garbage. In Debug
+    // builds, which is what the test suite runs, a result carrying invalid
+    // UTF-8 is reported as an internal failure instead of being printed.
+    var result = result_in;
+    if (builtin.mode == .Debug) {
+        if (firstInvalidString(result.data) orelse firstInvalidStringIn(result.messages)) |bad| {
+            var stderr_buffer: [512]u8 = undefined;
+            var stderr_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stderr(), io, &stderr_buffer);
+            try stderr_file_writer.interface.print("internal: result contains invalid UTF-8 at {s} (freed memory serialised?)\n", .{bad});
+            try stderr_file_writer.interface.flush();
+            result = .{ .data = .null, .messages = &.{}, .exit_code = .failure };
+            if (json_output) {
+                try writer.writeAll("{\"ok\":false,\"version\":\"");
+                try writer.writeAll(version.version);
+                try writer.writeAll("\",\"command\":");
+                try writeStringArrayJson(writer, path);
+                try writer.print(",\"failure\":{{\"kind\":\"internal_invalid_output\",\"message\":\"result contained invalid UTF-8; this is a godot-cli bug\",\"details\":{{\"at\":\"{s}\"}}}}}}\n", .{bad});
+                try writer.flush();
+                return;
+            }
+        }
+    }
 
     if (json_output) {
         try writer.writeAll("{\"ok\":true,\"version\":\"");
@@ -162,4 +187,38 @@ fn writeStringArrayJson(writer: *std.Io.Writer, items: []const []const u8) std.I
 
 fn writeJsonValue(writer: *std.Io.Writer, value: std.json.Value) std.Io.Writer.Error!void {
     try std.json.Stringify.value(value, .{}, writer);
+}
+
+/// The JSON path of the first string that is not valid UTF-8, or null.
+fn firstInvalidString(value: std.json.Value) ?[]const u8 {
+    return switch (value) {
+        .string, .number_string => |text| if (std.unicode.utf8ValidateSlice(text)) null else "data",
+        .array => |arr| blk: {
+            for (arr.items) |item| if (firstInvalidString(item) != null) break :blk "data[]";
+            break :blk null;
+        },
+        .object => |obj| blk: {
+            var it = obj.iterator();
+            while (it.next()) |entry| {
+                if (!std.unicode.utf8ValidateSlice(entry.key_ptr.*)) break :blk "data key";
+                if (firstInvalidString(entry.value_ptr.*) != null) break :blk entry.key_ptr.*;
+            }
+            break :blk null;
+        },
+        else => null,
+    };
+}
+
+fn firstInvalidStringIn(messages: []const []const u8) ?[]const u8 {
+    for (messages) |message| if (!std.unicode.utf8ValidateSlice(message)) return "messages";
+    return null;
+}
+
+test "invalid UTF-8 in a result is located" {
+    const bad = [_]u8{ 0xAA, 0xAA };
+    var obj: std.json.ObjectMap = .{};
+    defer obj.deinit(std.testing.allocator);
+    try obj.put(std.testing.allocator, "path", .{ .string = &bad });
+    try std.testing.expectEqualStrings("path", firstInvalidString(.{ .object = obj }).?);
+    try std.testing.expect(firstInvalidString(.{ .string = "fine" }) == null);
 }

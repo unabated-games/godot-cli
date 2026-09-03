@@ -19,7 +19,7 @@ install.sh --install-skill
 
 The skill lands in `~/.cursor/skills/`, `~/.claude/skills/`, `~/.config/opencode/skills/`, and `~/.agents/skills/`, all as `godot-scene-authoring`. It carries the workflow checklist, the command cheat sheet, and the anti-patterns. Refresh it after an upgrade with `install.sh --skills-only`.
 
-Point agents at `$GODOT_CLI_HOME`, never at a source checkout. The guides they need are installed at `$GODOT_CLI_HOME/docs/agent_quickstart.md`, `agent_scene_authoring.md`, and `agent_batch_commands.md`, with copy-paste intents in `$GODOT_CLI_HOME/examples/`.
+Point agents at `$GODOT_CLI_HOME`, never at a source checkout. The guides they need are installed at `$GODOT_CLI_HOME/docs/`: `agent_quickstart.md` (one page), `agent_godot_basics.md`, `agent_scene_authoring.md`, and `agent_batch_commands.md`, with copy-paste intents in `$GODOT_CLI_HOME/examples/`.
 
 ## 2. Write the project rules
 

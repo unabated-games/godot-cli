@@ -15,6 +15,16 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-09-03
+
+### Changed
+
+- **The agent quickstart is one page again.** It had grown to 278 lines covering basics, resources, connections, captures, and file moves, and the 2D trial's agent reported its tooling truncating the file mid-read. It now holds the rules, the workflow, a cheat sheet, the capture recipe, and a table of what to read next. The Godot basics and the full capture recipe live in a new `agent_godot_basics.md`; resources, file moves, repeated properties, the follow-ups table, the command examples, and the anti-patterns moved into `agent_scene_authoring.md`. The skill is cut to the same shape. Release archives and `install.sh` ship the new file.
+
+### Added
+
+- Debug builds check every result for invalid UTF-8 before printing it and report `internal_invalid_output` instead. Three bugs today serialised freed memory as JSON strings, each found by an agent reading garbage; the test suite runs Debug builds, so the next one fails a smoke test.
+
 ## [0.7.0] — 2026-09-03
 
 ### Added

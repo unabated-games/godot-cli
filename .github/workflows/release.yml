@@ -69,7 +69,7 @@ jobs:
           mkdir -p "dist/$name/docs" "dist/$name/share"
           cp -R out/bin "dist/$name/bin"
           cp -R templates "dist/$name/templates"
-          cp docs/agent_quickstart.md docs/agent_scene_authoring.md \
+          cp docs/agent_quickstart.md docs/agent_godot_basics.md docs/agent_scene_authoring.md \
              docs/agent_batch_commands.md docs/commands.md docs/mcp_tools.json \
              "dist/$name/docs/"
           cp -R share/examples "dist/$name/share/examples"

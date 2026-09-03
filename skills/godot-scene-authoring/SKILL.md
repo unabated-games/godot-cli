@@ -12,214 +12,71 @@ description: >-
 
 ## Prerequisites
 
-User must have run `install.sh` and sourced the environment:
+The user has run `install.sh` and sourced the environment:
 
 ```bash
 source "$HOME/.godot-cli/env.sh"
 ```
 
-Use `$GODOT_CLI` or `godot-cli` on PATH. **Never** reference the godot-cli source tree — all docs and examples live under `$GODOT_CLI_HOME`.
+Use `godot-cli` on PATH. Never reference the godot-cli source tree; docs and examples live under `$GODOT_CLI_HOME`.
 
 | Path | Contents |
 |------|----------|
-| `$GODOT_CLI_HOME/docs/agent_quickstart.md` | Start here |
-| `$GODOT_CLI_HOME/docs/agent_scene_authoring.md` | Full recipes |
+| `$GODOT_CLI_HOME/docs/agent_quickstart.md` | Start here: rules, workflow, cheat sheet |
+| `$GODOT_CLI_HOME/docs/agent_godot_basics.md` | Projects, scenes, Control layout, running the game |
+| `$GODOT_CLI_HOME/docs/agent_scene_authoring.md` | Every recipe and patch op, resources, moving files, UI parity |
 | `$GODOT_CLI_HOME/docs/agent_batch_commands.md` | Batch workflows |
 | `$GODOT_CLI_HOME/docs/mcp_tools.json` | Command JSON shapes |
 | `$GODOT_CLI_HOME/examples/intents/` | Copy-paste intent files |
 
-Work from the Godot project root (`project.godot`). Pass `--json` on every command. Pass `--project-root .` for writes, catalog, validate, and apply; optional (ignored) on `scene node list`, `scene node get`, and `scene diff`.
+Work from the Godot project root (`project.godot`). Pass `--json` on every command and `--project-root .` for writes, catalog, validate, apply, and project commands.
 
-## North star
+## Rules
 
-Persist hierarchy in `.tscn` — same as the Godot editor. **Never** `load().instantiate()` for static UI or level layout in GDScript.
+1. Structure lives in the scene file, as the editor writes it. No hand-edited `.tscn`, no `load().instantiate()` in `_ready()` for static UI or levels.
+2. Discover before editing: `scene node list`, `catalog list`, `catalog show <id>`.
+3. Project catalog ids are instanced with `--catalog-id`; `godot/...` builtins are plain nodes.
+4. Presentation on nodes, signals as `[connection]` sections (`scene connection add`), resources as `.tres` (`resource new`).
+5. Values are Variant text; strings carry their own quotes (`"\"Paused\""`).
+6. Files move with `project move`, never `mv`.
+7. Validate after every edit; run the game and read the frame and the log before reporting done.
 
 ## Workflow checklist
 
 ```
 - [ ] source "$HOME/.godot-cli/env.sh"
 - [ ] scene node list <scene> --json
-- [ ] catalog list --project-root . --json (if instancing project UI)
-- [ ] edit (scene commands, intent, or batch) — use --project-root .
+- [ ] catalog list --project-root . --json (when adding UI or level structure)
+- [ ] edit with scene commands, an intent, or a batch, always with --project-root .
 - [ ] scene validate <scene> --project-root . --json
-- [ ] scene node list <scene> --json (confirm)
+- [ ] mkdir -p capture && touch capture/.gdignore && godot --headless --path . --import --quit
+- [ ] godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
+- [ ] read the last capture/shot*.png and capture/godot.log
 ```
-
-## Wire signals in the scene
-
-```bash
-godot-cli scene connection add <scene> --from /root/Main/Menu/Resume --signal pressed \
-  --to /root/Main/Menu --method _on_resume_pressed --project-root .
-```
-
-That writes the `[connection]` section the editor's Node dock writes. Do not connect static UI signals in `_ready()`; the method still lives in the receiving node's script.
-
-## Several properties in one command
-
-`--property`/`--value` repeat on `scene node add` and `scene sub add`:
-
-```bash
-godot-cli scene node add <scene> --parent /root/Main --name HUD --type Control \
-  --property anchors_preset --value 15 --property anchor_right --value 1.0 \
-  --property anchor_bottom --value 1.0 --property grow_horizontal --value 2 \
-  --property grow_vertical --value 2 --project-root .
-```
-
-## Move or rename a file
-
-Never `mv` a script, scene, or texture by hand; the `res://` paths in every scene that uses it go stale. One command moves the file with its `.uid` sidecar and repoints every scene, resource, manifest, and `project.godot` setting:
-
-```bash
-godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
-```
-
-`--dry-run` lists what would change. Nodes inside an instanced scene are not in the parent file: to change one, use the `instance_override` patch op with `child`, which marks the instance editable; `set-property --node` on such a path fails with a hint saying so.
-
-## Resources (.tres)
-
-Materials, themes, shapes, and any other Resource are `.tres` files, and they are authored the same way as scenes:
-
-```bash
-godot-cli resource new --output materials/wood.tres --type StandardMaterial3D \
-  --property albedo_color --value "Color(0.6, 0.4, 0.2, 1)" --property roughness --value 0.8 --project-root .
-godot-cli resource sub add themes/main.tres --type StyleBoxFlat \
-  --property bg_color --value "Color(0.1, 0.1, 0.1, 1)" --project-root . --json   # returns the id
-godot-cli resource set-property themes/main.tres --property Button/styles/normal \
-  --value 'SubResource("StyleBoxFlat_xxxxx")' --project-root .
-godot-cli resource ext add themes/main.tres --type FontFile --path res://fonts/ui.ttf --project-root .
-godot-cli resource inspect themes/main.tres --json
-```
-
-Theme entries are `Type/category/name` properties on the resource: `Button/styles/normal`, `Label/colors/font_color`, `Label/font_sizes/font_size`. Do not hand-write `.tres` text.
-
-## Godot project and scene basics
-
-Things Godot assumes that an agent often does not know:
-
-- A project is a folder with `project.godot` at its root, and `res://` is that folder. A `.tscn` outside it cannot resolve `res://` paths, so create scenes inside the project and set `application/run/main_scene` with `project settings set`.
-- A scene has exactly one root node; the root has no `parent` attribute. Pick the root type for the job: `Node2D` for 2D worlds, `Node3D` for 3D, `Control` for UI screens.
-- `anchors_preset` is an editor label only. Runtime layout comes from `anchor_left/top/right/bottom` (0 to 1), `offset_*`, and `grow_horizontal/grow_vertical`. A `Control` with default anchors is 0 by 0 pixels, and anything centred inside it lands at the top-left corner.
-  - Full rect: `anchors_preset = 15`, `anchor_right = 1.0`, `anchor_bottom = 1.0`, `grow_horizontal = 2`, `grow_vertical = 2`.
-  - Centred: `anchors_preset = 8`, all four anchors `0.5`, `grow_horizontal = 2`, `grow_vertical = 2`.
-  - Top-left with an offset: leave anchors at 0 and set `offset_left` and `offset_top`.
-- Containers lay children out; plain Controls do not. `VBoxContainer` and `HBoxContainer` stack children. `MarginContainer`, `PanelContainer`, and `CenterContainer` hold one child, and stack several on top of each other. Give leaf controls (`ProgressBar`, `TextureRect`) a `custom_minimum_size` so a container knows how big they are.
-- After adding scripts or scenes from outside the editor, run `godot --headless --path . --import --quit` once so Godot assigns UIDs; then run the game and read the frame and the log (below).
-
-## Run the game and check the result
-
-After a scene change, `scene validate` proves the file is well formed. To see the result, run the game from the terminal; Godot writes a frame and a log with no extra tooling:
-
-```bash
-mkdir -p capture && touch capture/.gdignore          # Godot skips this folder, so frames are not imported
-godot --headless --path . --import --quit          # once after adding files, so Godot assigns UIDs
-godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
-```
-
-Read the highest-numbered `capture/shot*.png` and `capture/godot.log`. Sixty frames is one second at 60 FPS, long enough for gravity and a camera to settle; five is enough for a static UI screen. The log holds every `print()`, `push_warning`, `push_error`, and script error with a backtrace; any `ERROR` or `SCRIPT ERROR` line means the change is not done. Without a display, drop `--write-movie` and add `--headless` to get the log alone.
 
 ## Command cheat sheet
 
 ```bash
-# Discover (file-only — --project-root optional)
-godot-cli scene node list scenes/main.tscn --json
-godot-cli catalog list --project-root . --json
-godot-cli catalog show <id> --project-root . --json
-
-# Create
 godot-cli scene new --output scenes/main.tscn --root-name Main --root-type Node2D --project-root .
-godot-cli scene template copy 2d/top_down_player --output scenes/player.tscn --project-root .
-
-# Edit (pick one style)
 godot-cli scene node add scenes/main.tscn --parent /root/Main --name Player --type CharacterBody2D --project-root .
 godot-cli scene instance add scenes/main.tscn --parent /root/Main --name Btn --catalog-id ui/button --project-root .
+godot-cli scene connection add scenes/main.tscn --from /root/Main/Btn --signal pressed --to /root/Main --method _on_btn_pressed --project-root .
 godot-cli scene apply scenes/main.tscn --intent intents/hud.json --project-root . --json
-
-# Preview before write
-godot-cli scene apply scenes/main.tscn --intent intents/hud.json --dry-run --preview-properties --project-root . --json
-
-# Batch
-godot-cli batch --file workflow.json --json
-
-# Input Map (after movement script uses Input.get_vector actions)
-godot-cli project input apply --project-root . --intent intents/wasd_movement.json --json
-
-# Main scene + autoloads + plugins + rendering + physics
-godot-cli project settings apply --project-root . --intent intents/main_scene.json --json
-godot-cli project plugins enable --project-root . --plugin my_addon --json
-godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
-godot-cli project physics apply --project-root . --intent intents/physics_jolt.json --json
-
-# Unified bootstrap (optional — one intent for multiple sections)
-godot-cli project show --project-root . --json
+godot-cli scene apply scenes/main.tscn --patch patch.json --dry-run --project-root . --json
+godot-cli resource new --output materials/wood.tres --type StandardMaterial3D --property roughness --value 0.8 --project-root .
 godot-cli project apply --project-root . --intent intents/project_bootstrap.json --json
+godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
+godot-cli batch --file workflow.json --json
+godot-cli scene validate scenes/main.tscn --project-root . --json
 ```
 
-## Rules
+Recipes: `player_2d`, `static_body_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `catalog_button`, `connect`, `assign_ext`, `instance_override`, `node_set`, `add_node`. Patch ops and their fields: `agent_scene_authoring.md`.
 
-1. **Discover before edit** — `scene node list` for `/root/<RootName>/` paths
-2. **Project catalog** → `scene instance add --catalog-id`
-3. **Builtins** (`godot/ui/Button`) → `scene node add --type Button` only
-4. **Validate after every edit**
-5. **Many steps** → `scene apply --intent` or `batch --file`
-6. **UI editor parity** — static Control look in `.tscn` properties (`theme_override_*`, anchors, min size); `@tool` + export setters on reusable widgets; `%Name` via `--unique-name`; see `agent_scene_authoring.md` § UI authoring
-
-## UI authoring (short)
-
-- **Don't** set font size / theme / layout only in `_ready()` — editor won't match Play.
-- **Do** use `node_set` / `instance_override` / intent `properties` for presentation.
-- **Reusable widgets:** `@tool` + export setters → `get_node_or_null` into children.
-- **Stable script refs:** `--unique-name` on HUD nodes → `%Score` in GDScript.
-- **Patch strings:** `"value": "\"Score\""` for instance override text properties.
-- Example: `$GODOT_CLI_HOME/examples/intents/hud_top_bar.json`
-
-## Intent example
-
-Copy from `$GODOT_CLI_HOME/examples/intents/hud_main.json` into the project's `intents/` folder. Adjust `parent` to match `scene node list` output.
-
-```json
-{
-  "steps": [
-    { "recipe": "player_2d", "parent": "/root/Main", "name": "Player", "radius": 10.0 },
-    { "recipe": "camera_2d", "parent": "/root/Main", "name": "Camera" }
-  ]
-}
-```
-
-Recipes: `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `catalog_button`, `assign_ext`, `instance_override`, `node_set`, `add_node`.
-
-`player_2d` optional: `texture` / `sprite_texture` / `texture_path`, `modulate`, `position`, `script`, `shape_id_hint`, `radius`, `sprite` (bool).
-
-## Common follow-ups
-
-After create → intent → validate:
-
-- **Attach script** → `assign_ext` or `player_2d` + `"script": "res://…gd"`
-- **Assign sprite texture** → `assign_ext` or `player_2d` with `"texture": "res://icon.svg"`
-- **Tint sprite** → `modulate` on node properties or `player_2d` + `"modulate"`
-- **Another character body** → repeat `player_2d` with a different `name` (unique shape ids; shared textures dedupe by path)
-- **Reuse existing texture** → `assign_ext` or reference `ExtResource("<id>")` from inspect/refs
-- **Instance catalog UI** → already covered
-- **Player movement (WASD / joypad)** → `project input apply` with `wasd_movement.json` after attaching a script that uses `move_*` actions
-- **HUD styling** → theme/anchor/min-size on nodes via intent; not `_ready()` only (`hud_top_bar.json`)
-- **Reusable UI cell** → `@tool` script + `instance_override` on root exports (`label`, `number`)
-- **Script node refs** → `--unique-name` when adding HUD widgets; use `%Name` in GDScript
-
-Writes auto-run save preparation (ext/sub order, **node parent-before-child order**, id repair); `scene normalize` re-preps existing files.
-
-**Node order:** validate fails with `node_parent_order` if a child appears before its parent in the file. Never use Godot headless to fix order — normalize instead. Add parents before children in multi-step patches.
-
-Full pattern: `$GODOT_CLI_HOME/docs/agent_scene_authoring.md` (Wiring external resources).
-
-## First session prompt (for user)
-
-When starting a fresh agent session on a Godot project:
+## First session prompt (for the user)
 
 ```text
-Source ~/.godot-cli/env.sh. Author scenes with godot-cli only — no hand-editing .tscn.
-Read $GODOT_CLI_HOME/docs/agent_quickstart.md. Use --json on every command; --project-root . for apply/validate/catalog/writes.
-Task: create scenes/main.tscn (Node2D root Main), add player + camera via intent, validate.
+Source ~/.godot-cli/env.sh. Author scenes with godot-cli only; no hand-edited .tscn.
+Read $GODOT_CLI_HOME/docs/agent_quickstart.md, then agent_godot_basics.md.
+Use --json on every command and --project-root . for writes, validate, catalog, and project commands.
+Task: ...
 ```
-
-## More detail
-
-See [reference.md](reference.md) for batch modes, undo, and troubleshooting.

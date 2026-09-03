@@ -7,7 +7,7 @@ description: The assumptions Godot makes about projects, scenes, and Control lay
 
 Two trial runs of the same task, with two different agents, made the same mistake: a pause menu positioned with `anchors_preset` and nothing else. The scene validated, Godot loaded it without a warning, and the panel sat clipped in the top-left corner, because `anchors_preset` is a label the editor uses and the runtime reads `anchor_*`. Nothing in the tool can catch that. The rules can prevent it.
 
-This page is the short list. The agent quickstart installed at `$GODOT_CLI_HOME/docs/agent_quickstart.md` carries the same text, so an agent reading that gets it without you pasting anything.
+This page is the short list. The same text is installed for agents as `$GODOT_CLI_HOME/docs/agent_godot_basics.md`, which the quickstart points at, so an agent gets it without you pasting anything.
 
 ## Projects
 

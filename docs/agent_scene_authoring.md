@@ -743,6 +743,152 @@ The receiving node needs a script with that method; godot-cli writes the connect
 
 `node get` lists a node's connections, `diff` reports added and removed ones, rename and reparent rewrite the paths, removing a node removes its connections, and `validate` fails on a connection to a node that is not in the scene.
 
+## Several properties in one command
+
+`--property`/`--value` repeat on `scene node add` and `scene sub add`:
+
+```bash
+godot-cli scene node add <scene> --parent /root/Main --name HUD --type Control \
+  --property anchors_preset --value 15 --property anchor_right --value 1.0 \
+  --property anchor_bottom --value 1.0 --property grow_horizontal --value 2 \
+  --property grow_vertical --value 2 --project-root .
+```
+
+
+## Resources (.tres)
+
+Materials, themes, shapes, and any other Resource are `.tres` files, and they are authored the same way as scenes:
+
+```bash
+godot-cli resource new --output materials/wood.tres --type StandardMaterial3D \
+  --property albedo_color --value "Color(0.6, 0.4, 0.2, 1)" --property roughness --value 0.8 --project-root .
+godot-cli resource sub add themes/main.tres --type StyleBoxFlat \
+  --property bg_color --value "Color(0.1, 0.1, 0.1, 1)" --project-root . --json   # returns the id
+godot-cli resource set-property themes/main.tres --property Button/styles/normal \
+  --value 'SubResource("StyleBoxFlat_xxxxx")' --project-root .
+godot-cli resource ext add themes/main.tres --type FontFile --path res://fonts/ui.ttf --project-root .
+godot-cli resource inspect themes/main.tres --json
+```
+
+Theme entries are `Type/category/name` properties on the resource: `Button/styles/normal`, `Label/colors/font_color`, `Label/font_sizes/font_size`. Do not hand-write `.tres` text.
+
+
+## Move or rename a file
+
+Never `mv` a script, scene, or texture by hand; the `res://` paths in every scene that uses it go stale. One command moves the file with its `.uid` sidecar and repoints every scene, resource, manifest, and `project.godot` setting:
+
+```bash
+godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
+```
+
+`--dry-run` lists what would change. Nodes inside an instanced scene are not in the parent file: to change one, use the `instance_override` patch op with `child`, which marks the instance editable; `set-property --node` on such a path fails with a hint saying so.
+
+
+## Common follow-ups
+
+| Task | Approach |
+|------|----------|
+| Attach script | `assign_ext` recipe/op, or `player_2d` + `"script": "res://…gd"` |
+| Assign sprite texture | `assign_ext` or `player_2d` + `"texture": "res://icon.svg"` |
+| Tint a sprite | `modulate` on `node_add` / `node_set` (e.g. `Color(0.25, 1, 0.35, 1)`) or `player_2d` + `"modulate"` |
+| Second character body | Repeat `player_2d` with a different `name` — shape ids are per-node; shared textures reuse the same `ext_resource` |
+| Reuse existing texture | `assign_ext` dedupes by `res://` path; in patches you may also set `ExtResource("<existing_id>")` from `scene inspect` / `scene refs` |
+| Instance catalog UI | `scene instance add --catalog-id` |
+| Player WASD + joypad | Write `scripts/player.gd`, attach via `player_2d`/`assign_ext`, then `project input apply` with `wasd_movement.json` |
+| Set main scene | `project settings apply` with `main_scene.json` or `settings set --section application --key run/main_scene --value res://…` |
+| Game singleton | `project autoload apply` with `autoload_game_state.json` |
+| Physics layer names | `project settings apply` with `physics_layers.json` |
+| Enable editor plugin | `project plugins enable --plugin <addon_name>` (addon must exist under `addons/`) |
+| Rendering backend | `project rendering apply` with `rendering_forward_plus.json` |
+| Physics engine (e.g. Jolt) | `project physics apply` with `physics_jolt.json` |
+| Bootstrap project config | `project apply` with `project_bootstrap.json` (settings + input + autoload + rendering + physics) |
+| Project overview | `project show --json` |
+| HUD / Control styling | Scene properties (`theme_override_*`, anchors, `custom_minimum_size`) — not `_ready()` only; see `agent_scene_authoring.md` § UI authoring |
+| Reusable UI widget | `@tool` script + export setters; instance overrides on root exports |
+| Unique node paths in scripts | `--unique-name` on `scene node add` / `instance add`, or `unique_name_in_owner` via `node_set` → `%Name` |
+| HUD top bar layout | `hud_top_bar.json` intent example |
+
+`player_2d` optional fields: `texture` / `sprite_texture` / `texture_path`, `modulate`, `position`, `script`, `shape_id_hint`, `radius`, `sprite` (bool).
+
+Writes run **save preparation** by default (ext/sub section order, node parent-before-child order, id repair). Use `scene normalize` to re-run prep on an existing file; `--no-prepare-save` only for tests.
+
+**Node section order:** Godot instantiates nodes in file order. If `scene validate` reports `node_parent_order`, run `scene normalize` — do not use Godot headless as a scene pretty-printer. Add new parent nodes before reparenting children onto them when building multi-step patches.
+
+See `agent_scene_authoring.md` → “Wiring external resources” and “Multiple character bodies”.
+
+
+## Catalog rules
+
+| Kind | Id example | How to use |
+|------|------------|------------|
+| Project entry | `ui/button` | `scene instance add --catalog-id ui/button` |
+| Builtin (docs only) | `godot/ui/Button` | `scene node add --type Button` — never `--catalog-id` |
+
+
+## Command examples by task
+
+```bash
+# New 2D scene (root viewport path = /root/Main)
+godot-cli scene new --output scenes/main.tscn \
+  --root-name Main --root-type Node2D --project-root .
+
+# Template scaffold (templates from GODOT_CLI_HOME)
+godot-cli scene template list --json
+godot-cli scene template copy 2d/top_down_player \
+  --output scenes/player.tscn --project-root .
+
+# Plan + apply intent (recipes expand to patch ops)
+godot-cli scene plan scenes/main.tscn \
+  --intent intents/hud.json --project-root . --json
+
+godot-cli scene apply scenes/main.tscn \
+  --intent intents/hud.json --project-root . --json
+
+# Dry-run preview
+godot-cli scene apply scenes/main.tscn --intent intents/hud.json \
+  --dry-run --preview-properties --project-root . --json
+
+# Instance project catalog entry
+godot-cli catalog show ui/button --project-root . --json
+godot-cli scene instance add scenes/main.tscn \
+  --parent /root/Main --name StartButton --catalog-id ui/button --project-root .
+
+# Batch (apply → validate → list)
+godot-cli batch --file workflow.json --json
+
+# Input Map (WASD / joypad for player movement scripts)
+godot-cli project input list --project-root . --json
+godot-cli project input apply --project-root . \
+  --intent intents/wasd_movement.json --dry-run --json
+godot-cli project input apply --project-root . \
+  --intent intents/wasd_movement.json --json
+godot-cli project input validate --project-root . --json
+
+# Main scene, display, layer names, autoloads
+godot-cli project settings apply --project-root . --intent intents/main_scene.json --json
+godot-cli project autoload apply --project-root . --intent intents/autoload_game_state.json --json
+
+# Editor plugins + rendering + physics
+godot-cli project plugins enable --project-root . --plugin my_addon --json
+godot-cli project rendering apply --project-root . --intent intents/rendering_forward_plus.json --json
+godot-cli project physics apply --project-root . --intent intents/physics_jolt.json --json
+
+# Unified bootstrap (one intent, multiple sections)
+godot-cli project show --project-root . --json
+godot-cli project apply --project-root . --intent intents/project_bootstrap.json --dry-run --json
+```
+
+Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Use with a movement script that calls `Input.get_vector("move_left", "move_right", "move_up", "move_down")`. Re-applying the same intent is idempotent (replaces each action by name).
+
+
+## Anti-patterns
+
+- Hand-editing `[node]` / `parent=` / `instance=` lines when a CLI command exists
+- Instancing `godot/…` builtin ids
+- Skipping `scene validate` after edits
+- Forgetting `--project-root` when using `res://` or catalog ids
+- Using Godot headless to rewrite `.tscn` node order — use `scene normalize` instead
+
 ## Catalog integration
 
 | Step | Command |
