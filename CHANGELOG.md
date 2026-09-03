@@ -15,6 +15,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-09-04
+
 ### Added
 
 - **`scene extract <scene> <node> --output <new.tscn>`**: the editor's Save Branch as Scene. The subtree moves with its properties, unique ids, the resources it uses, and the connections inside it, rewritten relative to the new root; the source gets an instance in its place; `--catalog-id` registers the new scene. Connections that cross the boundary are dropped and listed. Trial 17 rebuilt a HUD by hand from inspected JSON, transcribing 23 properties, because nothing did this.
