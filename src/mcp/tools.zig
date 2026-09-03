@@ -165,7 +165,7 @@ pub fn acceptsJson(long: []const u8) bool {
 
 fn describe(allocator: std.mem.Allocator, text: []const u8, kind: spec.ValueKind, pinned: bool) ![]const u8 {
     if (kind != .path) return text;
-    return std.fmt.allocPrint(allocator, "{s}. A file path, relative to {s}; res:// paths are accepted where the CLI accepts them", .{
+    return std.fmt.allocPrint(allocator, "{s}. A path, relative to {s}", .{
         text,
         if (pinned) "the project root" else "the server's working directory",
     });

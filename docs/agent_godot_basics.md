@@ -18,7 +18,7 @@ Things Godot assumes that an agent often does not know:
 
 ## Seeing movement
 
-A `Camera2D` under the player follows it, so the player stays centred and the world slides. If nothing else is drawn, that looks like nothing happening. Give walls and floors something visible: the `static_body_2d` recipe takes `"color": "Color(0.3, 0.5, 0.8, 1)"` for a filled polygon the size of the collision box, or `"texture"` for a tiled sprite. Or put the camera under the root while testing. Input actions bound with `physical: true` are the keyboard positions of W, A, S, D, not the arrow keys.
+A `Camera2D` under the player follows it, so the player stays centred and the world slides. If nothing else is drawn, that looks like nothing happening. Give walls and floors something visible: the `static_body_2d` recipe takes `"color": "Color(0.3, 0.5, 0.8, 1)"` for a filled polygon the size of the collision box, or `"texture"` for a tiled sprite. Or put the camera under the root while testing; a root camera sits at the origin unless the recipe's `position` puts it where the player starts. Input actions bound with `physical: true` are the keyboard positions of W, A, S, D, not the arrow keys.
 
 ## Run the game and check the result
 

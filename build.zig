@@ -190,6 +190,9 @@ pub fn build(b: *std.Build) void {
         \\out=$(./zig-out/bin/godot-cli batch --json-body "{\"steps\":[{\"argv\":[\"scene\",\"set-property\",\"$t/main.tscn\",\"--node\",\"/root/Main/Box\",\"--property\",\"z_index\",\"--value\",\"4\",\"--json\"]}]}" --json) &&
         \\echo "$out" | grep -q '"property":"z_index"' &&
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"teleport","parent":"/root/Main","name":"X"}]}' --json | grep -q '"kind":"unknown_recipe"' &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"camera_2d","parent":"/root/Main","name":"Cam"},{"recipe":"assign_ext","path":"/root/Main","property":"script"}]}' --json | grep -q '"step":1' &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"assign_ext","path":"/root/Main","property":"script","res_path":"res://scripts/main.gd"}]}' --json | grep -q '\\"ext_type\\": \\"Script\\"' &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"camera_2d","parent":"/root/Main","name":"Cam","position":"Vector2(320, 180)"}]}' --json | grep -q 'Vector2(320, 180)' &&
         \\! ./zig-out/bin/godot-cli project new --project-root "$t/n" --name N --width abc --json >/dev/null 2>&1 &&
         \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"instance_catalog","parent":"/root/Root","name":"Btn","catalog_id":"ui/button","properties":{"visible":false}}]}' --project-root test_fixtures/project --json | grep -q 'visible' &&
         \\./zig-out/bin/godot-cli scene instance add "$t/main.tscn" --parent /root/Main --name Btn --scene res://main.tscn --properties '{"visible":false}' --project-root "$t" --json | grep -q '"ok":true' &&

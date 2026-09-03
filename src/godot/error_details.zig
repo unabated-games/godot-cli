@@ -14,6 +14,8 @@ pub const Detail = struct {
     field: ?[]const u8 = null,
     value: ?[]const u8 = null,
     hint: ?[]const u8 = null,
+    /// Index of the intent step or patch op, when the failure came from one.
+    step: ?usize = null,
 };
 
 threadlocal var last: ?Detail = null;
@@ -29,6 +31,16 @@ pub fn record(detail: Detail) void {
     var with_op = detail;
     if (with_op.op == null) with_op.op = current_op;
     last = with_op;
+}
+
+/// Attach the step index to whatever was recorded, or record just that, so
+/// an agent knows which entry of a long intent failed.
+pub fn noteStep(index: usize) void {
+    if (last) |*detail| {
+        if (detail.step == null) detail.step = index;
+    } else {
+        last = .{ .op = current_op, .step = index };
+    }
 }
 
 pub fn clear() void {
@@ -48,6 +60,7 @@ pub fn takeJson(allocator: std.mem.Allocator) !?std.json.ObjectMap {
     if (detail.field) |field| try map.put(allocator, "field", .{ .string = try allocator.dupe(u8, field) });
     if (detail.value) |value| try map.put(allocator, "value", .{ .string = try allocator.dupe(u8, value) });
     if (detail.hint) |hint| try map.put(allocator, "hint", .{ .string = try allocator.dupe(u8, hint) });
+    if (detail.step) |step| try map.put(allocator, "step", .{ .integer = @intCast(step) });
     return map;
 }
 

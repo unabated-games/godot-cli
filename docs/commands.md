@@ -2054,7 +2054,7 @@ godot-cli project import [options]
 
 Run the game for a few frames and capture the last frame and the log
 
-Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result, with the clicked node in its hover style since the cursor stays over it. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
 
 ```
 godot-cli project run [options]

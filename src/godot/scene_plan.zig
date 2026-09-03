@@ -129,7 +129,11 @@ fn expandIntentSteps(
 
         const recipe = try requiredString(step, "recipe");
         const before = ops.items.len;
-        try expandRecipe(ops_alloc, recipe, step, ops);
+        error_details.setCurrentOp(recipe);
+        expandRecipe(ops_alloc, recipe, step, ops) catch |err| {
+            error_details.noteStep(index);
+            return err;
+        };
         const added = ops.items.len - before;
 
         try step_plans.append(allocator, .{
@@ -237,20 +241,23 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     if (std.mem.eql(u8, recipe, "assign_ext")) {
         const node_path = try requiredString(step, "path");
         const property = try requiredString(step, "property");
-        const ext_type = if (step.get("ext_type") orelse step.get("type")) |v| blk: {
-            if (v != .string) return error.InvalidIntent;
-            break :blk v.string;
-        } else if (step.get("type")) |v| blk: {
-            if (v != .string) return error.InvalidIntent;
-            break :blk v.string;
-        } else return error.MissingIntentField;
         const res_path = if (step.get("res_path")) |v| blk: {
             if (v != .string) return error.InvalidIntent;
             break :blk v.string;
         } else if (step.get("resource_path")) |v| blk: {
             if (v != .string) return error.InvalidIntent;
             break :blk v.string;
-        } else return error.MissingIntentField;
+        } else {
+            error_details.record(.{ .field = "res_path", .hint = "the res:// path of the file to reference, e.g. res://scripts/player.gd" });
+            return error.MissingIntentField;
+        };
+        const ext_type = if (step.get("ext_type") orelse step.get("type")) |v| blk: {
+            if (v != .string) return error.InvalidIntent;
+            break :blk v.string;
+        } else inferExtType(res_path) orelse {
+            error_details.record(.{ .field = "ext_type", .value = res_path, .hint = "no class is known for this extension; give ext_type, the resource class Godot expects (Script, Texture2D, PackedScene, AudioStream, or a .tres class such as StyleBoxFlat)" });
+            return error.MissingIntentField;
+        };
         const id_hint = if (step.get("id_hint")) |v| blk: {
             if (v != .string) return error.InvalidIntent;
             break :blk v.string;
@@ -624,8 +631,12 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             .{ "type", "Camera2D" },
         }));
 
-        if (readFloat(step.get("zoom")) != null or readBool(step.get("enabled")) == false) {
+        if (readFloat(step.get("zoom")) != null or readBool(step.get("enabled")) == false or step.get("position") != null) {
             var props: std.json.ObjectMap = .{};
+            if (step.get("position")) |pos_value| {
+                if (pos_value != .string) return error.InvalidIntent;
+                try props.put(ops_alloc, "position", .{ .string = try ops_alloc.dupe(u8, pos_value.string) });
+            }
             if (readFloat(step.get("zoom"))) |zoom| {
                 const zoom_text = try std.fmt.allocPrint(ops_alloc, "Vector2({d}, {d})", .{ zoom, zoom });
                 try props.put(ops_alloc, "zoom", .{ .string = zoom_text });
@@ -697,7 +708,7 @@ pub const Recipe = struct {
 pub const recipes = [_]Recipe{
     .{ .name = "add_node", .summary = "One node of any type under a parent, with optional properties", .required = &.{ "parent", "name", "type" }, .optional = &.{ "properties", "unique_name" } },
     .{ .name = "node_set", .summary = "Set one property on an existing node", .required = &.{ "path", "property", "value" }, .optional = &.{} },
-    .{ .name = "assign_ext", .summary = "Register an external file and point a node property at it; ext_type is the resource class Godot expects (Script, Texture2D, PackedScene, AudioStream, or a .tres class such as StyleBoxFlat), inferred from the extension when omitted", .required = &.{ "path", "property" }, .optional = &.{ "res_path", "ext_type", "id_hint" } },
+    .{ .name = "assign_ext", .summary = "Register an external file and point a node property at it; ext_type is the resource class Godot expects and is inferred for .gd, .tscn, images, audio, and fonts; a .tres needs it given (StyleBoxFlat, Theme, ...)", .required = &.{ "path", "property", "res_path" }, .optional = &.{ "ext_type", "id_hint" } },
     .{ .name = "connect", .summary = "A [connection] section: signal from one node to a method on another", .required = &.{ "from", "signal", "to", "method" }, .optional = &.{} },
     .{ .name = "instance_catalog", .summary = "Instance a project catalog entry by id", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "properties", "editable" } },
     .{ .name = "instance_scene", .summary = "Instance a scene by res:// path", .required = &.{ "parent", "name", "scene" }, .optional = &.{ "properties", "editable" } },
@@ -705,7 +716,7 @@ pub const recipes = [_]Recipe{
     .{ .name = "catalog_button", .summary = "Instance a catalog button and set its label", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "label", "editable" } },
     .{ .name = "player_2d", .summary = "CharacterBody2D with capsule collision, optional sprite, script, and position", .required = &.{ "parent", "name" }, .optional = &.{ "position", "radius", "texture", "script", "modulate", "sprite" } },
     .{ .name = "static_body_2d", .summary = "StaticBody2D with a rectangle collision centred on position, size as Vector2(w, h); texture tiles a sprite, color draws a filled polygon so the body is visible", .required = &.{ "parent", "name" }, .optional = &.{ "position", "size", "texture", "color" } },
-    .{ .name = "camera_2d", .summary = "Camera2D; under the player it follows, under the root it stays put", .required = &.{ "parent", "name" }, .optional = &.{ "zoom", "enabled" } },
+    .{ .name = "camera_2d", .summary = "Camera2D; under the player it follows, under the root it sits at position (the origin unless given)", .required = &.{ "parent", "name" }, .optional = &.{ "position", "zoom", "enabled" } },
     .{ .name = "ui_panel", .summary = "Panel with an optional title label", .required = &.{ "parent", "name" }, .optional = &.{ "title", "full_rect" } },
     .{ .name = "tilemap_layer", .summary = "TileMapLayer with an optional tileset", .required = &.{ "parent", "name" }, .optional = &.{ "tileset", "with_tilemap", "tilemap_name" } },
     .{ .name = "audio_player", .summary = "AudioStreamPlayer (or 2D with spatial) with optional stream", .required = &.{ "parent", "name" }, .optional = &.{ "stream", "autoplay", "volume_db", "spatial" } },
@@ -869,9 +880,39 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
 }
 
 fn requiredString(map: std.json.ObjectMap, key: []const u8) Error![]const u8 {
-    const value = map.get(key) orelse return error.MissingIntentField;
-    if (value != .string) return error.InvalidIntent;
+    const value = map.get(key) orelse {
+        error_details.record(.{ .field = key, .hint = "this recipe needs the field; scene recipes lists every recipe's fields" });
+        return error.MissingIntentField;
+    };
+    if (value != .string) {
+        error_details.record(.{ .field = key, .hint = "must be a JSON string" });
+        return error.InvalidIntent;
+    }
     return value.string;
+}
+
+/// The resource class Godot expects for a file, from its extension, for
+/// `assign_ext` steps that leave `ext_type` out.
+fn inferExtType(res_path: []const u8) ?[]const u8 {
+    const table = [_]struct { ext: []const u8, class: []const u8 }{
+        .{ .ext = ".gd", .class = "Script" },
+        .{ .ext = ".cs", .class = "Script" },
+        .{ .ext = ".gdshader", .class = "Shader" },
+        .{ .ext = ".tscn", .class = "PackedScene" },
+        .{ .ext = ".scn", .class = "PackedScene" },
+        .{ .ext = ".png", .class = "Texture2D" },
+        .{ .ext = ".svg", .class = "Texture2D" },
+        .{ .ext = ".jpg", .class = "Texture2D" },
+        .{ .ext = ".jpeg", .class = "Texture2D" },
+        .{ .ext = ".webp", .class = "Texture2D" },
+        .{ .ext = ".wav", .class = "AudioStream" },
+        .{ .ext = ".ogg", .class = "AudioStream" },
+        .{ .ext = ".mp3", .class = "AudioStream" },
+        .{ .ext = ".ttf", .class = "FontFile" },
+        .{ .ext = ".otf", .class = "FontFile" },
+    };
+    for (table) |entry| if (std.ascii.endsWithIgnoreCase(res_path, entry.ext)) return entry.class;
+    return null;
 }
 
 fn readBool(value: ?std.json.Value) ?bool {
