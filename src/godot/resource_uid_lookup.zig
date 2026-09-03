@@ -101,8 +101,11 @@ pub fn refreshExtResourceUids(
             section.header.setStringField(allocator, "uid", current) catch return error.OutOfMemory;
             changed += 1;
         } else {
-            // The editor writes a uid on every reference whose target has one.
-            // Only a recorded uid is added; a derived guess is not.
+            // A reference to a scene or resource gains the uid from that file's
+            // header, as the editor writes. Script and asset references are
+            // left alone: Godot's own headless save (the round-trip fixture)
+            // writes those without a uid, and the fixture is the ground truth.
+            if (!std.mem.endsWith(u8, res_path, ".tscn") and !std.mem.endsWith(u8, res_path, ".tres")) continue;
             const known = (try resolveRecordedExtResourceUid(allocator, io, project_root, res_path)) orelse continue;
             defer allocator.free(known);
             section.header.setStringField(allocator, "uid", known) catch return error.OutOfMemory;
