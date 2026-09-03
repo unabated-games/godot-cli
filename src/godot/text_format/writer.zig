@@ -43,6 +43,8 @@ fn contiguousWithPrevious(doc: *const document.Document, index: usize) bool {
         std.mem.eql(u8, previous.header.name, "connection");
 }
 
+const error_details = @import("../error_details.zig");
+
 pub fn writeFile(
     allocator: std.mem.Allocator,
     path: []const u8,
@@ -54,7 +56,10 @@ pub fn writeFile(
     }
     const bytes = try writeDocument(allocator, doc);
     defer allocator.free(bytes);
-    try io_util.writeFile(path, bytes);
+    io_util.writeFile(path, bytes) catch |err| {
+        error_details.record(.{ .field = "output", .value = path });
+        return err;
+    };
 }
 
 test "round trip preserves structure" {

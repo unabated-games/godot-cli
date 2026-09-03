@@ -534,7 +534,7 @@ godot-cli scene plan scenes/main.tscn \
 godot-cli scene apply scenes/main.tscn --patch patches/generated.json --project-root .
 ```
 
-**Intent recipes:** `add_node`, `connect`, `instance_catalog`, `instance_scene`, `node_set`, `assign_ext`, `instance_override`, `catalog_button`, `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`  
+**Intent recipes:** `add_node`, `connect`, `static_body_2d`, `instance_catalog`, `instance_scene`, `node_set`, `assign_ext`, `instance_override`, `catalog_button`, `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`  
 **Passthrough:** intent file with `"ops": [ … ]` same as patch format  
 **Direct op in steps:** `{ "op": "node_add", … }` without `recipe`
 
@@ -710,6 +710,15 @@ Built-in templates: `2d/character_body`, `2d/top_down_player`, `2d/camera_rig`, 
 ```
 
 ---
+
+## Recipe: static body (ground, platform, wall)
+
+```json
+{ "recipe": "static_body_2d", "parent": "/root/Main", "name": "Ground",
+  "position": "Vector2(320, 352)", "size": "Vector2(640, 16)", "texture": "res://art/ground.svg" }
+```
+
+Expands to a `StaticBody2D`, a `RectangleShape2D` sub-resource of `size` with its `CollisionShape2D`, and, when `texture` is given, a `Sprite2D` tiled across `size` (`region_enabled`, `region_rect`, `texture_repeat`). `size` defaults to `Vector2(64, 16)`.
 
 ## Signal connections
 

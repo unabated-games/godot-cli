@@ -39,7 +39,7 @@ Every property value is Variant text, which trips people up exactly once: `"16.0
 
 ## Intents
 
-An intent is a higher-level description. Recipes such as `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `catalog_button`, and `connect` expand into the ops above:
+An intent is a higher-level description. Recipes such as `player_2d`, `static_body_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `catalog_button`, and `connect` expand into the ops above:
 
 ```json
 {

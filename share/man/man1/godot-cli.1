@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-02" "godot-cli 0.4.1" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-03" "godot-cli 0.5.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -1049,6 +1049,203 @@ stripped by Godot.
 Godot\-saved reference file (default: second positional)
 .SS godot\-cli resource
 Inspect and edit Godot resource files
+.SS godot\-cli resource new
+Create a new .tres resource file
+.PP
+Writes a gd_resource header and a [resource] section. Repeat
+\-\-property/\-\-value for several properties. Add sub\-resources
+with resource sub add and external files with resource ext
+add.
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output .tres path (required)
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Property to set on the resource; repeat with \-\-value for
+several
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (Variant text), one per \-\-property
+.TP
+\fB\-\-raw\-value\fR
+Write property values verbatim
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli resource sub
+Sub\-resources embedded in a .tres
+.SS godot\-cli resource sub add
+Add a sub_resource; reference it as SubResource("<id>")
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Godot resource class (e.g. StyleBoxFlat)
+.TP
+\fB\-\-property\fR \fIvalue\fR
+Property to set on the new sub\-resource; repeat with \-\-value
+for several
+.TP
+\fB\-\-value\fR \fIvalue\fR
+Property value (Variant text), one per \-\-property
+.TP
+\fB\-\-raw\-value\fR
+Write property values verbatim
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli resource sub remove
+Remove a sub_resource by id
+.PP
+Takes the file path and the resource id. Fails with referrer
+list if the id is still referenced.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli resource ext
+External resource references in a .tres
+.SS godot\-cli resource ext add
+Register an external file; reference it as ExtResource("<id>")
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Resource type of the external file (e.g. Texture2D, Script)
+.TP
+\fB\-\-path\fR \fIvalue\fR
+res:// path of the external file
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli resource ext remove
+Remove an ext_resource by id
+.PP
+Takes the file path and the resource id. Fails with referrer
+list if the id is still referenced.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides \-\-project\-root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
 .SS godot\-cli resource inspect
 Parse a .tres file and report structure and ID issues
 .PP

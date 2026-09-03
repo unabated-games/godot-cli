@@ -15,6 +15,8 @@ Each guide is a task with the commands to finish it. If you are new here, read [
 
 [Build UI]({{ base_url }}/how-to/build-ui/): Control trees with anchors, containers, theme overrides, and unique names, in the shape the editor writes them.
 
+[Author .tres resources]({{ base_url }}/how-to/author-resources/): materials, themes, and shapes as files the editor would have saved, with sub-resources and external references.
+
 [Edit project settings]({{ base_url }}/how-to/project-settings/): the input map, autoloads, editor plugins, rendering and physics backends, and the main scene, all in `project.godot`.
 
 ## Working with agents

@@ -229,14 +229,18 @@ pub fn render(allocator: std.mem.Allocator, doc: *const Document) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
+    // Godot's own layout (core/config/project_settings.cpp, _save_settings_text):
+    // the preamble ends with one newline, every section is preceded by one blank
+    // line and followed by one, and entries run to the end of the section. The
+    // preamble is trimmed so a file written this way rewrites byte for byte.
     if (doc.preamble.len > 0) {
-        try out.appendSlice(allocator, doc.preamble);
-        if (doc.preamble[doc.preamble.len - 1] != '\n') try out.append(allocator, '\n');
+        try out.appendSlice(allocator, std.mem.trimEnd(u8, doc.preamble, "\n"));
+        try out.append(allocator, '\n');
     }
 
     for (doc.sections.items, 0..) |section, section_index| {
         if (section_index > 0 or doc.preamble.len > 0) try out.append(allocator, '\n');
-        try appendFmt(allocator, &out, "[{s}]\n", .{section.name});
+        try appendFmt(allocator, &out, "[{s}]\n\n", .{section.name});
 
         for (section.entries.items) |entry| {
             try appendFmt(allocator, &out, "{s}={s}\n", .{ entry.key, entry.value });

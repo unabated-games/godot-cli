@@ -42,7 +42,13 @@ _godot_cli_children() {
             _godot_cli_reply=( 'list:List built-in scene templates' 'show:Show template metadata, node tree, and sections' 'copy:Copy a template to a new scene file' )
             ;;
         'resource')
-            _godot_cli_reply=( 'inspect:Parse a .tres file and report structure and ID issues' 'validate:Validate resource IDs and references (fails on errors)' 'validate-batch:Validate multiple resource files (aggregated JSON, exit 1 on any error)' 'set-property:Set a property on a resource section and save' 'normalize:Repair scene-local IDs and sort ext_resource sections for save' 'retarget-ext:Replace ext_resource paths across one or more files' 'round-trip:Parse and rewrite a resource file; fail if structure is not preserved' 'compare-godot:Compare a resource to a Godot headless save (semantic match)' )
+            _godot_cli_reply=( 'new:Create a new .tres resource file' 'sub:Sub-resources embedded in a .tres' 'ext:External resource references in a .tres' 'inspect:Parse a .tres file and report structure and ID issues' 'validate:Validate resource IDs and references (fails on errors)' 'validate-batch:Validate multiple resource files (aggregated JSON, exit 1 on any error)' 'set-property:Set a property on a resource section and save' 'normalize:Repair scene-local IDs and sort ext_resource sections for save' 'retarget-ext:Replace ext_resource paths across one or more files' 'round-trip:Parse and rewrite a resource file; fail if structure is not preserved' 'compare-godot:Compare a resource to a Godot headless save (semantic match)' )
+            ;;
+        'resource sub')
+            _godot_cli_reply=( 'add:Add a sub_resource; reference it as SubResource("<id>")' 'remove:Remove a sub_resource by id' )
+            ;;
+        'resource ext')
+            _godot_cli_reply=( 'add:Register an external file; reference it as ExtResource("<id>")' 'remove:Remove an ext_resource by id' )
             ;;
         'catalog')
             _godot_cli_reply=( 'add:Create or update a JSON catalog manifest for a scene' 'relink:Repoint manifests whose scene has moved' 'scan:Scan project for catalog manifests' 'list:List valid catalog entries' 'show:Show merged catalog entry by id' 'validate:Validate catalog manifests in a project' 'search:Search project catalog entries and builtins' 'export:Export agent digest markdown' )
@@ -180,6 +186,21 @@ _godot_cli_options() {
             ;;
         'scene compare-godot')
             _godot_cli_reply=( '--reference:Godot-saved reference file (default\: second positional)' )
+            ;;
+        'resource new')
+            _godot_cli_reply=( '--output:Output .tres path (required)' '--type:Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)' '--property:Property to set on the resource; repeat with --value for several' '--value:Property value (Variant text), one per --property' '--raw-value:Write property values verbatim' '--project-root:Godot project root for res\:// seed path and id session cache' '--resource-path:Godot res\:// path for ID seeding (overrides --project-root)' '--no-prepare-save:Skip Godot save preparation (ID repair/sort)' '--dry-run:Parse and validate edit without writing' '--id-session:Path to ext_resource id session cache JSON' '--no-id-session:Do not load or update ext_resource id session cache' '--godot-save-format:Strip Godot-omitted header fields and default sub_resource properties' '--normalize-properties:Rewrite property values through Variant parse/format' )
+            ;;
+        'resource sub add')
+            _godot_cli_reply=( '--type:Godot resource class (e.g. StyleBoxFlat)' '--property:Property to set on the new sub-resource; repeat with --value for several' '--value:Property value (Variant text), one per --property' '--raw-value:Write property values verbatim' '--project-root:Godot project root for res\:// seed path and id session cache' '--resource-path:Godot res\:// path for ID seeding (overrides --project-root)' '--no-prepare-save:Skip Godot save preparation (ID repair/sort)' '--output:Output path (default\: overwrite input)' '--dry-run:Parse and validate edit without writing' '--id-session:Path to ext_resource id session cache JSON' '--no-id-session:Do not load or update ext_resource id session cache' '--godot-save-format:Strip Godot-omitted header fields and default sub_resource properties' '--normalize-properties:Rewrite property values through Variant parse/format' )
+            ;;
+        'resource sub remove')
+            _godot_cli_reply=( '--project-root:Godot project root for res\:// seed path and id session cache' '--resource-path:Godot res\:// path for ID seeding (overrides --project-root)' '--no-prepare-save:Skip Godot save preparation (ID repair/sort)' '--output:Output path (default\: overwrite input)' '--dry-run:Parse and validate edit without writing' '--id-session:Path to ext_resource id session cache JSON' '--no-id-session:Do not load or update ext_resource id session cache' '--godot-save-format:Strip Godot-omitted header fields and default sub_resource properties' '--normalize-properties:Rewrite property values through Variant parse/format' )
+            ;;
+        'resource ext add')
+            _godot_cli_reply=( '--type:Resource type of the external file (e.g. Texture2D, Script)' '--path:res\:// path of the external file' '--project-root:Godot project root for res\:// seed path and id session cache' '--resource-path:Godot res\:// path for ID seeding (overrides --project-root)' '--no-prepare-save:Skip Godot save preparation (ID repair/sort)' '--output:Output path (default\: overwrite input)' '--dry-run:Parse and validate edit without writing' '--id-session:Path to ext_resource id session cache JSON' '--no-id-session:Do not load or update ext_resource id session cache' '--godot-save-format:Strip Godot-omitted header fields and default sub_resource properties' '--normalize-properties:Rewrite property values through Variant parse/format' )
+            ;;
+        'resource ext remove')
+            _godot_cli_reply=( '--project-root:Godot project root for res\:// seed path and id session cache' '--resource-path:Godot res\:// path for ID seeding (overrides --project-root)' '--no-prepare-save:Skip Godot save preparation (ID repair/sort)' '--output:Output path (default\: overwrite input)' '--dry-run:Parse and validate edit without writing' '--id-session:Path to ext_resource id session cache JSON' '--no-id-session:Do not load or update ext_resource id session cache' '--godot-save-format:Strip Godot-omitted header fields and default sub_resource properties' '--normalize-properties:Rewrite property values through Variant parse/format' )
             ;;
         'resource inspect')
             _godot_cli_reply=( '--project-root:Godot project root for uid_cache lookup and res\:// seed path' '--no-validate:Skip ID validation' '--parse-properties:Include parsed property values in JSON output' '--no-parse-properties:Omit parsed properties (faster for large files)' )

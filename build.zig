@@ -17,11 +17,11 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.4.1";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.5.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
-    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-09-02";
+    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-09-03";
 
     const version_options = b.addOptions();
     version_options.addOption([]const u8, "version", version_string);
@@ -797,6 +797,50 @@ pub fn build(b: *std.Build) void {
     uid_sidecar_smoke.setCwd(b.path("."));
     uid_sidecar_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&uid_sidecar_smoke.step);
+
+    // Resource authoring against files Godot itself saved, the sub-resource
+    // placement fix (they used to land after [resource]), set-property's
+    // default section, the static_body_2d recipe, and scene new creating a
+    // missing parent directory.
+    const resource_authoring_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\touch "$tmp/project.godot" &&
+        \\./zig-out/bin/godot-cli resource new --output "$tmp/mat/wood.tres" --type StandardMaterial3D --property albedo_color --value "Color(1, 0.5, 0.25, 1)" --property roughness --value 0.8 --project-root "$tmp" >/dev/null &&
+        \\cmp "$tmp/mat/wood.tres" test_fixtures/project/resources/mat_godot_saved.tres &&
+        \\./zig-out/bin/godot-cli resource new --output "$tmp/shape.tres" --type RectangleShape2D --property size --value "Vector2(64, 16)" --project-root "$tmp" >/dev/null &&
+        \\cmp "$tmp/shape.tres" test_fixtures/project/resources/shape_godot_saved.tres &&
+        \\./zig-out/bin/godot-cli resource new --output "$tmp/theme.tres" --type Theme --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli resource sub add "$tmp/theme.tres" --type StyleBoxFlat --property bg_color --value "Color(0.1, 0.1, 0.1, 1)" --property corner_radius_top_left --value 6 --project-root "$tmp" >/dev/null &&
+        \\id=$(grep -o 'id="StyleBoxFlat_[^"]*"' "$tmp/theme.tres" | cut -d'"' -f2) &&
+        \\./zig-out/bin/godot-cli resource set-property "$tmp/theme.tres" --property Button/styles/normal --value "SubResource(\"$id\")" --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli resource set-property "$tmp/theme.tres" --property Label/colors/font_color --value "Color(1, 1, 1, 1)" --project-root "$tmp" >/dev/null &&
+        \\./zig-out/bin/godot-cli resource set-property "$tmp/theme.tres" --property Label/font_sizes/font_size --value 20 --project-root "$tmp" >/dev/null &&
+        \\grep -n '^\[' "$tmp/theme.tres" | tr '\n' ' ' | grep -q 'gd_resource.*sub_resource.*resource' &&
+        \\./zig-out/bin/godot-cli resource compare-godot "$tmp/theme.tres" test_fixtures/project/resources/theme_godot_saved.tres --json | grep -q '"matches_godot_save":true' &&
+        \\./zig-out/bin/godot-cli scene new --output "$tmp/scenes/m.tscn" --root-name Main --root-type Node2D --project-root "$tmp" >/dev/null &&
+        \\printf '{ "steps": [ { "recipe": "static_body_2d", "parent": "/root/Main", "name": "Ground", "size": "Vector2(640, 16)" } ] }' > "$tmp/g.json" &&
+        \\./zig-out/bin/godot-cli scene apply "$tmp/scenes/m.tscn" --intent "$tmp/g.json" --project-root "$tmp" --json | grep -q '"applied_count":3' &&
+        \\grep -q 'type="StaticBody2D"' "$tmp/scenes/m.tscn" && grep -q '^size = Vector2(640, 16)$' "$tmp/scenes/m.tscn"
+    });
+    resource_authoring_smoke.setCwd(b.path("."));
+    resource_authoring_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&resource_authoring_smoke.step);
+
+    // project.godot as Godot writes it (blank line before and after each
+    // section header) has to survive a settings edit byte for byte.
+    const project_godot_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) &&
+        \\trap 'rm -rf "$tmp"' EXIT &&
+        \\cp test_fixtures/project/project_godot_saved.godot "$tmp/project.godot" &&
+        \\./zig-out/bin/godot-cli project settings set --project-root "$tmp" --section application --key config/name --value PgRef >/dev/null &&
+        \\cmp "$tmp/project.godot" test_fixtures/project/project_godot_saved.godot
+    });
+    project_godot_smoke.setCwd(b.path("."));
+    project_godot_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_godot_smoke.step);
 
     // Generated CLI surface: the Markdown command reference, the man page, and
     // the shell completions all come from the CommandSpec tree, so they are

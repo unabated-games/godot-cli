@@ -62,6 +62,23 @@ godot-cli scene node add <scene> --parent /root/Main --name HUD --type Control \
   --property grow_vertical --value 2 --project-root .
 ```
 
+## Resources (.tres)
+
+Materials, themes, shapes, and any other Resource are `.tres` files, and they are authored the same way as scenes:
+
+```bash
+godot-cli resource new --output materials/wood.tres --type StandardMaterial3D \
+  --property albedo_color --value "Color(0.6, 0.4, 0.2, 1)" --property roughness --value 0.8 --project-root .
+godot-cli resource sub add themes/main.tres --type StyleBoxFlat \
+  --property bg_color --value "Color(0.1, 0.1, 0.1, 1)" --project-root . --json   # returns the id
+godot-cli resource set-property themes/main.tres --property Button/styles/normal \
+  --value 'SubResource("StyleBoxFlat_xxxxx")' --project-root .
+godot-cli resource ext add themes/main.tres --type FontFile --path res://fonts/ui.ttf --project-root .
+godot-cli resource inspect themes/main.tres --json
+```
+
+Theme entries are `Type/category/name` properties on the resource: `Button/styles/normal`, `Label/colors/font_color`, `Label/font_sizes/font_size`. Do not hand-write `.tres` text.
+
 ## Godot project and scene basics
 
 Things Godot assumes that an agent often does not know:
@@ -82,10 +99,10 @@ After a scene change, `scene validate` proves the file is well formed. To see th
 ```bash
 mkdir -p capture && touch capture/.gdignore          # Godot skips this folder, so frames are not imported
 godot --headless --path . --import --quit          # once after adding files, so Godot assigns UIDs
-godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log --no-header
+godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
 ```
 
-Read the highest-numbered `capture/shot*.png` and `capture/godot.log`. The log holds every `print()`, `push_warning`, `push_error`, and script error with a backtrace; any `ERROR` or `SCRIPT ERROR` line means the change is not done. Without a display, drop `--write-movie` and add `--headless` to get the log alone.
+Read the highest-numbered `capture/shot*.png` and `capture/godot.log`. Sixty frames is one second at 60 FPS, long enough for gravity and a camera to settle; five is enough for a static UI screen. The log holds every `print()`, `push_warning`, `push_error`, and script error with a backtrace; any `ERROR` or `SCRIPT ERROR` line means the change is not done. Without a display, drop `--write-movie` and add `--headless` to get the log alone.
 
 ## Standard workflow
 

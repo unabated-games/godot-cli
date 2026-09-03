@@ -44,7 +44,7 @@ man godot-cli
 Options worth knowing:
 
 ```bash
-./install.sh --version 0.4.1     # pin a release
+./install.sh --version 0.5.0     # pin a release
 ./install.sh --prefix /opt/godot-cli
 ./install.sh --install-skill     # also install the agent skill
 ```

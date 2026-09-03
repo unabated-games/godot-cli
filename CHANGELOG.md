@@ -15,6 +15,21 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-03
+
+### Added
+
+- **Resource authoring.** `resource new --output x.tres --type <Class>` with repeated `--property`/`--value`, `resource sub add|remove`, and `resource ext add|remove`, alongside the existing `resource set-property`, which now targets the `[resource]` section when no target is given (its help said so; it returned a usage error). A material and a shape created this way are byte-identical to Godot's own saves; a theme with a `StyleBoxFlat` sub-resource matches semantically (sub-resource ids are seeded per file). Fixtures saved by Godot 4.8 under `test_fixtures/project/resources/`.
+- Intent recipe `static_body_2d`: a `StaticBody2D` with a `RectangleShape2D` collision of `size` and, with `texture`, a `Sprite2D` tiled across it. The 2D trial built its ground from raw patch ops because no recipe covered it.
+- `failure.details` on a write that fails names the output path (`{"field": "output", "value": "scenes/main.tscn"}`); it used to be a bare `FileNotFound`.
+
+### Fixed
+
+- `scene new` and `resource new` create a missing parent directory instead of failing.
+- A sub-resource added to a `.tres` with no other resources was appended after the `[resource]` section, where Godot does not look for it. Resources now go before the body in both scenes and resource files.
+- `project.godot` came back with the blank lines in the wrong places after any `project` edit: three before the first section, none after a header. The writer now lays the file out the way `ProjectSettings::_save_settings_text` does, and a file Godot saved is byte-identical after a settings edit.
+- The capture recipe's five frames were too few to see gravity or a following camera act; the recipe and rules text use sixty, one second at 60 FPS.
+
 ## [0.4.1] — 2026-09-02
 
 ### Added

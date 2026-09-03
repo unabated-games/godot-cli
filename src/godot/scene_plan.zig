@@ -318,6 +318,76 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         return;
     }
 
+    // A platform or floor: StaticBody2D with a rectangle collision and an
+    // optional sprite. The 2D trial had to build this from raw ops.
+    if (std.mem.eql(u8, recipe, "static_body_2d")) {
+        const parent = try requiredString(step, "parent");
+        const name = try requiredString(step, "name");
+        const body_path = try std.fmt.allocPrint(ops_alloc, "{s}/{s}", .{ parent, name });
+        const shape_hint = try shapeIdHint(ops_alloc, step, name);
+        defer ops_alloc.free(shape_hint);
+        const shape_ref = try std.fmt.allocPrint(ops_alloc, "SubResource(\"RectangleShape2D_{s}\")", .{shape_hint});
+        defer ops_alloc.free(shape_ref);
+        const size = if (step.get("size")) |v| (if (v == .string) v.string else return error.InvalidIntent) else "Vector2(64, 16)";
+
+        {
+            var body_props: std.json.ObjectMap = .{};
+            if (step.get("position")) |pos_value| {
+                if (pos_value != .string) return error.InvalidIntent;
+                try body_props.put(ops_alloc, "position", .{ .string = try ops_alloc.dupe(u8, pos_value.string) });
+            }
+            var body_op = try makeOpObject(ops_alloc, &[_]Field{
+                .{ "op", "node_add" },
+                .{ "parent", parent },
+                .{ "name", name },
+                .{ "type", "StaticBody2D" },
+            });
+            if (body_props.count() > 0) try body_op.object.put(ops_alloc, "properties", .{ .object = body_props });
+            try ops.append(body_op);
+        }
+        {
+            var props: std.json.ObjectMap = .{};
+            try props.put(ops_alloc, "size", .{ .string = try ops_alloc.dupe(u8, size) });
+            var sub_op = try makeOpObject(ops_alloc, &[_]Field{
+                .{ "op", "sub_add" },
+                .{ "type", "RectangleShape2D" },
+                .{ "id_hint", shape_hint },
+            });
+            try sub_op.object.put(ops_alloc, "properties", .{ .object = props });
+            try ops.append(sub_op);
+        }
+        {
+            var props: std.json.ObjectMap = .{};
+            try props.put(ops_alloc, "shape", .{ .string = try ops_alloc.dupe(u8, shape_ref) });
+            var op = try makeOpObject(ops_alloc, &[_]Field{
+                .{ "op", "node_add" },
+                .{ "parent", body_path },
+                .{ "name", "Collision" },
+                .{ "type", "CollisionShape2D" },
+            });
+            try op.object.put(ops_alloc, "properties", .{ .object = props });
+            try ops.append(op);
+        }
+        if (step.get("texture")) |tex| {
+            if (tex != .string) return error.InvalidIntent;
+            var sprite_props: std.json.ObjectMap = .{};
+            try sprite_props.put(ops_alloc, "region_enabled", .{ .bool = true });
+            try sprite_props.put(ops_alloc, "region_rect", .{ .string = try std.fmt.allocPrint(ops_alloc, "Rect2(0, 0, {s})", .{std.mem.trim(u8, size[std.mem.indexOfScalar(u8, size, '(').? + 1 .. size.len - 1], " ")}) });
+            try sprite_props.put(ops_alloc, "texture_repeat", .{ .integer = 2 });
+            var sprite_op = try makeOpObject(ops_alloc, &[_]Field{
+                .{ "op", "node_add" },
+                .{ "parent", body_path },
+                .{ "name", "Sprite" },
+                .{ "type", "Sprite2D" },
+            });
+            try sprite_op.object.put(ops_alloc, "properties", .{ .object = sprite_props });
+            try ops.append(sprite_op);
+            const sprite_path = try std.fmt.allocPrint(ops_alloc, "{s}/Sprite", .{body_path});
+            try appendAssignExt(ops_alloc, ops, sprite_path, "texture", "Texture2D", tex.string, try defaultExtHint(ops_alloc, tex.string, "texture"));
+        }
+        return;
+    }
+
     if (std.mem.eql(u8, recipe, "player_2d")) {
         const parent = try requiredString(step, "parent");
         const name = try requiredString(step, "name");

@@ -18,7 +18,7 @@ mkdir -p capture && touch capture/.gdignore
 A `.gdignore` file makes Godot ignore that folder entirely. Then:
 
 ```bash
-godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log --no-header
+godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
 ```
 
 That launches the project's main scene, writes one PNG per frame as `capture/shot00000000.png`, `capture/shot00000001.png`, and so on, quits after five frames, and writes everything the game printed to `godot.log`. Use the highest-numbered frame; the first one or two can be captured before the scene has drawn.
@@ -71,7 +71,7 @@ The rules file is the place to put this, next to the validate step:
 After a scene change, run the game and check the result:
   mkdir -p capture && touch capture/.gdignore
   godot --headless --path . --import --quit
-  godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 5 --log-file capture/godot.log --no-header
+  godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
 Read the highest-numbered capture/shot*.png and capture/godot.log. Any ERROR or SCRIPT ERROR
 line means the change is not done.
 ```

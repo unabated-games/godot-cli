@@ -283,6 +283,11 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         if (inv.getOption("section")) |section_name| {
             break :blk text_format.document.findSectionIndexByTagName(&doc, section_name) orelse return error.Usage;
         }
+        // A .tres has one [resource] section, and that is what
+        // `resource set-property` means without a target.
+        if (std.mem.eql(u8, kind, "resource")) {
+            break :blk text_format.document.findSectionIndexByTagName(&doc, "resource") orelse return error.Usage;
+        }
         return error.Usage;
     };
 
@@ -588,6 +593,40 @@ fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
         .data = .{ .object = data },
         .messages = &.{},
     };
+}
+
+fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const output_path = inv.getOption("output") orelse return error.Usage;
+    const resource_type = inv.getOption("type") orelse return error.Usage;
+
+    var doc = try scene_edit.createNewResource(cli.allocator, resource_type);
+    defer doc.deinit(cli.allocator);
+    const resource_index = doc.sections.items.len - 1;
+
+    const property_names = try inv.getOptionAll(cli.allocator, "property");
+    defer cli.allocator.free(property_names);
+    const property_values = try inv.getOptionAll(cli.allocator, "value");
+    defer cli.allocator.free(property_values);
+    if (property_names.len != property_values.len) return error.Usage;
+    for (property_names, property_values) |property_name, property_value| {
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+        defer cli.allocator.free(written_value);
+        try text_format.document.setSectionProperty(&doc, cli.allocator, resource_index, property_name, written_value);
+    }
+
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, resource_type) });
+    try data.put(cli.allocator, "property_count", .{ .integer = @intCast(property_names.len) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = try std.fmt.allocPrint(cli.allocator, "created {s} resource {s}", .{ resource_type, output_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
 fn sceneNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -2181,6 +2220,23 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (default: resource)" },
     } ++ save_options;
+    const resource_new_options = [_]spec.OptionSpec{
+        .{ .long = "output", .kind = .path, .description = "Output .tres path (required)" },
+        .{ .long = "type", .kind = .string, .description = "Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)" },
+        .{ .long = "property", .kind = .string, .description = "Property to set on the resource; repeat with --value for several", .repeatable = true },
+        .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
+        .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
+    } ++ withoutOption(&save_options, "output");
+    const resource_sub_add_options = [_]spec.OptionSpec{
+        .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. StyleBoxFlat)" },
+        .{ .long = "property", .kind = .string, .description = "Property to set on the new sub-resource; repeat with --value for several", .repeatable = true },
+        .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
+        .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
+    } ++ save_options;
+    const resource_ext_add_options = [_]spec.OptionSpec{
+        .{ .long = "type", .kind = .string, .description = "Resource type of the external file (e.g. Texture2D, Script)" },
+        .{ .long = "path", .kind = .string, .description = "res:// path of the external file" },
+    } ++ save_options;
     const batch_options = [_]spec.OptionSpec{
         project_root_opt,
     };
@@ -2211,6 +2267,29 @@ pub fn resourceCommands() spec.CommandSpec {
         .name = "resource",
         .summary = "Inspect and edit Godot resource files",
         .children = &.{
+            .{
+                .name = "new",
+                .summary = "Create a new .tres resource file",
+                .description = "Writes a gd_resource header and a [resource] section. Repeat --property/--value for several properties. Add sub-resources with resource sub add and external files with resource ext add.",
+                .options = resource_new_options,
+                .handler = resourceNewHandler,
+            },
+            .{
+                .name = "sub",
+                .summary = "Sub-resources embedded in a .tres",
+                .children = &.{
+                    .{ .name = "add", .summary = "Add a sub_resource; reference it as SubResource(\"<id>\")", .options = &resource_sub_add_options, .handler = sceneSubAddHandler },
+                    .{ .name = "remove", .summary = "Remove a sub_resource by id", .description = "Takes the file path and the resource id. Fails with referrer list if the id is still referenced.", .options = &save_options, .handler = sceneSubRemoveHandler },
+                },
+            },
+            .{
+                .name = "ext",
+                .summary = "External resource references in a .tres",
+                .children = &.{
+                    .{ .name = "add", .summary = "Register an external file; reference it as ExtResource(\"<id>\")", .options = &resource_ext_add_options, .handler = sceneExtAddHandler },
+                    .{ .name = "remove", .summary = "Remove an ext_resource by id", .description = "Takes the file path and the resource id. Fails with referrer list if the id is still referenced.", .options = &save_options, .handler = sceneExtRemoveHandler },
+                },
+            },
             .{
                 .name = "inspect",
                 .summary = "Parse a .tres file and report structure and ID issues",

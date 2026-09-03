@@ -25,7 +25,7 @@ $ godot-cli scene new --output level.tscn --root-name Level --root-type Node2D
 $ godot-cli scene node add level.tscn --parent /root/Level --name Player --type CharacterBody2D
 $ godot-cli scene instance add level.tscn --parent /root/Level --scene res://ui/hud.tscn --name HUD
 $ godot-cli scene validate level.tscn --project-root . --json
-{"ok":true,"version":"0.4.1","command":["scene","validate"],"data":{"path":"level.tscn","issues":[]},...}
+{"ok":true,"version":"0.5.0","command":["scene","validate"],"data":{"path":"level.tscn","issues":[]},...}
 ```
 
 That scene is a normal Godot scene: the hierarchy lives in the file, the way a

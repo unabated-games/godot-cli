@@ -51,6 +51,7 @@ NAV = [
             ("how-to/batch-edits.md", "Batch edits with intents and patches"),
             ("how-to/build-ui.md", "Build UI"),
             ("how-to/project-settings.md", "Edit project settings"),
+            ("how-to/author-resources.md", "Author .tres resources"),
             ("how-to/review-changes.md", "Review and validate changes"),
             ("how-to/run-and-capture.md", "Run the game and capture output"),
             ("how-to/agent-setup.md", "Set up an agent"),

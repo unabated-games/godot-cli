@@ -1,0 +1,10 @@
+[gd_resource type="Theme" format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wvktn"]
+bg_color = Color(0.1, 0.1, 0.1, 1)
+corner_radius_top_left = 6
+
+[resource]
+Button/styles/normal = SubResource("StyleBoxFlat_wvktn")
+Label/colors/font_color = Color(1, 1, 1, 1)
+Label/font_sizes/font_size = 20

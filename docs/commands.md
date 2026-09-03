@@ -81,6 +81,13 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli scene round-trip`](#godot-cli-scene-round-trip) | Parse and rewrite a scene; fail if structure is not preserved |
 | [`godot-cli scene compare-godot`](#godot-cli-scene-compare-godot) | Compare a scene to a Godot headless save (semantic match) |
 | [`godot-cli resource`](#godot-cli-resource) | Inspect and edit Godot resource files |
+| [`godot-cli resource new`](#godot-cli-resource-new) | Create a new .tres resource file |
+| [`godot-cli resource sub`](#godot-cli-resource-sub) | Sub-resources embedded in a .tres |
+| [`godot-cli resource sub add`](#godot-cli-resource-sub-add) | Add a sub_resource; reference it as SubResource("&lt;id&gt;") |
+| [`godot-cli resource sub remove`](#godot-cli-resource-sub-remove) | Remove a sub_resource by id |
+| [`godot-cli resource ext`](#godot-cli-resource-ext) | External resource references in a .tres |
+| [`godot-cli resource ext add`](#godot-cli-resource-ext-add) | Register an external file; reference it as ExtResource("&lt;id&gt;") |
+| [`godot-cli resource ext remove`](#godot-cli-resource-ext-remove) | Remove an ext_resource by id |
 | [`godot-cli resource inspect`](#godot-cli-resource-inspect) | Parse a .tres file and report structure and ID issues |
 | [`godot-cli resource validate`](#godot-cli-resource-validate) | Validate resource IDs and references (fails on errors) |
 | [`godot-cli resource validate-batch`](#godot-cli-resource-validate-batch) | Validate multiple resource files (aggregated JSON, exit 1 on any error) |
@@ -1145,6 +1152,9 @@ godot-cli resource [options]
 
 | Subcommand | Summary |
 |------------|---------|
+| [`new`](#godot-cli-resource-new) | Create a new .tres resource file |
+| [`sub`](#godot-cli-resource-sub) | Sub-resources embedded in a .tres |
+| [`ext`](#godot-cli-resource-ext) | External resource references in a .tres |
 | [`inspect`](#godot-cli-resource-inspect) | Parse a .tres file and report structure and ID issues |
 | [`validate`](#godot-cli-resource-validate) | Validate resource IDs and references (fails on errors) |
 | [`validate-batch`](#godot-cli-resource-validate-batch) | Validate multiple resource files (aggregated JSON, exit 1 on any error) |
@@ -1153,6 +1163,162 @@ godot-cli resource [options]
 | [`retarget-ext`](#godot-cli-resource-retarget-ext) | Replace ext_resource paths across one or more files |
 | [`round-trip`](#godot-cli-resource-round-trip) | Parse and rewrite a resource file; fail if structure is not preserved |
 | [`compare-godot`](#godot-cli-resource-compare-godot) | Compare a resource to a Godot headless save (semantic match) |
+
+### `godot-cli resource new`
+
+Create a new .tres resource file
+
+Writes a gd_resource header and a [resource] section. Repeat --property/--value for several properties. Add sub-resources with resource sub add and external files with resource ext add.
+
+```
+godot-cli resource new [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--output` | `<path>` | Output .tres path (required) | — |
+| `--type` | `<value>` | Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D) | — |
+| `--property` | `<value>` | Property to set on the resource; repeat with --value for several | — |
+| `--value` | `<value>` | Property value (Variant text), one per --property | — |
+| `--raw-value` | — | Write property values verbatim | — |
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli resource sub`
+
+Sub-resources embedded in a .tres
+
+```
+godot-cli resource sub [options]
+```
+
+**Subcommands**
+
+| Subcommand | Summary |
+|------------|---------|
+| [`add`](#godot-cli-resource-sub-add) | Add a sub_resource; reference it as SubResource("&lt;id&gt;") |
+| [`remove`](#godot-cli-resource-sub-remove) | Remove a sub_resource by id |
+
+### `godot-cli resource sub add`
+
+Add a sub_resource; reference it as SubResource("&lt;id&gt;")
+
+```
+godot-cli resource sub add [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--type` | `<value>` | Godot resource class (e.g. StyleBoxFlat) | — |
+| `--property` | `<value>` | Property to set on the new sub-resource; repeat with --value for several | — |
+| `--value` | `<value>` | Property value (Variant text), one per --property | — |
+| `--raw-value` | — | Write property values verbatim | — |
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli resource sub remove`
+
+Remove a sub_resource by id
+
+Takes the file path and the resource id. Fails with referrer list if the id is still referenced.
+
+```
+godot-cli resource sub remove [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli resource ext`
+
+External resource references in a .tres
+
+```
+godot-cli resource ext [options]
+```
+
+**Subcommands**
+
+| Subcommand | Summary |
+|------------|---------|
+| [`add`](#godot-cli-resource-ext-add) | Register an external file; reference it as ExtResource("&lt;id&gt;") |
+| [`remove`](#godot-cli-resource-ext-remove) | Remove an ext_resource by id |
+
+### `godot-cli resource ext add`
+
+Register an external file; reference it as ExtResource("&lt;id&gt;")
+
+```
+godot-cli resource ext add [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--type` | `<value>` | Resource type of the external file (e.g. Texture2D, Script) | — |
+| `--path` | `<value>` | res:// path of the external file | — |
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli resource ext remove`
+
+Remove an ext_resource by id
+
+Takes the file path and the resource id. Fails with referrer list if the id is still referenced.
+
+```
+godot-cli resource ext remove [options] [args...]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
 
 ### `godot-cli resource inspect`
 

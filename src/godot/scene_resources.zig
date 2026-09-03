@@ -415,14 +415,18 @@ fn findResourceInsertIndex(doc: *const document.Document, section_name: []const 
         }
         if (last_ext) |index| return index + 1;
 
-        for (doc.sections.items, 0..) |item, index| {
-            if (std.mem.eql(u8, item.header.name, "node")) return index;
-        }
-        return doc.sections.items.len;
+        return firstBodySectionIndex(doc);
     }
 
+    return firstBodySectionIndex(doc);
+}
+
+/// Where resources stop and the body starts: the first `[node]` in a scene,
+/// the `[resource]` section in a .tres. Sub-resources appended after the
+/// `[resource]` body used to land there for a .tres with no other resources.
+fn firstBodySectionIndex(doc: *const document.Document) usize {
     for (doc.sections.items, 0..) |item, index| {
-        if (std.mem.eql(u8, item.header.name, "node")) return index;
+        if (std.mem.eql(u8, item.header.name, "node") or std.mem.eql(u8, item.header.name, "resource")) return index;
     }
     return doc.sections.items.len;
 }

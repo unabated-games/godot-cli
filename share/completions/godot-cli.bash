@@ -42,7 +42,13 @@ _godot_cli_children() {
             echo "list show copy"
             ;;
         'resource')
-            echo "inspect validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
+            echo "new sub ext inspect validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
+            ;;
+        'resource sub')
+            echo "add remove"
+            ;;
+        'resource ext')
+            echo "add remove"
             ;;
         'catalog')
             echo "add relink scan list show validate search export"
@@ -180,6 +186,21 @@ _godot_cli_options() {
             ;;
         'scene compare-godot')
             echo "--reference"
+            ;;
+        'resource new')
+            echo "--output --type --property --value --raw-value --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'resource sub add')
+            echo "--type --property --value --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'resource sub remove')
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'resource ext add')
+            echo "--type --path --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'resource ext remove')
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource inspect')
             echo "--project-root --no-validate --parse-properties --no-parse-properties"
@@ -363,6 +384,11 @@ _godot_cli_takes_args() {
         'scene retarget-ext') return 0 ;;
         'scene round-trip') return 0 ;;
         'scene compare-godot') return 0 ;;
+        'resource new') return 0 ;;
+        'resource sub add') return 0 ;;
+        'resource sub remove') return 0 ;;
+        'resource ext add') return 0 ;;
+        'resource ext remove') return 0 ;;
         'resource inspect') return 0 ;;
         'resource validate') return 0 ;;
         'resource validate-batch') return 0 ;;

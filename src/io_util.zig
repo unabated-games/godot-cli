@@ -18,6 +18,11 @@ pub fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
 /// Writing to a sibling temporary and renaming means an interrupted run leaves
 /// the original untouched.
 pub fn writeFileAtomic(io: std.Io, path: []const u8, data: []const u8) !void {
+    // `scene new --output scenes/main.tscn` in a project with no scenes/ folder
+    // used to fail with a bare FileNotFound; a missing parent is created.
+    if (std.fs.path.dirname(path)) |parent| {
+        if (parent.len != 0) std.Io.Dir.cwd().createDirPath(io, parent) catch {};
+    }
     var atomic = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .replace = true });
     defer atomic.deinit(io);
 

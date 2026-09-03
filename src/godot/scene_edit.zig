@@ -61,6 +61,26 @@ pub fn createNewScene(allocator: std.mem.Allocator, root_name: []const u8, root_
     return doc;
 }
 
+/// A new `.tres`: a `gd_resource` header and an empty `[resource]` section.
+/// Godot writes `format=3` and no `load_steps` for a resource with nothing
+/// else in it, so neither does this.
+pub fn createNewResource(allocator: std.mem.Allocator, resource_type: []const u8) Error!document.Document {
+    var doc = document.Document.init(allocator);
+    errdefer doc.deinit(allocator);
+
+    var header = tag.Tag{ .name = try allocator.dupe(u8, "gd_resource"), .fields = .{} };
+    errdefer header.deinit(allocator);
+    try header.setStringField(allocator, "type", resource_type);
+    try header.setIntegerField(allocator, "format", 3);
+    try doc.sections.append(allocator, .{ .line = 0, .leading_blank_lines = 0, .header = header, .properties = .empty });
+
+    var body = tag.Tag{ .name = try allocator.dupe(u8, "resource"), .fields = .{} };
+    errdefer body.deinit(allocator);
+    try doc.sections.append(allocator, .{ .line = 0, .leading_blank_lines = 1, .header = body, .properties = .empty });
+
+    return doc;
+}
+
 pub fn addNode(
     allocator: std.mem.Allocator,
     doc: *document.Document,

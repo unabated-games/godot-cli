@@ -1,6 +1,6 @@
 {
   "name": "godot-cli",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "request_envelope": {
@@ -1153,6 +1153,149 @@
       "options": [
         "--dry-run"
       ]
+    },
+    {
+      "name": "resource_new",
+      "argv": [
+        "resource",
+        "new",
+        "--output",
+        "<path.tres>",
+        "--type",
+        "<Class>"
+      ],
+      "options": [
+        "--property",
+        "--value",
+        "--raw-value",
+        "--project-root",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "resource",
+          "new",
+          "--output",
+          "materials/wood.tres",
+          "--type",
+          "StandardMaterial3D",
+          "--property",
+          "roughness",
+          "--value",
+          "0.8",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "resource_sub_add",
+      "argv": [
+        "resource",
+        "sub",
+        "add",
+        "<file.tres>",
+        "--type",
+        "<Class>"
+      ],
+      "options": [
+        "--property",
+        "--value",
+        "--raw-value",
+        "--project-root",
+        "--output",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "resource",
+          "sub",
+          "add",
+          "themes/main.tres",
+          "--type",
+          "StyleBoxFlat",
+          "--property",
+          "bg_color",
+          "--value",
+          "Color(0.1, 0.1, 0.1, 1)",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "resource_sub_remove",
+      "argv": [
+        "resource",
+        "sub",
+        "remove",
+        "<file.tres>",
+        "<id>"
+      ],
+      "json_request": {
+        "argv": [
+          "resource",
+          "sub",
+          "remove",
+          "themes/main.tres",
+          "StyleBoxFlat_vpj74",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "resource_ext_add",
+      "argv": [
+        "resource",
+        "ext",
+        "add",
+        "<file.tres>",
+        "--type",
+        "<Class>",
+        "--path",
+        "<res://path>"
+      ],
+      "json_request": {
+        "argv": [
+          "resource",
+          "ext",
+          "add",
+          "themes/main.tres",
+          "--type",
+          "FontFile",
+          "--path",
+          "res://fonts/ui.ttf",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "resource_ext_remove",
+      "argv": [
+        "resource",
+        "ext",
+        "remove",
+        "<file.tres>",
+        "<id>"
+      ],
+      "json_request": {
+        "argv": [
+          "resource",
+          "ext",
+          "remove",
+          "themes/main.tres",
+          "1_abc12",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
     },
     {
       "name": "catalog_add",

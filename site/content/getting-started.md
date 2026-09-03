@@ -29,7 +29,7 @@ The installer downloads the release archive for your platform, checks it against
 
 Add the `source` line to `~/.zshrc` or `~/.bashrc` to keep it.
 
-To pin a version, pass `--version 0.4.1`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
+To pin a version, pass `--version 0.5.0`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
 
 Windows has no installer script. Unpack the `.zip` from the [releases page](https://github.com/unabated-games/godot-cli/releases) and put `bin\` on `PATH`.
 

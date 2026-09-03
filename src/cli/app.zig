@@ -140,6 +140,13 @@ pub const App = struct {
             // Field and value errors from patches and intents carry the
             // context an agent needs to fix its own document.
             const name = @errorName(err);
+            if (std.mem.eql(u8, name, "FileNotFound") or std.mem.eql(u8, name, "Io") or std.mem.eql(u8, name, "AccessDenied")) {
+                if (error_details.takeJson(self.allocator) catch null) |details| {
+                    failure.kind = "io";
+                    failure.message = "could not write the output file";
+                    failure.details = .{ .object = details };
+                }
+            }
             if (std.mem.eql(u8, name, "InvalidPropertyValue") or
                 std.mem.eql(u8, name, "MissingPatchField") or
                 std.mem.eql(u8, name, "MissingIntentField"))
