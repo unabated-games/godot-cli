@@ -4,6 +4,9 @@ pub const ValueKind = enum {
     flag,
     string,
     path,
+    /// A whole number; the parser rejects anything else, and the MCP schema
+    /// says `integer` so a client validates before the call is made.
+    integer,
 };
 
 pub const OptionSpec = struct {

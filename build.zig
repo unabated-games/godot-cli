@@ -187,6 +187,12 @@ pub fn build(b: *std.Build) void {
         \\grep -q 'z_index = 3' "$t/main.tscn" && grep -q 'position = Vector2(1, 2)' "$t/main.tscn" &&
         \\out=$(./zig-out/bin/godot-cli batch --json-body "{\"steps\":[{\"argv\":[\"scene\",\"set-property\",\"$t/main.tscn\",\"--node\",\"/root/Main/Box\",\"--property\",\"z_index\",\"--value\",\"4\",\"--json\"]}]}" --json) &&
         \\echo "$out" | grep -q '"property":"z_index"' &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"teleport","parent":"/root/Main","name":"X"}]}' --json | grep -q '"kind":"unknown_recipe"' &&
+        \\! ./zig-out/bin/godot-cli project new --project-root "$t/n" --name N --width abc --json >/dev/null 2>&1 &&
+        \\./zig-out/bin/godot-cli scene plan --intent-json '{"steps":[{"recipe":"instance_catalog","parent":"/root/Root","name":"Btn","catalog_id":"ui/button","properties":{"visible":false}}]}' --project-root test_fixtures/project --json | grep -q 'visible' &&
+        \\./zig-out/bin/godot-cli scene instance add "$t/main.tscn" --parent /root/Main --name Btn --scene res://main.tscn --properties '{"visible":false}' --project-root "$t" --json | grep -q '"ok":true' &&
+        \\grep -q 'visible = false' "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Bad --type Label --properties '{"text":"bare"}' --dry-run --json | grep -q '"field":"text"' &&
         \\rm -rf "$t"
     });
     batch_fixes_smoke.setCwd(b.path("."));

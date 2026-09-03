@@ -250,9 +250,10 @@ fn formatPropertyValueForWrite(
     allocator: std.mem.Allocator,
     property_value: []const u8,
     raw: bool,
+    property_name: []const u8,
 ) ![]const u8 {
     if (raw) return try allocator.dupe(u8, property_value);
-    try scene_patch.rejectRawVariantText(allocator, "value", property_value);
+    try scene_patch.rejectRawVariantText(allocator, property_name, property_value);
     var parsed = try variant.parse.parsePropertyValue(allocator, property_value);
     const formatted = try parsed.formatForWrite(allocator);
     parsed.deinit(allocator);
@@ -315,7 +316,7 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         return error.Usage;
     };
 
-    const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+    const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
     defer cli.allocator.free(written_value);
 
     try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, property_name, written_value);
@@ -633,7 +634,7 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
         defer cli.allocator.free(written_value);
         try text_format.document.setSectionProperty(&doc, cli.allocator, resource_index, property_name, written_value);
     }
@@ -713,7 +714,7 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
         defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, property_name, written_value);
     }
@@ -1035,7 +1036,7 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"));
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
         errdefer cli.allocator.free(written_value);
         try properties.append(cli.allocator, .{ .name = property_name, .value = written_value });
     }
@@ -1348,6 +1349,14 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
 
     if (inv.flag("unique-name")) {
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, "unique_name_in_owner", "true");
+    }
+
+    const instance_pairs = try collectPropertyPairs(cli, inv);
+    defer cli.allocator.free(instance_pairs);
+    for (instance_pairs) |pair| {
+        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name);
+        defer cli.allocator.free(written_value);
+        try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, pair.name, written_value);
     }
 
     if (!inv.flag("dry-run")) {
@@ -1887,7 +1896,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "node", .kind = .string, .description = "Target node by viewport path (e.g. /root/Main/Player)" },
         .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },
         .{ .long = "section-id", .kind = .string, .description = "Target an ext_resource or sub_resource by its id (e.g. CapsuleShape2D_abc12)" },
-        .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
+        .{ .long = "section-line", .kind = .integer, .description = "Target section by header line number" },
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (e.g. resource)" },
     } ++ save_options;
     const batch_options = [_]spec.OptionSpec{
@@ -2002,6 +2011,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves scene path; requires --project-root)" },
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the instance root (%Name from owner scripts)" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value to set on the instance root (anchors, offsets, overrides)" },
     } ++ save_options;
     // save_options carries an --output that defaults to overwriting the input,
     // which scene new redefines as required. Dropping it here keeps the option
@@ -2035,7 +2045,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "deferred", .kind = .flag, .description = "CONNECT_DEFERRED: call at idle time" },
         .{ .long = "one-shot", .kind = .flag, .description = "CONNECT_ONE_SHOT: disconnect after the first emission" },
         .{ .long = "binds", .kind = .string, .description = "Extra arguments as Godot array text, e.g. '[\"quit\"]'" },
-        .{ .long = "unbinds", .kind = .string, .description = "Number of trailing signal arguments to drop" },
+        .{ .long = "unbinds", .kind = .integer, .description = "Number of trailing signal arguments to drop" },
     } ++ save_options;
     const connection_remove_options = [_]spec.OptionSpec{
         .{ .long = "from", .kind = .string, .description = "Emitting node, viewport path" },
@@ -2241,7 +2251,13 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "plan",
                 .summary = "Expand intent JSON to a patch and preview (no write)",
-                .description = "Accepts --intent or --patch. Optional scene path positional dry-runs the patch. See docs/agent_scene_authoring.md.",
+                .description =
+                \\Expands an intent into patch ops and previews them; with a scene path, dry-runs the patch against that scene. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json).
+                \\
+                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name"; add_node takes "type" and an optional "properties" object; instance_catalog takes "catalog_id"; connect takes "from", "signal", "to", "method".
+                \\
+                \\A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object, numbers and booleans are JSON and a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
+                ,
                 .options = &plan_options,
                 .handler = scenePlanHandler,
                 .positionals = &pos.file_optional,
@@ -2249,7 +2265,11 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "apply",
                 .summary = "Apply a declarative JSON patch to a scene",
-                .description = "Batch node/resource/instance edits. Use --patch or --intent. See docs/agent_scene_authoring.md.",
+                .description =
+                \\Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run.
+                \\
+                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
+                ,
                 .options = &apply_options,
                 .handler = sceneApplyHandler,
                 .positionals = &pos.scene_file,
@@ -2349,7 +2369,7 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "property", .kind = .string, .description = "Property name to set" },
         .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
-        .{ .long = "section-line", .kind = .string, .description = "Target section by header line number" },
+        .{ .long = "section-line", .kind = .integer, .description = "Target section by header line number" },
         .{ .long = "section", .kind = .string, .description = "Target section by tag name (default: resource)" },
     } ++ save_options;
     const resource_new_options = [_]spec.OptionSpec{

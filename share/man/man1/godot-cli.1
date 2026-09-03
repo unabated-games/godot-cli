@@ -648,7 +648,7 @@ CONNECT_ONE_SHOT: disconnect after the first emission
 \fB\-\-binds\fR \fIvalue\fR
 Extra arguments as Godot array text, e.g. '["quit"]'
 .TP
-\fB\-\-unbinds\fR \fIvalue\fR
+\fB\-\-unbinds\fR \fIn\fR
 Number of trailing signal arguments to drop
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
@@ -753,6 +753,10 @@ Mark the instance editable in the parent scene ([editable path=...])
 \fB\-\-unique\-name\fR
 Set unique_name_in_owner on the instance root (%Name from owner
 scripts)
+.TP
+\fB\-\-properties\fR \fIvalue\fR
+JSON object of property name to value to set on the instance
+root (anchors, offsets, overrides)
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -863,8 +867,26 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene plan
 Expand intent JSON to a patch and preview (no write)
 .PP
-Accepts \-\-intent or \-\-patch. Optional scene path positional
-dry\-runs the patch. See docs/agent_scene_authoring.md.
+Expands an intent into patch ops and previews them; with a
+scene path, dry\-runs the patch against that scene. Give the
+document as a file (\-\-intent, \-\-patch) or inline (\-\-intent\-json,
+\-\-patch\-json).
+
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main",
+"name": "Player"}]}. Recipes: add_node, node_set, assign_ext,
+connect, instance_catalog, instance_scene, instance_override,
+catalog_button, player_2d, static_body_2d, camera_2d, ui_panel,
+tilemap_layer, audio_player. Every recipe takes "parent" and
+"name"; add_node takes "type" and an optional "properties"
+object; instance_catalog takes "catalog_id"; connect takes
+"from", "signal", "to", "method".
+
+A patch is {"ops": [{"op": "node_add", "parent": "/root/Main",
+"name": "HUD", "type": "CanvasLayer", "properties": {"visible":
+false}}]}. In a properties object, numbers and booleans are
+JSON and a string carries its own quotes: "text": "\e"Score\e"".
+Full reference: agent_scene_authoring.md, served over MCP as
+godot\-cli://docs/scene\-authoring.
 .TP
 \fIfile\fR
 Scene file to dry\-run the expanded patch against (optional)
@@ -889,8 +911,20 @@ Godot project root for uid_cache lookup and res:// seed path
 .SS godot\-cli scene apply
 Apply a declarative JSON patch to a scene
 .PP
-Batch node/resource/instance edits. Use \-\-patch or \-\-intent.
-See docs/agent_scene_authoring.md.
+Applies a patch, or an intent expanded to one, as a single
+write; if any op fails the file is untouched. Give the document
+as a file (\-\-intent, \-\-patch) or inline (\-\-intent\-json,
+\-\-patch\-json); preview first with \-\-dry\-run.
+
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main",
+"name": "Player"}]}. Recipes: add_node, node_set, assign_ext,
+connect, instance_catalog, instance_scene, instance_override,
+catalog_button, player_2d, static_body_2d, camera_2d, ui_panel,
+tilemap_layer, audio_player. A patch is {"ops": [{"op": "node_add",
+"parent": "/root/Main", "name": "HUD", "type": "CanvasLayer",
+"properties": {"visible": false}}]}. In a properties object
+a string carries its own quotes: "text": "\e"Score\e"". Full
+reference: agent_scene_authoring.md, served over MCP as godot\-cli://docs/scene\-authoring.
 .TP
 \fIfile\fR
 Scene file (.tscn)
@@ -1031,7 +1065,7 @@ Target node section by name attribute
 \fB\-\-section\-id\fR \fIvalue\fR
 Target an ext_resource or sub_resource by its id (e.g. CapsuleShape2D_abc12)
 .TP
-\fB\-\-section\-line\fR \fIvalue\fR
+\fB\-\-section\-line\fR \fIn\fR
 Target section by header line number
 .TP
 \fB\-\-section\fR \fIvalue\fR
@@ -1441,7 +1475,7 @@ Property value (normalized unless \-\-raw\-value)
 \fB\-\-raw\-value\fR
 Write value verbatim without Variant normalization
 .TP
-\fB\-\-section\-line\fR \fIvalue\fR
+\fB\-\-section\-line\fR \fIn\fR
 Target section by header line number
 .TP
 \fB\-\-section\fR \fIvalue\fR
@@ -1732,10 +1766,10 @@ Project name (application/config/name)
 \fB\-\-main\-scene\fR \fIvalue\fR
 Main scene as a res:// path (application/run/main_scene)
 .TP
-\fB\-\-width\fR \fIvalue\fR
+\fB\-\-width\fR \fIn\fR
 Viewport width in pixels (display/window/size/viewport_width)
 .TP
-\fB\-\-height\fR \fIvalue\fR
+\fB\-\-height\fR \fIn\fR
 Viewport height in pixels (display/window/size/viewport_height)
 .TP
 \fB\-\-dry\-run\fR
@@ -1767,12 +1801,25 @@ Godot project root (directory containing project.godot)
 .SS godot\-cli project apply
 Apply unified project intent JSON (input, settings, autoload,
 plugins, rendering, physics)
+.PP
+One intent with any of the sections: {"settings": {"application":
+{"run/main_scene": "res://scenes/main.tscn"}}, "input": {"actions":
+[{"name": "move_left", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, "autoload": {"autoloads": [{"name":
+"GameState", "path": "res://scripts/game_state.gd", "singleton":
+true}]}, "physics": {"engine_3d": "Jolt Physics"}}. Each section
+takes the same document as the matching project <section> apply
+command. Give it as a file (\-\-intent) or inline (\-\-intent\-json).
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file
+Intent JSON file: settings {"<section>": {"<key>": value}},
+input {"actions": [{"name", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
+"path", "singleton"}]}, plugins, rendering, physics; see the
+examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -1796,7 +1843,11 @@ Apply input map intent JSON (merge/replace per action)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file
+Intent JSON file: settings {"<section>": {"<key>": value}},
+input {"actions": [{"name", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
+"path", "singleton"}]}, plugins, rendering, physics; see the
+examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -1860,7 +1911,11 @@ Apply settings intent JSON (per\-key merge)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file
+Intent JSON file: settings {"<section>": {"<key>": value}},
+input {"actions": [{"name", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
+"path", "singleton"}]}, plugins, rendering, physics; see the
+examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -1892,7 +1947,11 @@ Apply autoload intent JSON (merge by name; optional replace_all)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file
+Intent JSON file: settings {"<section>": {"<key>": value}},
+input {"actions": [{"name", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
+"path", "singleton"}]}, plugins, rendering, physics; see the
+examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -1949,7 +2008,11 @@ Apply plugin intent JSON (enable/disable lists)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file
+Intent JSON file: settings {"<section>": {"<key>": value}},
+input {"actions": [{"name", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
+"path", "singleton"}]}, plugins, rendering, physics; see the
+examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -1978,7 +2041,11 @@ Apply rendering intent JSON (friendly aliases)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file
+Intent JSON file: settings {"<section>": {"<key>": value}},
+input {"actions": [{"name", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
+"path", "singleton"}]}, plugins, rendering, physics; see the
+examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file
@@ -2007,7 +2074,11 @@ Apply physics intent JSON (friendly aliases)
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file
+Intent JSON file: settings {"<section>": {"<key>": value}},
+input {"actions": [{"name", "events": [{"type": "key", "keycode":
+"A", "physical": true}]}]}, autoload {"autoloads": [{"name",
+"path", "singleton"}]}, plugins, rendering, physics; see the
+examples
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent JSON itself, instead of a file

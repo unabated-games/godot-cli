@@ -26,6 +26,8 @@ Common `project.godot` keys: `application` → `run/main_scene`, `config/name`; 
 
 Agents may pass `--project-root .` on all scene commands when working inside a Godot project; it is only *required* for writes, catalog, and validation that touches project paths.
 
+Through the MCP server there is no `project-root` argument. A server started with `--project-root` is bound to that project, adds the option to every call, and refuses paths outside it; `project_show` reports the absolute root.
+
 
 ## Rules
 
@@ -88,8 +90,8 @@ Read the highest-numbered `capture/shot*.png` and `capture/godot.log`. Any `ERRO
 
 | File | When |
 |------|------|
-| `agent_godot_basics.md` | Before the first UI or level: what a project is, one root per scene, why `anchors_preset` alone leaves a Control at 0 by 0, which containers stack children, the capture recipe in full |
-| `agent_scene_authoring.md` | Every recipe and patch op, resources, moving files, UI editor parity, the follow-ups table, anti-patterns |
-| `agent_batch_commands.md` | Several commands in one process, with `stop`, `continue`, or `atomic` |
+| `agent_godot_basics.md` (MCP: `godot-cli://docs/godot-basics`) | Before the first UI or level: what a project is, one root per scene, why `anchors_preset` alone leaves a Control at 0 by 0, which containers stack children, the capture recipe in full |
+| `agent_scene_authoring.md` (MCP: `godot-cli://docs/scene-authoring`) | Every recipe and patch op, resources, moving files, UI editor parity, the follow-ups table, anti-patterns |
+| `agent_batch_commands.md` (MCP: `godot-cli://docs/batch`) | Several commands in one process, with `stop`, `continue`, or `atomic` |
 | `mcp_tools.json` | JSON request shape for every command |
-| `examples/intents/` | Copy-paste intents: `player_with_icon.json`, `wasd_movement.json`, `project_bootstrap.json`, `hud_top_bar.json` |
+| `examples/intents/` (MCP: `godot-cli://examples/intents/<name>.json`) | Copy-paste intents: `player_with_icon.json`, `wasd_movement.json`, `project_bootstrap.json`, `hud_top_bar.json` |

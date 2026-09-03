@@ -199,6 +199,10 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             const last = &ops.items[ops.items.len - 1];
             try last.object.put(ops_alloc, "editable", .{ .bool = true });
         }
+        if (step.get("properties")) |props| {
+            const last = &ops.items[ops.items.len - 1];
+            try last.object.put(ops_alloc, "properties", props);
+        }
         return;
     }
 
@@ -212,6 +216,10 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         if (readBool(step.get("editable")) orelse false) {
             const last = &ops.items[ops.items.len - 1];
             try last.object.put(ops_alloc, "editable", .{ .bool = true });
+        }
+        if (step.get("properties")) |props| {
+            const last = &ops.items[ops.items.len - 1];
+            try last.object.put(ops_alloc, "properties", props);
         }
         return;
     }
@@ -646,7 +654,34 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         return;
     }
 
+    error_details.record(.{
+        .op = recipe,
+        .field = "recipe",
+        .value = recipe,
+        .hint = "unknown recipe; known: " ++ recipe_names_text,
+    });
     return error.UnknownRecipe;
+}
+
+/// Every recipe `expandRecipe` accepts, in the order the docs list them. The
+/// command descriptions repeat this list; a test keeps the two in step.
+pub const recipe_names = [_][]const u8{ "add_node", "node_set", "assign_ext", "connect", "instance_catalog", "instance_scene", "instance_override", "catalog_button", "player_2d", "static_body_2d", "camera_2d", "ui_panel", "tilemap_layer", "audio_player" };
+pub const recipe_names_text = "add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player";
+
+test "every listed recipe is one expandRecipe accepts" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    for (recipe_names) |name| {
+        var ops: std.json.Array = .init(arena);
+        const step: std.json.ObjectMap = .{};
+        // A recipe with no fields fails on a missing field, never on its name.
+        expandRecipe(arena, name, step, &ops) catch |err| {
+            try std.testing.expect(err != error.UnknownRecipe);
+        };
+    }
+    var ops: std.json.Array = .init(arena);
+    try std.testing.expectError(error.UnknownRecipe, expandRecipe(arena, "teleport", .{}, &ops));
 }
 
 const Field = struct { []const u8, []const u8 };

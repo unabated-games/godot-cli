@@ -106,6 +106,7 @@ fn printOption(writer: *std.Io.Writer, opt: spec.OptionSpec) std.Io.Writer.Error
         .flag => "",
         .string => " <value>",
         .path => " <path>",
+        .integer => " <n>",
     };
 
     // Pad the whole label — flag, short form, and value placeholder together —

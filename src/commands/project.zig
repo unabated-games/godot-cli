@@ -791,6 +791,9 @@ fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    if (std.Io.Dir.cwd().realPathFileAlloc(cli.io, root, cli.allocator)) |absolute| {
+        try data.put(cli.allocator, "project_root", .{ .string = absolute });
+    } else |_| {}
     if (summary.project_name) |name| try data.put(cli.allocator, "project_name", .{ .string = try cli.allocator.dupe(u8, name) });
     if (summary.main_scene) |scene| try data.put(cli.allocator, "main_scene", .{ .string = try cli.allocator.dupe(u8, scene) });
     try data.put(cli.allocator, "input_action_count", .{ .integer = @intCast(summary.input_action_count) });
@@ -941,8 +944,8 @@ const new_options = [_]spec.OptionSpec{
     .{ .long = "project-root", .kind = .path, .description = "Folder to create the project in (default: current directory)" },
     .{ .long = "name", .kind = .string, .description = "Project name (application/config/name)" },
     .{ .long = "main-scene", .kind = .string, .description = "Main scene as a res:// path (application/run/main_scene)" },
-    .{ .long = "width", .kind = .string, .description = "Viewport width in pixels (display/window/size/viewport_width)" },
-    .{ .long = "height", .kind = .string, .description = "Viewport height in pixels (display/window/size/viewport_height)" },
+    .{ .long = "width", .kind = .integer, .description = "Viewport width in pixels (display/window/size/viewport_width)" },
+    .{ .long = "height", .kind = .integer, .description = "Viewport height in pixels (display/window/size/viewport_height)" },
     .{ .long = "dry-run", .kind = .flag, .description = "Report what would be written without creating the file" },
 };
 
@@ -953,7 +956,7 @@ pub fn commands() spec.CommandSpec {
 
     const intent_apply_options = [_]spec.OptionSpec{
         .{ .long = "project-root", .kind = .path, .description = "Godot project root (directory containing project.godot)" },
-        .{ .long = "intent", .kind = .path, .description = "Intent JSON file" },
+        .{ .long = "intent", .kind = .path, .description = "Intent JSON file: settings {\"<section>\": {\"<key>\": value}}, input {\"actions\": [{\"name\", \"events\": [{\"type\": \"key\", \"keycode\": \"A\", \"physical\": true}]}]}, autoload {\"autoloads\": [{\"name\", \"path\", \"singleton\"}]}, plugins, rendering, physics; see the examples" },
         .{ .long = "intent-json", .kind = .string, .description = "The intent JSON itself, instead of a file" },
         .{ .long = "file", .kind = .path, .description = "Alias for --intent" },
         .{ .long = "dry-run", .kind = .flag, .description = "Apply in memory without writing project.godot" },
@@ -1021,6 +1024,9 @@ pub fn commands() spec.CommandSpec {
             .{
                 .name = "apply",
                 .summary = "Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics)",
+                .description =
+                \\One intent with any of the sections: {"settings": {"application": {"run/main_scene": "res://scenes/main.tscn"}}, "input": {"actions": [{"name": "move_left", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, "autoload": {"autoloads": [{"name": "GameState", "path": "res://scripts/game_state.gd", "singleton": true}]}, "physics": {"engine_3d": "Jolt Physics"}}. Each section takes the same document as the matching project <section> apply command. Give it as a file (--intent) or inline (--intent-json).
+                ,
                 .options = &intent_apply_options,
                 .handler = projectApplyHandler,
             },

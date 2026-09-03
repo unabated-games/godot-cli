@@ -875,7 +875,7 @@ godot-cli scene connection add [options] <file>
 | `--deferred` | — | CONNECT_DEFERRED: call at idle time | — |
 | `--one-shot` | — | CONNECT_ONE_SHOT: disconnect after the first emission | — |
 | `--binds` | `<value>` | Extra arguments as Godot array text, e.g. '["quit"]' | — |
-| `--unbinds` | `<value>` | Number of trailing signal arguments to drop | — |
+| `--unbinds` | `<n>` | Number of trailing signal arguments to drop | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -958,6 +958,7 @@ godot-cli scene instance add [options] <file>
 | `--catalog-id` | `<value>` | Project catalog id (resolves scene path; requires --project-root) | — |
 | `--editable` | — | Mark the instance editable in the parent scene ([editable path=...]) | — |
 | `--unique-name` | — | Set unique_name_in_owner on the instance root (%Name from owner scripts) | — |
+| `--properties` | `<value>` | JSON object of property name to value to set on the instance root (anchors, offsets, overrides) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -1061,7 +1062,11 @@ godot-cli scene template copy [options] <template>
 
 Expand intent JSON to a patch and preview (no write)
 
-Accepts --intent or --patch. Optional scene path positional dry-runs the patch. See docs/agent_scene_authoring.md.
+Expands an intent into patch ops and previews them; with a scene path, dry-runs the patch against that scene. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json).
+
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name"; add_node takes "type" and an optional "properties" object; instance_catalog takes "catalog_id"; connect takes "from", "signal", "to", "method".
+
+A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object, numbers and booleans are JSON and a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
 
 ```
 godot-cli scene plan [options] [file]
@@ -1088,7 +1093,9 @@ godot-cli scene plan [options] [file]
 
 Apply a declarative JSON patch to a scene
 
-Batch node/resource/instance edits. Use --patch or --intent. See docs/agent_scene_authoring.md.
+Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run.
+
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
 
 ```
 godot-cli scene apply [options] <file>
@@ -1238,7 +1245,7 @@ godot-cli scene set-property [options] <file>
 | `--node` | `<value>` | Target node by viewport path (e.g. /root/Main/Player) | — |
 | `--node-name` | `<value>` | Target node section by name attribute | — |
 | `--section-id` | `<value>` | Target an ext_resource or sub_resource by its id (e.g. CapsuleShape2D_abc12) | — |
-| `--section-line` | `<value>` | Target section by header line number | — |
+| `--section-line` | `<n>` | Target section by header line number | — |
 | `--section` | `<value>` | Target section by tag name (e.g. resource) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
@@ -1648,7 +1655,7 @@ godot-cli resource set-property [options] <file>
 | `--property` | `<value>` | Property name to set | — |
 | `--value` | `<value>` | Property value (normalized unless --raw-value) | — |
 | `--raw-value` | — | Write value verbatim without Variant normalization | — |
-| `--section-line` | `<value>` | Target section by header line number | — |
+| `--section-line` | `<n>` | Target section by header line number | — |
 | `--section` | `<value>` | Target section by tag name (default: resource) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides --project-root) | — |
@@ -2003,8 +2010,8 @@ godot-cli project new [options]
 | `--project-root` | `<path>` | Folder to create the project in (default: current directory) | — |
 | `--name` | `<value>` | Project name (application/config/name) | — |
 | `--main-scene` | `<value>` | Main scene as a res:// path (application/run/main_scene) | — |
-| `--width` | `<value>` | Viewport width in pixels (display/window/size/viewport_width) | — |
-| `--height` | `<value>` | Viewport height in pixels (display/window/size/viewport_height) | — |
+| `--width` | `<n>` | Viewport width in pixels (display/window/size/viewport_width) | — |
+| `--height` | `<n>` | Viewport height in pixels (display/window/size/viewport_height) | — |
 | `--dry-run` | — | Report what would be written without creating the file | — |
 
 ### `godot-cli project show`
@@ -2044,6 +2051,8 @@ godot-cli project move [options]
 
 Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics)
 
+One intent with any of the sections: {"settings": {"application": {"run/main_scene": "res://scenes/main.tscn"}}, "input": {"actions": [{"name": "move_left", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, "autoload": {"autoloads": [{"name": "GameState", "path": "res://scripts/game_state.gd", "singleton": true}]}, "physics": {"engine_3d": "Jolt Physics"}}. Each section takes the same document as the matching project &lt;section&gt; apply command. Give it as a file (--intent) or inline (--intent-json).
+
 ```
 godot-cli project apply [options]
 ```
@@ -2053,7 +2062,7 @@ godot-cli project apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file | — |
+| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2101,7 +2110,7 @@ godot-cli project input apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file | — |
+| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2201,7 +2210,7 @@ godot-cli project settings apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file | — |
+| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2264,7 +2273,7 @@ godot-cli project autoload apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file | — |
+| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2362,7 +2371,7 @@ godot-cli project plugins apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file | — |
+| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2424,7 +2433,7 @@ godot-cli project rendering apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file | — |
+| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |
@@ -2486,7 +2495,7 @@ godot-cli project physics apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file | — |
+| `--intent` | `<path>` | Intent JSON file: settings {"&lt;section&gt;": {"&lt;key&gt;": value}}, input {"actions": [{"name", "events": [{"type": "key", "keycode": "A", "physical": true}]}]}, autoload {"autoloads": [{"name", "path", "singleton"}]}, plugins, rendering, physics; see the examples | — |
 | `--intent-json` | `<value>` | The intent JSON itself, instead of a file | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |

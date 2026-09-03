@@ -207,14 +207,17 @@ fn readOptionValue(
 ) ParseError![]const u8 {
     switch (opt.kind) {
         .flag => return try allocator.dupe(u8, ""),
-        .string, .path => {
+        .string, .path, .integer => {
             const eq = std.mem.indexOfScalar(u8, arg, '=');
-            if (eq) |at| {
-                return try allocator.dupe(u8, arg[at + 1 ..]);
+            const raw = if (eq) |at| arg[at + 1 ..] else blk: {
+                index.* += 1;
+                if (index.* >= argv.len) return error.MissingValue;
+                break :blk argv[index.*];
+            };
+            if (opt.kind == .integer) {
+                _ = std.fmt.parseInt(i64, raw, 10) catch return error.InvalidValue;
             }
-            index.* += 1;
-            if (index.* >= argv.len) return error.MissingValue;
-            return try allocator.dupe(u8, argv[index.*]);
+            return try allocator.dupe(u8, raw);
         },
     }
 }

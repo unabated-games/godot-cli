@@ -222,6 +222,13 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
             failure.details = .{ .object = details };
         }
     }
+    if (std.mem.eql(u8, name, "UnknownRecipe")) {
+        failure.kind = "unknown_recipe";
+        failure.message = "no intent recipe with that name";
+        if (error_details.takeJson(allocator) catch null) |details| {
+            failure.details = .{ .object = details };
+        }
+    }
     if (std.mem.eql(u8, name, "NodeNotFound")) {
         if (error_details.takeJson(allocator) catch null) |details| {
             failure.kind = "node_not_found";

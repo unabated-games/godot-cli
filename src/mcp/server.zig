@@ -40,9 +40,11 @@ const instructions =
     \\Read the resource godot-cli://docs/quickstart before the first edit; use the godot-scene-session prompt to start a session.
     \\Every tool returns the CLI's JSON envelope (ok, data, messages, failure); a failure's details name the field or value to fix.
     \\Discover with scene_node_list and catalog_list before editing, validate with scene_validate after every edit.
+    \\The docs describe a --project-root option; over MCP there is none. When the server was started with --project-root it is bound to that project, adds the option to every call, and refuses paths outside it; project_show reports the absolute root. Otherwise paths resolve against the server's working directory.
 ;
 
 const catalog_uri = "godot-cli://catalog";
+const session_uri = "godot-cli://prompts/session";
 
 const State = struct {
     gpa: std.mem.Allocator,
@@ -348,6 +350,17 @@ fn listResources(state: *State, arena: std.mem.Allocator) !Outcome {
         try row.put(arena, "size", .{ .integer = @intCast(doc.text.len) });
         try list.append(.{ .object = row });
     }
+    {
+        // Many clients hide prompts; the session opener is a resource as well.
+        var row: std.json.ObjectMap = .{};
+        try row.put(arena, "uri", .{ .string = session_uri });
+        try row.put(arena, "name", .{ .string = "session" });
+        try row.put(arena, "title", .{ .string = "Session rules" });
+        try row.put(arena, "description", .{ .string = "The rules and workflow the godot-scene-session prompt carries, for clients that do not surface prompts." });
+        try row.put(arena, "mimeType", .{ .string = "text/markdown" });
+        try row.put(arena, "size", .{ .integer = @intCast(prompts.rules.len) });
+        try list.append(.{ .object = row });
+    }
     if (state.pinned()) {
         var row: std.json.ObjectMap = .{};
         try row.put(arena, "uri", .{ .string = catalog_uri });
@@ -373,6 +386,9 @@ fn readResource(state: *State, arena: std.mem.Allocator, params: ?std.json.Objec
     if (resources.find(uri)) |doc| {
         mime = doc.mime;
         text = doc.text;
+    } else if (std.mem.eql(u8, uri, session_uri)) {
+        mime = "text/markdown";
+        text = prompts.rules;
     } else if (state.pinned() and std.mem.eql(u8, uri, catalog_uri)) {
         const tool = tools.find(state.tool_list, "catalog_list").?;
         const argv = switch (try tools.buildArgv(arena, tool, null, state.confinement)) {
@@ -556,7 +572,7 @@ test "resources and the prompt are listed and readable" {
     var state = try testState(arena);
 
     const listed = try dispatch(&state, arena, "resources/list", null);
-    try std.testing.expect(listed.result.object.get("resources").?.array.items.len == resources.docs.len);
+    try std.testing.expect(listed.result.object.get("resources").?.array.items.len == resources.docs.len + 1);
 
     var params: std.json.ObjectMap = .{};
     try params.put(arena, "uri", .{ .string = resources.quickstart_uri });

@@ -15,6 +15,19 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- `scene plan` and `scene apply` describe the intent and patch shapes and list every recipe in their help text, and `project apply` describes its sections, so an agent reading the MCP tool description does not need the 37 KB guide to learn a recipe's fields. An unknown recipe now fails as `unknown_recipe` with the known names in the details.
+- A `properties` object on instances: the `instance_add` patch op, the `instance_catalog` and `instance_scene` recipes, and `scene instance add --properties`. Positioning an instanced widget was eight `node_set` steps in the MCP trial.
+- The session prompt is also the resource `godot-cli://prompts/session`, because several clients hide prompts.
+- `project show` reports the absolute `project_root`, and the server instructions and quickstart say that the MCP server has no `project-root` argument and why.
+
+### Changed
+
+- Options that take a whole number (`project new --width` and `--height`, `scene connection add --unbinds`, `set-property --section-line`) are declared as integers: the parser rejects anything else and the MCP schema says `integer`.
+- `invalid_property_value` names the property that failed rather than `value`, so a multi-property object points at the right entry.
+- The quickstart's "Read next" table gives each document's MCP resource URI.
+
 ## [0.9.0] — 2026-09-03
 
 ### Added

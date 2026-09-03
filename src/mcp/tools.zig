@@ -114,7 +114,11 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
             try types.append(.{ .string = "string" });
             try prop.put(allocator, "type", .{ .array = types });
         } else {
-            try prop.put(allocator, "type", .{ .string = if (opt.kind == .flag) "boolean" else "string" });
+            try prop.put(allocator, "type", .{ .string = switch (opt.kind) {
+                .flag => "boolean",
+                .integer => "integer",
+                .string, .path => "string",
+            } });
         }
         try prop.put(allocator, "description", .{ .string = try describe(allocator, opt.description, opt.kind, pinned) });
         if (opt.default_value) |default_value| try prop.put(allocator, "default", .{ .string = default_value });
@@ -204,7 +208,7 @@ pub fn buildArgv(
                 .bool => |enabled| if (enabled) try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}", .{opt.long})),
                 else => return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a boolean", .{opt.long}) },
             },
-            .string, .path => {
+            .string, .path, .integer => {
                 if (opt.repeatable) {
                     if (value != .array) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be an array of strings", .{opt.long}) };
                     for (value.array.items) |item| {

@@ -60,6 +60,7 @@ fn valuePlaceholder(kind: spec.ValueKind) []const u8 {
         .flag => "",
         .string => "<value>",
         .path => "<path>",
+        .integer => "<n>",
     };
 }
 

@@ -23,6 +23,8 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"godot-cli://docs/quickstart"}}' \
   '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"scene_node_list","arguments":{"file":"missing.tscn"}}}' \
   '{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"uri":"godot-cli://catalog"}}' \
+  '{"jsonrpc":"2.0","id":8,"method":"resources/read","params":{"uri":"godot-cli://prompts/session"}}' \
+  '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"project_show","arguments":{}}}' \
   | "$binary" mcp --project-root test_fixtures/project >"$legacy_out"
 
 printf '%s\n' \
@@ -40,7 +42,7 @@ def lines(path):
         return [json.loads(line) for line in handle if line.strip()]
 
 legacy = lines(sys.argv[1])
-assert len(legacy) == 7, f"expected 7 legacy responses, got {len(legacy)}"
+assert len(legacy) == 9, f"expected 9 legacy responses, got {len(legacy)}"
 by_id = {r["id"]: r for r in legacy}
 
 init = by_id[1]["result"]
@@ -76,6 +78,13 @@ missing = by_id[6]["result"]
 assert missing["isError"] is True, missing
 assert missing["structuredContent"]["ok"] is False
 assert missing["structuredContent"]["failure"]["kind"], missing
+
+session = by_id[8]["result"]["contents"][0]
+assert "project_move" in session["text"], session
+shown = by_id[9]["result"]["structuredContent"]
+assert shown["ok"] and shown["data"]["project_root"].startswith("/"), shown
+new_schema = next(t for t in tools if t["name"] == "project_new")["inputSchema"]["properties"]
+assert new_schema["width"]["type"] == "integer", new_schema["width"]
 
 catalog = json.loads(by_id[7]["result"]["contents"][0]["text"])
 assert catalog["ok"] is True and "entries" in catalog["data"], catalog

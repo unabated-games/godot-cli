@@ -391,6 +391,9 @@ fn applyOneOp(
             editable,
         );
         defer added.deinit(allocator);
+        if (op_value.object.get("properties")) |props| {
+            try applyNodeProperties(allocator, doc, added.path, props);
+        }
         if (options.undo) |recorder| {
             try scene_undo.recordNodeAddUndo(recorder, added.path);
         }
