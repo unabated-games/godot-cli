@@ -535,6 +535,8 @@ godot-cli scene apply scenes/main.tscn --patch patches/generated.json --project-
 ```
 
 **Intent recipes:** `add_node`, `connect`, `static_body_2d`, `instance_catalog`, `instance_scene`, `node_set`, `assign_ext`, `instance_override`, `catalog_button`, `player_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`  
+
+The `instance_catalog` and `instance_scene` recipes, and the `instance_add` op, take an optional `properties` object set on the instance root in the same write (anchors, offsets, exported overrides); `scene instance add --properties` does the same from the command line. An unknown recipe fails as `unknown_recipe` with the known names in `details.hint`.  
 **Passthrough:** intent file with `"ops": [ … ]` same as patch format  
 **Direct op in steps:** `{ "op": "node_add", … }` without `recipe`
 
