@@ -15,6 +15,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-09-03
+
 ### Added
 
 - Intent failures name the step: `missing_field` and `invalid_property_value` details carry `step` (the index in `steps`), the `recipe`, and the `field`, so a bad entry in a long intent is found without bisecting. `assign_ext` infers `ext_type` from the extension (`.gd`, `.tscn`, images, audio, fonts) as its description claimed; a `.tres` still needs it. `camera_2d` takes `position`. The `file` alias on `project * apply` is hidden from the MCP schemas, and path descriptions drop the `res://` boilerplate.
