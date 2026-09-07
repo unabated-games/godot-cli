@@ -203,7 +203,17 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
     if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId") or
         std.mem.eql(u8, @errorName(err), "DuplicateExtPath"))
     {
-        if (scene_resources.conflictDetailsJson(allocator) catch null) |details| {
+        if (scene_resources.conflictDetailsJson(allocator) catch null) |conflict| {
+            var details = conflict;
+            // The op that hit it recorded which option fixes it; without this
+            // the failure names the colliding id and nothing else.
+            if (error_details.takeJson(allocator) catch null) |context| {
+                var it = context.iterator();
+                while (it.next()) |entry| {
+                    if (details.get(entry.key_ptr.*) != null) continue;
+                    details.put(allocator, entry.key_ptr.*, entry.value_ptr.*) catch {};
+                }
+            }
             failure.kind = @errorName(err);
             failure.message = if (std.mem.eql(u8, @errorName(err), "DuplicateResourceId"))
                 "scene resource id already exists in file"

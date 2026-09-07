@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-04" "godot-cli 0.12.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-07" "godot-cli 0.13.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -1894,8 +1894,10 @@ done until this passes. A run can pass with a wrong layout,
 so read the frame as well as the log. \-\-press move_right@10..40
 holds an input action over a frame range and \-\-click /root/Main/HUD/PauseButton@20
 clicks a node, so movement and buttons can be exercised; the
-frame then shows the result, with the clicked node in its hover
-style since the cursor stays over it. Result data: frame (path
+frame then shows the result. The cursor moves off the node
+after a click, so the last frame shows its normal style; \-\-keep\-cursor
+leaves it there for the hover style. Only the game's own cursor
+moves, never the desktop pointer. Result data: frame (path
 of the last PNG), log, log_tail (last 40 lines), errors and
 error_count, exit and import_exit, stderr_tail, frames_written,
 presses, clicks, duration_ms, summary. Frames other than the
@@ -1948,7 +1950,15 @@ both see it
 .TP
 \fB\-\-click\fR \fIvalue\fR
 Left\-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20;
-repeatable. A Button's pressed signal fires from this
+repeatable. A Button's pressed signal fires from this, and
+the cursor moves off the node after the release so later frames
+show its normal style
+.TP
+\fB\-\-keep\-cursor\fR
+Leave the synthetic cursor on the last clicked node instead
+of moving it off, so the frame shows that node's hover style;
+only the in\-game cursor moves either way, never the desktop
+pointer
 .TP
 \fB\-\-frame\-at\fR \fIn\fR
 Also keep this frame (numbered from 0) and return it as frame_at,

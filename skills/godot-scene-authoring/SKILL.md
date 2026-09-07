@@ -68,6 +68,7 @@ godot-cli resource new --output materials/wood.tres --type StandardMaterial3D --
 godot-cli project apply --project-root . --intent intents/project_bootstrap.json --json
 godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
 godot-cli batch --file workflow.json --json
+godot-cli project run --project-root . --frames 30 --click /root/Main/HUD/Play@20 --json   # click a node; the cursor then leaves it, so the frame shows the normal style (--keep-cursor holds the hover style)
 godot-cli scene validate scenes/main.tscn --project-root . --json
 ```
 

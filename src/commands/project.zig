@@ -161,6 +161,7 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .user_args = user_args,
         .presses = presses.items,
         .clicks = clicks.items,
+        .keep_cursor = inv.flag("keep-cursor"),
         .main_scene = main_scene,
         .frame_at = if (inv.getOption("frame-at")) |text| (std.fmt.parseInt(u32, text, 10) catch return error.InvalidValue) else null,
     });
@@ -177,6 +178,13 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (run.frame_at_path) |path| try data.put(cli.allocator, "frame_at", .{ .string = path });
     if (run.log_tail.len != 0) try data.put(cli.allocator, "log_tail", .{ .string = run.log_tail });
 
+    // Without this, a run with --keep-cursor and nothing to hover over reads
+    // as though the frame is showing a held hover style.
+    var messages: std.ArrayList([]const u8) = .empty;
+    if (inv.flag("keep-cursor") and clicks.items.len == 0) {
+        try messages.append(cli.allocator, "keep-cursor does nothing without --click: the cursor only moves when a click puts it somewhere");
+    }
+
     const clean_exit = run.exit != null and run.exit.? == 0;
     const ok = clean_exit and run.errors.len == 0;
     const summary = if (ok)
@@ -186,7 +194,7 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     else
         try std.fmt.allocPrint(cli.allocator, "{d} error line(s) in {s}; the change is not done", .{ run.errors.len, run.log_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
-    return .{ .data = .{ .object = data }, .exit_code = if (ok) .success else .failure };
+    return .{ .data = .{ .object = data }, .messages = messages.items, .exit_code = if (ok) .success else .failure };
 }
 
 fn newHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -1128,7 +1136,8 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display" },
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
     .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
-    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this", .repeatable = true },
+    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style", .repeatable = true },
+    .{ .long = "keep-cursor", .kind = .flag, .description = "Leave the synthetic cursor on the last clicked node instead of moving it off, so the frame shows that node's hover style; only the in-game cursor moves either way, never the desktop pointer" },
     .{ .long = "frame-at", .kind = .integer, .description = "Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open" },
 };
 
@@ -1202,7 +1211,7 @@ pub fn commands() spec.CommandSpec {
                 .name = "run",
                 .summary = "Run the game for a few frames and capture the last frame and the log",
                 .description =
-                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result, with the clicked node in its hover style since the cursor stays over it. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+                \\Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. The cursor moves off the node after a click, so the last frame shows its normal style; --keep-cursor leaves it there for the hover style. Only the game's own cursor moves, never the desktop pointer. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
                 ,
                 .options = &run_options,
                 .handler = runHandler,

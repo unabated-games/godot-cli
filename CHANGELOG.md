@@ -15,6 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-09-07
+
+### Added
+
+- **A field an op or recipe does not take is rejected** instead of dropped, naming the field, the fields the op accepts, and the op's index. Trial 20 wrote `"id"` where `ext_add` takes `id_hint`; the id was ignored, and the `node_set` that referenced it wrote a dangling `ExtResource("MyStyle")`. The recipe table `scene recipes` prints is what intent steps are checked against, so it now lists every field the expanders read — `connect` takes `deferred`, `one_shot`, `binds` and `unbinds`, `catalog_button` takes `label_text`, `child`, `child_type` and `type`, `player_2d` takes `sprite_texture`, `texture_path` and `shape_id_hint`, `static_body_2d` takes `shape_id_hint`, `assign_ext` takes `type` and `resource_path`, and `instance_override` takes `type`.
+- **A colliding generated resource id names `id_hint`.** Two `sub_add` ops of one type in a patch get the same generated id and the second failed with the id alone; the failure now says the id comes from the type and the scene and that an `id_hint` on each fixes it. Trial 20 abandoned inline sub-resources over this and wrote four `.tres` files instead.
+- Every patch op failure carries `details.step`, the index of the op that failed, the way intent steps already did (asked by trial 19 for `invalid_property_value`).
+
+### Changed
+
+- **`project run --click` moves the cursor off the node after the release**, so the last frame shows the clicked node in its normal style instead of its hover style. Trial 15 could not verify a button's `normal` styling in the same run that clicked it. `--keep-cursor` restores the old behaviour when the hover style is what you want to see. Only the game's own cursor moves — a synthetic `InputEventMouseMotion` through `Input.parse_input_event`; nothing warps the desktop pointer.
+
 ## [0.12.0] — 2026-09-04
 
 ### Added

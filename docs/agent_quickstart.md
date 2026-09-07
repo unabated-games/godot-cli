@@ -35,7 +35,7 @@ Through the MCP server there is no `project-root` argument. A server started wit
 2. Discover before editing: `scene node list` for viewport paths (`/root/<Root>/...`), `catalog list` and `catalog show <id>` for components the project already has.
 3. A project catalog id is instanced (`scene instance add --catalog-id`); a `godot/...` builtin is a plain node (`scene node add --type`), never instanced.
 4. Presentation lives on nodes (`anchor_*`, `grow_*`, `theme_override_*`, `custom_minimum_size`), signals in `[connection]` sections (`scene connection add`), resources in `.tres` files (`resource new`). None of them in `_ready()`.
-5. Values are Godot Variant text: `Vector2(1, 2)`, `1.5`, `true`, and a string carries its own quotes, `"\"Paused\""`. A bare word is rejected before anything is written.
+5. Values are Godot Variant text: `Vector2(1, 2)`, `1.5`, `true`, and a string carries its own quotes, `"\"Paused\""`. A bare word is rejected before anything is written, and so is a field the op or recipe does not take (`id` is not `id_hint`); the failure names the fields it accepts.
 6. Move files with `project move`, never `mv`; a plain move leaves every `res://` reference stale.
 7. Validate after every edit, then run the game and read the frame and the log.
 
@@ -84,7 +84,7 @@ godot-cli scene diff before.tscn scenes/main.tscn --properties --json
 godot-cli project run --project-root . --json          # import, run 60 frames, capture the last frame and the log
 ```
 
-Read `data.frame` (a PNG) and `data.errors`. The command fails when Godot did not exit cleanly or the log holds an `ERROR` or `SCRIPT ERROR` line, so the change is not done until it passes. `--scene res://ui/menu.tscn` runs one scene, `--frames 5` is enough for a static screen, `--press move_right@10..40` holds an input action so the frame shows the player having moved, `--click /root/Main/HUD/PauseButton@20` clicks a node so a button's signal fires, `--headless` gives the log alone on a machine without a display, and `--user-arg` passes a flag your script can read to trigger a test path. The same loop by hand:
+Read `data.frame` (a PNG) and `data.errors`. The command fails when Godot did not exit cleanly or the log holds an `ERROR` or `SCRIPT ERROR` line, so the change is not done until it passes. `--scene res://ui/menu.tscn` runs one scene, `--frames 5` is enough for a static screen, `--press move_right@10..40` holds an input action so the frame shows the player having moved, `--click /root/Main/HUD/PauseButton@20` clicks a node so a button's signal fires (the cursor then leaves the node, so the frame shows its normal style; `--keep-cursor` holds the hover style instead), `--headless` gives the log alone on a machine without a display, and `--user-arg` passes a flag your script can read to trigger a test path. The same loop by hand:
 
 ```bash
 mkdir -p capture && touch capture/.gdignore
@@ -94,7 +94,7 @@ godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 
 
 ## Over MCP
 
-The server has one tool per command, named with underscores: `scene_node_add`, `project_run`. Ten cover most sessions: `project_new`, `project_input_apply`, `scene_new`, `scene_apply`, `scene_instance_add`, `scene_connection_add`, `resource_new`, `catalog_add`, `scene_validate`, `project_run`. `project_run` returns the frame as an image and the last lines of the log; `--press move_right@10..40` holds an input action over a frame range and `--click /root/Main/HUD/PauseButton@20` clicks a node, so movement and buttons can be seen working. The documents below are resources: `godot-cli://docs/recipes` is the short one to read before writing an intent.
+The server has one tool per command, named with underscores: `scene_node_add`, `project_run`. Ten cover most sessions: `project_new`, `project_input_apply`, `scene_new`, `scene_apply`, `scene_instance_add`, `scene_connection_add`, `resource_new`, `catalog_add`, `scene_validate`, `project_run`. `project_run` returns the frame as an image and the last lines of the log; `--press move_right@10..40` holds an input action over a frame range and `--click /root/Main/HUD/PauseButton@20` clicks a node, so movement and buttons can be seen working; after a click the cursor moves off the node, so the frame shows its normal style, and `--keep-cursor` keeps it there for the hover style. The documents below are resources: `godot-cli://docs/recipes` is the short one to read before writing an intent.
 
 ## Read next
 

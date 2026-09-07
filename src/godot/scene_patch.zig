@@ -79,6 +79,7 @@ pub fn applyPatchJson(
 
     for (ops_value.array.items, 0..) |*op_value, index| {
         const summary = applyOneOp(allocator, doc, op_value, options) catch |err| {
+            error_details.noteStep(index);
             if (options.strict) return err;
             const msg = try std.fmt.allocPrint(allocator, "op {d} failed: {s}", .{ index, @errorName(err) });
             try results.append(allocator, .{
@@ -102,6 +103,73 @@ pub fn applyPatchJson(
     };
 }
 
+/// Every field an op accepts, so an unknown one is rejected instead of being
+/// silently dropped: trial 20 wrote `"id"` where `ext_add` takes `id_hint`,
+/// got a generated id, and left a later `node_set` pointing at an
+/// `ExtResource("MyStyle")` that was never written.
+const OpFields = struct {
+    name: []const u8,
+    fields: []const []const u8,
+    /// `<op> takes: a, b, c`, built once at compile time for the failure hint.
+    hint: []const u8,
+};
+
+fn opRow(comptime name: []const u8, comptime fields: []const []const u8) OpFields {
+    comptime var hint: []const u8 = name ++ " takes: ";
+    inline for (fields, 0..) |field, i| {
+        hint = hint ++ (if (i == 0) "" else ", ") ++ field;
+    }
+    return .{ .name = name, .fields = fields, .hint = hint };
+}
+
+const op_fields = [_]OpFields{
+    opRow("node_add", &.{ "parent", "name", "type", "properties" }),
+    opRow("node_remove", &.{ "path", "recursive" }),
+    opRow("node_rename", &.{ "path", "name" }),
+    opRow("node_reparent", &.{ "path", "parent" }),
+    opRow("node_set", &.{ "path", "property", "value" }),
+    opRow("ext_add", &.{ "type", "path", "id_hint" }),
+    opRow("ext_remove", &.{"id"}),
+    opRow("sub_add", &.{ "type", "id_hint", "properties" }),
+    opRow("sub_remove", &.{"id"}),
+    opRow("assign_ext", &.{ "path", "property", "type", "ext_type", "res_path", "resource_path", "id_hint" }),
+    opRow("instance_add", &.{ "parent", "name", "scene", "catalog_id", "properties", "editable", "scene_uid" }),
+    opRow("instance_override", &.{ "path", "property", "value", "child", "type", "editable" }),
+    opRow("connection_add", &.{ "from", "signal", "to", "method", "binds", "unbinds", "deferred", "one_shot" }),
+    opRow("connection_remove", &.{ "from", "signal", "to", "method" }),
+};
+
+fn checkOpFields(op_name: []const u8, object: std.json.ObjectMap) Error!void {
+    const known = for (op_fields) |row| {
+        if (std.mem.eql(u8, row.name, op_name)) break row;
+    } else return; // An op with no row is an unknown op, reported below.
+
+    var it = object.iterator();
+    keys: while (it.next()) |entry| {
+        const key = entry.key_ptr.*;
+        if (std.mem.eql(u8, key, "op")) continue;
+        for (known.fields) |field| {
+            if (std.mem.eql(u8, key, field)) continue :keys;
+        }
+        error_details.record(.{ .field = key, .hint = known.hint });
+        return error.InvalidPatch;
+    }
+}
+
+/// `id_hint` is the answer to a generated id colliding, and the failure never
+/// said so; trial 20 gave up on inline sub-resources and wrote four .tres
+/// files instead.
+fn noteIdCollision(err: anyerror, kind: enum { sub, ext }) void {
+    if (err != error.DuplicateResourceId) return;
+    error_details.record(.{
+        .field = "id_hint",
+        .hint = switch (kind) {
+            .sub => "the id is generated from the resource type and the scene, so two sub_add ops of the same type collide; give each one an id_hint (\"id_hint\": \"play_normal\" writes StyleBoxFlat_play_normal)",
+            .ext => "the id is generated from the scene, so two ext_add ops in one patch collide; give each one an id_hint (\"id_hint\": \"hover\" writes StyleBoxFlat_hover)",
+        },
+    });
+}
+
 fn applyOneOp(
     allocator: std.mem.Allocator,
     doc: *document.Document,
@@ -114,6 +182,7 @@ fn applyOneOp(
     // in a patch and got UnknownPatchOp.
     const op_name = opAlias(op_name_given);
     error_details.setCurrentOp(op_name);
+    try checkOpFields(op_name, op_value.object);
 
     if (std.mem.eql(u8, op_name, "node_add")) {
         const parent = try requiredString(op_value.object, "parent");
@@ -252,7 +321,10 @@ fn applyOneOp(
             return std.fmt.allocPrint(allocator, "reused ext_resource {s} ({s})", .{ existing_id, path });
         }
 
-        var added = try scene_resources.addExtResourceWithId(allocator, doc, res_type, path, id, scene_uid);
+        var added = scene_resources.addExtResourceWithId(allocator, doc, res_type, path, id, scene_uid) catch |err| {
+            noteIdCollision(err, .ext);
+            return err;
+        };
         defer added.deinit(allocator);
         if (options.undo) |recorder| {
             try scene_undo.recordExtRemoveUndo(recorder, added.id);
@@ -351,7 +423,10 @@ fn applyOneOp(
             try collectPropertyInputs(allocator, props, &props_list);
         }
 
-        var added = try scene_resources.addSubResourceWithId(allocator, doc, res_type, id, props_list.items);
+        var added = scene_resources.addSubResourceWithId(allocator, doc, res_type, id, props_list.items) catch |err| {
+            noteIdCollision(err, .sub);
+            return err;
+        };
         defer added.deinit(allocator);
         if (options.undo) |recorder| {
             try scene_undo.recordSubRemoveUndo(recorder, added.id);
@@ -805,4 +880,88 @@ test "apply patch instance override on child" {
     defer list.deinit(allocator);
     const label = @import("node_tree.zig").findByPath(&list, "/root/Main/MyButton/Label") orelse return error.TestExpectedEqual;
     _ = label;
+}
+
+test "an unknown field on an op is rejected and names the fields the op takes" {
+    // Recorded details point into the patch JSON and the handler's allocator,
+    // which the CLI keeps alive in its arena; the test matches that contract.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const source =
+        \\[gd_scene load_steps=2 format=3]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    // "id" instead of "id_hint": accepted and dropped before, so a later
+    // node_set referencing that id wrote a dangling ExtResource.
+    const patch =
+        \\{
+        \\  "ops": [
+        \\    { "op": "ext_add", "type": "Texture2D", "path": "res://icon.svg", "id": "MyIcon" }
+        \\  ]
+        \\}
+    ;
+    try std.testing.expectError(error.InvalidPatch, applyPatchJson(allocator, &doc, patch, .{ .seed_path = "res://main.tscn" }));
+
+    var details = (error_details.takeJson(allocator) catch null) orelse return error.TestExpectedEqual;
+    defer details.deinit(allocator);
+    try std.testing.expectEqualStrings("id", details.get("field").?.string);
+    try std.testing.expectEqualStrings("ext_add takes: type, path, id_hint", details.get("hint").?.string);
+    try std.testing.expectEqual(@as(i64, 0), details.get("step").?.integer);
+    // Nothing was written: the op is rejected before it runs.
+    try std.testing.expectEqual(@as(usize, 2), doc.sections.items.len);
+}
+
+test "a colliding generated id names id_hint and the op that failed" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const source =
+        \\[gd_scene load_steps=2 format=3]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    const patch =
+        \\{
+        \\  "ops": [
+        \\    { "op": "sub_add", "type": "StyleBoxFlat" },
+        \\    { "op": "sub_add", "type": "StyleBoxFlat" }
+        \\  ]
+        \\}
+    ;
+    try std.testing.expectError(error.DuplicateResourceId, applyPatchJson(allocator, &doc, patch, .{ .seed_path = "res://main.tscn" }));
+
+    var details = (error_details.takeJson(allocator) catch null) orelse return error.TestExpectedEqual;
+    defer details.deinit(allocator);
+    try std.testing.expectEqualStrings("id_hint", details.get("field").?.string);
+    try std.testing.expectEqualStrings("sub_add", details.get("op").?.string);
+    try std.testing.expectEqual(@as(i64, 1), details.get("step").?.integer);
+    try std.testing.expect(std.mem.indexOf(u8, details.get("hint").?.string, "id_hint") != null);
+    scene_resources.releaseConflictDetails(allocator);
+}
+
+test "every op the dispatcher knows has a field row" {
+    // A new op without a row would silently accept anything.
+    const names = [_][]const u8{
+        "node_add",       "node_remove",       "node_rename",  "node_reparent",
+        "node_set",       "ext_add",           "ext_remove",   "sub_add",
+        "sub_remove",     "assign_ext",        "instance_add", "instance_override",
+        "connection_add", "connection_remove",
+    };
+    for (names) |name| {
+        const found = for (op_fields) |row| {
+            if (std.mem.eql(u8, row.name, name)) break true;
+        } else false;
+        try std.testing.expect(found);
+    }
+    try std.testing.expectEqual(names.len, op_fields.len);
 }

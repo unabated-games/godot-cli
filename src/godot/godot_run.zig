@@ -36,6 +36,10 @@ pub const Options = struct {
     main_scene: ?[]const u8 = null,
     /// Mouse clicks on a node, by viewport path, on a physics frame.
     clicks: []const Click = &.{},
+    /// Leave the synthetic cursor on the node after a click, so the frame
+    /// shows its hover style. By default the cursor is moved off-screen after
+    /// the release and the node draws normally again.
+    keep_cursor: bool = false,
     /// Also keep this frame (as Godot numbers them, from 0), for a mid-run state.
     frame_at: ?u32 = null,
 };
@@ -252,12 +256,18 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
     for (options.clicks, 0..) |click, i| {
         w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", click.node_path, click.frame }) catch return error.OutOfMemory;
     }
+    w.print("]\nconst KEEP_CURSOR := {s}\n", .{if (options.keep_cursor) "true" else "false"}) catch return error.OutOfMemory;
     // Presses go through parse_input_event as well as the polled action
     // state, so Controls (a focused Button on ui_accept) and scripts polling
     // Input.get_vector both see them. Clicks are a mouse press at the node's
     // centre, released on the next frame, which is what a Button needs.
+    //
+    // After the release the viewport's cursor is moved off-screen, so the
+    // clicked Control gets NOTIFICATION_MOUSE_EXIT and the last frame shows
+    // its normal style instead of its hover style. This is a synthetic event
+    // through Input.parse_input_event: nothing warps the real pointer.
     w.writeAll(
-        \\]
+        \\const AWAY := Vector2(-10000, -10000)
         \\var _frame := 0
         \\
         \\func _init() -> void:
@@ -308,6 +318,12 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        Input.parse_input_event(motion)
         \\    Input.parse_input_event(event)
         \\
+        \\func _mouse_away() -> void:
+        \\    var motion := InputEventMouseMotion.new()
+        \\    motion.position = AWAY
+        \\    motion.global_position = AWAY
+        \\    Input.parse_input_event(motion)
+        \\
         \\func _tick() -> void:
         \\    _frame += 1
         \\    for press in PRESSES:
@@ -320,6 +336,8 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\            _click(click[0], true)
         \\        if _frame == click[1] + 1:
         \\            _click(click[0], false)
+        \\            if not KEEP_CURSOR:
+        \\                _mouse_away()
         \\
     ) catch return error.OutOfMemory;
 
@@ -476,4 +494,42 @@ test "tail keeps the last lines" {
     const text = try tail(allocator, "a\nb\nc\nd\n", 2);
     defer allocator.free(text);
     try std.testing.expectEqualStrings("c\nd", text);
+}
+
+test "the driver script moves the cursor off the node after a click, unless it is kept" {
+    const allocator = std.testing.allocator;
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.testing.io;
+    try tmp.dir.createDirPath(io, "cap");
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_len = try tmp.dir.realPath(io, &path_buf);
+    const root = path_buf[0..dir_len];
+
+    var options = Options{
+        .project_root = root,
+        .scene = "main.tscn",
+        .capture_dir = "cap",
+        .clicks = &.{.{ .node_path = "/root/Main/Play", .frame = 20 }},
+    };
+    const relative = try writeDriverScript(arena, io, options);
+    const script_path = try std.fs.path.join(arena, &.{ root, relative });
+    const moved = try std.Io.Dir.cwd().readFileAlloc(io, script_path, arena, .unlimited);
+    try std.testing.expect(std.mem.indexOf(u8, moved, "res://main.tscn") != null);
+    try std.testing.expect(std.mem.indexOf(u8, moved, "const KEEP_CURSOR := false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, moved, "const AWAY := Vector2(-10000, -10000)") != null);
+    // The move happens after the release, not with the press, or the click
+    // would land on nothing.
+    const away_call = std.mem.indexOf(u8, moved, "            if not KEEP_CURSOR:\n                _mouse_away()").?;
+    const release = std.mem.indexOf(u8, moved, "_click(click[0], false)").?;
+    try std.testing.expect(away_call > release);
+
+    options.keep_cursor = true;
+    _ = try writeDriverScript(arena, io, options);
+    const kept = try std.Io.Dir.cwd().readFileAlloc(io, script_path, arena, .unlimited);
+    try std.testing.expect(std.mem.indexOf(u8, kept, "const KEEP_CURSOR := true") != null);
 }

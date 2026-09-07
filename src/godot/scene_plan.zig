@@ -133,6 +133,10 @@ fn expandIntentSteps(
         const recipe = try requiredString(step, "recipe");
         const before = ops.items.len;
         error_details.setCurrentOp(recipe);
+        checkStepFields(recipe, step) catch |err| {
+            error_details.noteStep(index);
+            return err;
+        };
         expandRecipe(ops_alloc, recipe, step, ops) catch |err| {
             error_details.noteStep(index);
             return err;
@@ -699,6 +703,35 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     return error.UnknownRecipe;
 }
 
+/// A field the recipe does not take is a typo, and dropping it silently costs
+/// a run: trial 20's `"id"` for `"id_hint"` wrote a dangling ExtResource.
+/// The table above is the reference `scene recipes` prints, so it has to name
+/// every field the expander reads.
+fn checkStepFields(recipe_name: []const u8, step: std.json.ObjectMap) Error!void {
+    const canonical = if (std.mem.eql(u8, recipe_name, "instance_set")) "instance_override" else recipe_name;
+    const recipe = for (recipes) |row| {
+        if (std.mem.eql(u8, row.name, canonical)) break row;
+    } else return; // An unknown recipe reports itself in expandRecipe.
+
+    var it = step.iterator();
+    keys: while (it.next()) |entry| {
+        const key = entry.key_ptr.*;
+        if (std.mem.eql(u8, key, "recipe")) continue;
+        for (recipe.required) |field| {
+            if (std.mem.eql(u8, key, field)) continue :keys;
+        }
+        for (recipe.optional) |field| {
+            if (std.mem.eql(u8, key, field)) continue :keys;
+        }
+        error_details.record(.{
+            .op = recipe_name,
+            .field = key,
+            .hint = "not a field of this recipe; scene recipes lists every recipe's required and optional fields",
+        });
+        return error.InvalidIntent;
+    }
+}
+
 pub const Recipe = struct {
     name: []const u8,
     summary: []const u8,
@@ -712,14 +745,14 @@ pub const Recipe = struct {
 pub const recipes = [_]Recipe{
     .{ .name = "add_node", .summary = "One node of any type under a parent, with optional properties", .required = &.{ "parent", "name", "type" }, .optional = &.{ "properties", "unique_name" } },
     .{ .name = "node_set", .summary = "Set one property on an existing node", .required = &.{ "path", "property", "value" }, .optional = &.{} },
-    .{ .name = "assign_ext", .summary = "Register an external file and point a node property at it; ext_type is the resource class Godot expects and is inferred for .gd, .tscn, images, audio, and fonts; a .tres needs it given (StyleBoxFlat, Theme, ...)", .required = &.{ "path", "property", "res_path" }, .optional = &.{ "ext_type", "id_hint" } },
-    .{ .name = "connect", .summary = "A [connection] section: signal from one node to a method on another", .required = &.{ "from", "signal", "to", "method" }, .optional = &.{} },
+    .{ .name = "assign_ext", .summary = "Register an external file and point a node property at it; ext_type is the resource class Godot expects and is inferred for .gd, .tscn, images, audio, and fonts; a .tres needs it given (StyleBoxFlat, Theme, ...)", .required = &.{ "path", "property", "res_path" }, .optional = &.{ "ext_type", "id_hint", "type", "resource_path" } },
+    .{ .name = "connect", .summary = "A [connection] section: signal from one node to a method on another", .required = &.{ "from", "signal", "to", "method" }, .optional = &.{ "deferred", "one_shot", "binds", "unbinds" } },
     .{ .name = "instance_catalog", .summary = "Instance a project catalog entry by id", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "properties", "editable" } },
     .{ .name = "instance_scene", .summary = "Instance a scene by res:// path", .required = &.{ "parent", "name", "scene" }, .optional = &.{ "properties", "editable" } },
-    .{ .name = "instance_override", .summary = "Override a property on an instanced scene's root, or on a child with editable children", .required = &.{ "path", "property", "value" }, .optional = &.{ "child", "editable" } },
-    .{ .name = "catalog_button", .summary = "Instance a catalog button and set its label", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "label", "editable" } },
-    .{ .name = "player_2d", .summary = "CharacterBody2D with capsule collision, optional sprite, script, and position", .required = &.{ "parent", "name" }, .optional = &.{ "position", "radius", "texture", "script", "modulate", "sprite" } },
-    .{ .name = "static_body_2d", .summary = "StaticBody2D with a rectangle collision centred on position, size as Vector2(w, h); texture tiles a sprite, color draws a filled polygon so the body is visible", .required = &.{ "parent", "name" }, .optional = &.{ "position", "size", "texture", "color" } },
+    .{ .name = "instance_override", .summary = "Override a property on an instanced scene's root, or on a child with editable children", .required = &.{ "path", "property", "value" }, .optional = &.{ "child", "type", "editable" } },
+    .{ .name = "catalog_button", .summary = "Instance a catalog button and set its label", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "label", "label_text", "child", "child_type", "type", "editable" } },
+    .{ .name = "player_2d", .summary = "CharacterBody2D with capsule collision, optional sprite, script, and position", .required = &.{ "parent", "name" }, .optional = &.{ "position", "radius", "texture", "sprite_texture", "texture_path", "script", "modulate", "sprite", "shape_id_hint" } },
+    .{ .name = "static_body_2d", .summary = "StaticBody2D with a rectangle collision centred on position, size as Vector2(w, h); texture tiles a sprite, color draws a filled polygon so the body is visible", .required = &.{ "parent", "name" }, .optional = &.{ "position", "size", "texture", "color", "shape_id_hint" } },
     .{ .name = "camera_2d", .summary = "Camera2D; under the player it follows, under the root it sits at position (the origin unless given)", .required = &.{ "parent", "name" }, .optional = &.{ "position", "zoom", "enabled" } },
     .{ .name = "ui_panel", .summary = "Panel with an optional title label", .required = &.{ "parent", "name" }, .optional = &.{ "title", "full_rect" } },
     .{ .name = "tilemap_layer", .summary = "TileMapLayer with an optional tileset", .required = &.{ "parent", "name" }, .optional = &.{ "tileset", "with_tilemap", "tilemap_name" } },
@@ -1326,4 +1359,58 @@ test "plan previews against scene" {
 
     try std.testing.expect(plan.preview != null);
     try std.testing.expectEqual(@as(usize, 1), plan.preview.?.applied_count);
+}
+
+test "an unknown field on an intent step is rejected" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+
+    var ops: std.json.Array = .init(allocator);
+    var step_plans: std.ArrayList(StepPlan) = .empty;
+    const intent =
+        \\{ "steps": [ { "recipe": "add_node", "parent": "/root/Main", "name": "Box", "type": "Node2D", "propertys": {} } ] }
+    ;
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, intent, .{});
+    defer parsed.deinit();
+
+    try std.testing.expectError(
+        error.InvalidIntent,
+        expandIntentSteps(allocator, parsed.value.object.get("steps").?, &ops, &step_plans, allocator),
+    );
+    var details = (error_details.takeJson(allocator) catch null) orelse return error.TestExpectedEqual;
+    defer details.deinit(allocator);
+    try std.testing.expectEqualStrings("propertys", details.get("field").?.string);
+    try std.testing.expectEqual(@as(i64, 0), details.get("step").?.integer);
+}
+
+test "every field the recipe expanders read is in the recipe table" {
+    // The table is what `scene recipes` prints and what validation checks, so
+    // a field the expander reads but the table omits would be rejected.
+    const pairs = [_]struct { recipe: []const u8, field: []const u8 }{
+        .{ .recipe = "add_node", .field = "unique_name" },
+        .{ .recipe = "connect", .field = "one_shot" },
+        .{ .recipe = "connect", .field = "unbinds" },
+        .{ .recipe = "assign_ext", .field = "resource_path" },
+        .{ .recipe = "assign_ext", .field = "type" },
+        .{ .recipe = "instance_override", .field = "type" },
+        .{ .recipe = "catalog_button", .field = "label_text" },
+        .{ .recipe = "catalog_button", .field = "child_type" },
+        .{ .recipe = "player_2d", .field = "sprite_texture" },
+        .{ .recipe = "player_2d", .field = "texture_path" },
+        .{ .recipe = "player_2d", .field = "shape_id_hint" },
+        .{ .recipe = "static_body_2d", .field = "shape_id_hint" },
+    };
+    for (pairs) |pair| {
+        const recipe = for (recipes) |row| {
+            if (std.mem.eql(u8, row.name, pair.recipe)) break row;
+        } else return error.TestExpectedEqual;
+        const found = for (recipe.optional) |field| {
+            if (std.mem.eql(u8, field, pair.field)) break true;
+        } else false;
+        if (!found) {
+            std.debug.print("recipe {s} is missing field {s}\n", .{ pair.recipe, pair.field });
+            return error.TestExpectedEqual;
+        }
+    }
 }

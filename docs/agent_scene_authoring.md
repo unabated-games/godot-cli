@@ -669,7 +669,16 @@ A missing required field fails the same way with `"kind": "missing_field"` and t
 | `connection_add` | `from`, `signal`, `to`, `method` | Viewport paths; optional `deferred`, `one_shot` (bools), `binds` (array text), `unbinds` (int) |
 | `connection_remove` | `from`, `signal`, `to` | Optional `method`; without it every connection of that signal between the nodes goes |
 
-`id_hint` lets later ops reference stable ids in `ExtResource("…")` / `SubResource("…")` strings.
+`id_hint` lets later ops reference stable ids in `ExtResource("…")` / `SubResource("…")` strings. Without it the id is generated from the resource type and the scene, so **two `sub_add` ops of the same type in one patch collide** (`DuplicateResourceId`); give each one an `id_hint`:
+
+```json
+{ "ops": [
+  { "op": "sub_add", "type": "StyleBoxFlat", "id_hint": "play_normal", "properties": { "bg_color": "Color(0.2, 0.4, 0.8, 1)" } },
+  { "op": "sub_add", "type": "StyleBoxFlat", "id_hint": "play_hover",  "properties": { "bg_color": "Color(0.3, 0.5, 1, 1)" } }
+] }
+```
+
+A field an op does not take is rejected rather than dropped, with the accepted fields in `details.hint` and the op's position in `details.step`. `"id"` is not `"id_hint"`, and a silently ignored one used to leave a later `node_set` pointing at an `ExtResource` that was never written. The same check runs on intent steps against the fields `scene recipes` lists.
 
 Options: `--dry-run` (apply in memory + `preview_diff`), `--preview-properties` (property diffs in dry-run), `--strict` (stop on first error, default).
 

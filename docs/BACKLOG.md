@@ -1,6 +1,6 @@
 # Open asks
 
-Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.12.0 (2026-09-04). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
+Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.13.0 (2026-09-07). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 and 21 built styled menus and verified their normal and hover states from one run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
 
 Items are grouped by area and ordered by how much they would change what an agent produces. Closed asks are listed at the end so the picture is complete.
 
@@ -14,7 +14,7 @@ Items are grouped by area and ordered by how much they would change what an agen
 
 **Real root type for instanced nodes in `scene node list`.** Trials 11, 12, 17, 18. Instanced nodes report `PackedScene`. Reading the instanced scene's root type needs the project root, which `scene node list` accepts and ignores today. Size S.
 
-**Op index on `invalid_property_value` for patch ops.** Trial 19. Intent steps carry `step`; a patch with several `node_set` ops on `position` does not say which failed. Size S.
+**A `properties` object on `node_set`.** Trial 21, and the maintainer hit it the same day. `node_add` takes `properties`, `node_set` takes one `property` and `value`, so the obvious `{"op": "node_set", "path": ..., "properties": {...}}` is rejected and the caller writes one op per property. The rejection now lists the fields, which is how the trial recovered, but accepting a `properties` object (expanded to one set each) would remove the step. `scene set-property` has the same asymmetry against `scene node add --properties`. Size S.
 
 **The `scene validate` envelope over MCP.** Trial 19. Issues come back as `ok: true` with `error_count: 1` and exit code 1, so the MCP client marks the result as an error while the JSON says ok. Either `ok: false` with a failure, or a normal result with issues. This is a design decision about the envelope that every validate-shaped command shares. Size S once decided.
 
@@ -46,8 +46,6 @@ Items are grouped by area and ordered by how much they would change what an agen
 
 ## `project run`
 
-**Move the mouse away after a click.** Trial 15. The synthetic cursor stays over the clicked node, so the frame shows its hover style and the `normal` style cannot be verified in the same run. Size S.
-
 **A first-and-last frame pair.** Trial 16. `--frame-at` keeps one chosen frame; a before-and-after comparison in one run would want frame 0 as well. Size S.
 
 **A `log-lines` option and a frames upper hint.** Trial 15. The log tail is fixed at 40 lines. Size S.
@@ -68,3 +66,4 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.10.0: intent and patch shapes in the tool help, `unknown_recipe`, `properties` on instances, integer options, the session prompt as a resource, the absolute root from `project show`, `scene recipes`, `color` on static bodies, the default icon, window settings in `project show`, plumbing flags hidden from MCP, the empty `scene_uid` message.
 - 0.11.0: `project run` and `project import` with presses, clicks, the log tail, the image result, and the project's resolution; header uids on new files; required options in the schemas; float coercion; step-indexed intent failures; `assign_ext` inference; `camera_2d` position; the header-uid stale check; uids on scene and resource references.
 - 0.12.0: `scene extract` with catalog registration and script-reference messages; the recursive-remove undo fix; properties on `scene node get`; op aliases; scalar `node_set` values; details on every failure; `control_under_node2d`; `--frame-at`; the reparent undo fix; snapshot cleanup on a rejected apply.
+- 0.13.0: the cursor moves off the node after `project run --click`, so the frame shows the `normal` style, with `--keep-cursor` to hold the hover style; unknown fields on patch ops and intent steps rejected with the accepted list; `id_hint` named when a generated id collides; `step` on every patch op failure.
