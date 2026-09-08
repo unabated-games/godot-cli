@@ -47,7 +47,7 @@ Work from the Godot project root (`project.godot`). Pass `--json` on every comma
 
 ```
 - [ ] source "$HOME/.godot-cli/env.sh"
-- [ ] scene node list <scene> --json
+- [ ] scene describe <scene> --project-root . --json (tree with properties, connections, refs, scripts)
 - [ ] catalog list --project-root . --json (when adding UI or level structure)
 - [ ] edit with scene commands, an intent, or a batch, always with --project-root .
 - [ ] scene validate <scene> --project-root . --json

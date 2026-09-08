@@ -336,12 +336,29 @@ pub fn missingEndpoints(allocator: std.mem.Allocator, doc: *const document.Docum
             const attr = section.header.getString(key) orelse continue;
             const path = try attrToViewportPath(allocator, root_path, attr);
             defer allocator.free(path);
-            if (node_tree.findByPath(&list, path) == null) {
-                try out.append(allocator, .{ .section_line = section.line, .field = key, .attr = attr });
-            }
+            if (node_tree.findByPath(&list, path) != null) continue;
+            // A path that descends into an instanced node names something in
+            // the other scene, which this document cannot see. Godot allows
+            // exactly that for an instance with editable children, and the
+            // game runs; calling it missing was a false report on a correct
+            // scene (trial 26).
+            if (descendsIntoInstance(&list, path)) continue;
+            try out.append(allocator, .{ .section_line = section.line, .field = key, .attr = attr });
         }
     }
     return try out.toOwnedSlice(allocator);
+}
+
+/// Whether any ancestor of the path is an instanced node, which means the
+/// endpoint lives inside the scene that node instances.
+fn descendsIntoInstance(list: *const node_tree.NodeList, path: []const u8) bool {
+    for (list.nodes) |*node| {
+        if (node.instance == null) continue;
+        if (path.len <= node.path.len) continue;
+        if (!std.mem.startsWith(u8, path, node.path)) continue;
+        if (path[node.path.len] == '/') return true;
+    }
+    return false;
 }
 
 pub fn toJson(allocator: std.mem.Allocator, info: *const ConnectionInfo) !std.json.Value {

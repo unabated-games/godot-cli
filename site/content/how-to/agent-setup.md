@@ -34,6 +34,9 @@ hand-edit scene text.
 Work from the project root and pass --json. Pass --project-root . for writes,
 catalog lookups, validation, and apply.
 
+Before changing a scene, read it in one call:
+  godot-cli scene describe <scene> --project-root . --json
+
 Before adding UI or level structure, check what already exists:
   godot-cli catalog list --project-root . --json
   godot-cli catalog show <id> --project-root . --json

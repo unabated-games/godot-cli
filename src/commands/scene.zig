@@ -556,6 +556,23 @@ fn sceneInspectHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     return inspectHandler(ctx, inv, "scene");
 }
 
+/// The root node's type in the scene a `res://` path names, or null when the
+/// file cannot be read or has no root. Best effort by design: `scene node
+/// list` answers with or without a project root, and a missing sub-scene must
+/// not turn a listing into a failure.
+fn instanceRootType(cli: *const app_mod.App, project_root: []const u8, res_path: []const u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, res_path, "res://")) return null;
+    const relative = res_path["res://".len..];
+    const full = std.fs.path.join(cli.allocator, &.{ project_root, relative }) catch return null;
+    const doc = text_format.document.parseFile(cli.allocator, cli.io, full) catch return null;
+    var list = node_tree.collectNodes(cli.allocator, &doc) catch return null;
+    defer list.deinit(cli.allocator);
+    if (list.nodes.len == 0) return null;
+    const root_type = list.nodes[0].node_type;
+    if (root_type.len == 0) return null;
+    return cli.allocator.dupe(u8, root_type) catch null;
+}
+
 fn sceneNodeListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
@@ -565,7 +582,23 @@ fn sceneNodeListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
     var list = try node_tree.collectNodes(cli.allocator, &doc);
     defer list.deinit(cli.allocator);
 
-    const nodes = try node_tree.nodesToJsonArray(cli.allocator, list.nodes);
+    var nodes = try node_tree.nodesToJsonArray(cli.allocator, list.nodes);
+    // An instanced node has no type of its own in the file, so the tree
+    // reports PackedScene, which tells an agent nothing about what it is
+    // looking at. The class is in the scene it instances: read it when the
+    // project root says where that scene lives. Asked for by trials 11, 12,
+    // 17 and 18.
+    var resolved: usize = 0;
+    if (projectRootFrom(inv)) |root| {
+        for (list.nodes, 0..) |*node, index| {
+            const res_path = node.instance_path orelse continue;
+            const root_type = instanceRootType(cli, root, res_path) orelse continue;
+            if (nodes.items[index] != .object) continue;
+            try nodes.items[index].object.put(cli.allocator, "type", .{ .string = root_type });
+            try nodes.items[index].object.put(cli.allocator, "instance_of", .{ .string = "PackedScene" });
+            resolved += 1;
+        }
+    }
 
     var data: std.json.ObjectMap = .{};
     const path_copy = try cli.allocator.dupe(u8, path);
@@ -794,6 +827,7 @@ fn sceneNodeRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     const node_path = inv.positionals[1];
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "was removed");
     const removed = try scene_edit.removeNode(cli.allocator, &doc, node_path, inv.flag("recursive"));
 
     const output_path = inv.getOption("output") orelse input_path;
@@ -808,6 +842,103 @@ fn sceneNodeRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     try data.put(cli.allocator, "recursive", .{ .bool = inv.flag("recursive") });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     const summary = try std.fmt.allocPrint(cli.allocator, "removed {d} node section(s) from {s}", .{ removed, node_path });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(script_refs.len) });
+
+    return .{ .data = .{ .object = data }, .messages = script_refs };
+}
+
+/// Everything about a scene in one call: the tree with each node's properties,
+/// the instanced nodes resolved to the class they actually are, the signal
+/// connections, the external references and whether they resolve, and the
+/// scripts attached. Trial 19 spent seven calls learning one existing scene
+/// before it could touch it.
+fn sceneDescribeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const path = inv.positionals[0];
+    const project_root = projectRootFrom(inv);
+
+    const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
+    var list = try node_tree.collectNodes(cli.allocator, &doc);
+    defer list.deinit(cli.allocator);
+
+    var nodes = std.json.Array.init(cli.allocator);
+    for (list.nodes) |*node| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, node.path) });
+        try row.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, node.name) });
+        var node_type = node.node_type;
+        if (node.instance_path) |res_path| {
+            try row.put(cli.allocator, "instance_of", .{ .string = "PackedScene" });
+            try row.put(cli.allocator, "instance_path", .{ .string = try cli.allocator.dupe(u8, res_path) });
+            if (project_root) |root| {
+                if (instanceRootType(cli, root, res_path)) |resolved| node_type = resolved;
+            }
+        }
+        try row.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, node_type) });
+        if (node.unique_id) |id| try row.put(cli.allocator, "unique_id", .{ .integer = id });
+        if (node.section_index < doc.sections.items.len) {
+            const section = doc.sections.items[node.section_index];
+            try row.put(cli.allocator, "properties", .{ .array = try variant.property_line.buildPropertiesJson(cli.allocator, section.properties.items) });
+        }
+        try nodes.append(.{ .object = row });
+    }
+
+    var connections = try scene_connections.collect(cli.allocator, &doc);
+    defer connections.deinit(cli.allocator);
+    var connection_rows = std.json.Array.init(cli.allocator);
+    for (connections.items) |*info| try connection_rows.append(try scene_connections.toJson(cli.allocator, info));
+
+    var refs = try scene_refs.collectExtResources(cli.allocator, cli.io, &doc, project_root);
+    defer refs.deinit(cli.allocator);
+
+    // The scripts attached to nodes, which is where the behaviour is and what
+    // a caller has to read before changing the tree.
+    var scripts = std.json.Array.init(cli.allocator);
+    for (list.nodes) |*node| {
+        if (node.section_index >= doc.sections.items.len) continue;
+        for (doc.sections.items[node.section_index].properties.items) |line| {
+            const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+            if (!std.mem.eql(u8, std.mem.trim(u8, line.raw[0..equals], " \t"), "script")) continue;
+            const value = std.mem.trim(u8, line.raw[equals + 1 ..], " \t");
+            var row: std.json.ObjectMap = .{};
+            try row.put(cli.allocator, "node", .{ .string = try cli.allocator.dupe(u8, node.path) });
+            try row.put(cli.allocator, "value", .{ .string = try cli.allocator.dupe(u8, value) });
+            for (refs.refs) |ref| {
+                if (std.mem.indexOf(u8, value, ref.id) == null) continue;
+                try row.put(cli.allocator, "res_path", .{ .string = try cli.allocator.dupe(u8, ref.path) });
+                if (ref.exists) |exists| try row.put(cli.allocator, "resolves", .{ .bool = exists });
+            }
+            try scripts.append(.{ .object = row });
+        }
+    }
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, path) });
+    if (list.nodes.len != 0) {
+        try data.put(cli.allocator, "root", .{ .string = try cli.allocator.dupe(u8, list.nodes[0].path) });
+        try data.put(cli.allocator, "root_type", .{ .string = try cli.allocator.dupe(u8, list.nodes[0].node_type) });
+    }
+    const node_count = nodes.items.len;
+    const connection_count = connection_rows.items.len;
+    const script_count = scripts.items.len;
+    try data.put(cli.allocator, "nodes", .{ .array = nodes });
+    try data.put(cli.allocator, "connections", .{ .array = connection_rows });
+    try data.put(cli.allocator, "refs", .{ .array = try scene_refs.refsToJsonArray(cli.allocator, refs.refs) });
+    try data.put(cli.allocator, "scripts", .{ .array = scripts });
+
+    var unresolved: usize = 0;
+    for (refs.refs) |ref| {
+        if (ref.exists) |exists| {
+            if (!exists) unresolved += 1;
+        }
+    }
+    const summary = try std.fmt.allocPrint(
+        cli.allocator,
+        "{d} node(s), {d} connection(s), {d} external reference(s){s}, {d} script(s) in {s}",
+        .{ node_count, connection_count, refs.refs.len, if (unresolved != 0) " with some missing" else "", script_count, path },
+    );
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -906,6 +1037,7 @@ fn sceneNodeRenameHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     const new_name = inv.getOption("name") orelse return error.Usage;
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "was renamed");
     const new_path = try scene_edit.renameNode(cli.allocator, &doc, node_path, new_name);
     defer cli.allocator.free(new_path);
 
@@ -922,8 +1054,9 @@ fn sceneNodeRenameHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     const summary = try std.fmt.allocPrint(cli.allocator, "renamed {s} to {s}", .{ node_path, new_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
+    try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(script_refs.len) });
 
-    return .{ .data = .{ .object = data }, .messages = &.{} };
+    return .{ .data = .{ .object = data }, .messages = script_refs };
 }
 
 fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -934,6 +1067,7 @@ fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     const new_parent = inv.getOption("parent") orelse return error.Usage;
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "moved to another parent");
     try scene_edit.reparentNode(cli.allocator, &doc, node_path, new_parent);
 
     const output_path = inv.getOption("output") orelse input_path;
@@ -948,8 +1082,9 @@ fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     const summary = try std.fmt.allocPrint(cli.allocator, "reparented {s} under {s}", .{ node_path, new_parent });
     try data.put(cli.allocator, "summary", .{ .string = summary });
+    try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(script_refs.len) });
 
-    return .{ .data = .{ .object = data }, .messages = &.{} };
+    return .{ .data = .{ .object = data }, .messages = script_refs };
 }
 
 fn referrersToJson(allocator: std.mem.Allocator, referrers: []const scene_resources.Referrer) !std.json.Array {
@@ -1517,12 +1652,26 @@ fn sceneRecipesHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
 
 /// Lines in the scripts this scene still references that name a path inside
 /// `node_path`, as `$HUD/Label`, `get_node("HUD/Label")`, or `%Name`.
-fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const []const u8 {
-    var out: std.ArrayList([]const u8) = .empty;
+pub const ScriptHit = struct {
+    res_path: []const u8,
+    line_no: usize,
+    text: []const u8,
+};
+
+/// Lines in the scene's own scripts that name a node path by `$Path` or by a
+/// quoted path. A structural change — an extract, a remove, a rename, a
+/// reparent — leaves these still parsing and resolving to nothing, which is
+/// the class of breakage trials 17 and 18 asked to be told about.
+fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const ScriptHit {
+    var out: std.ArrayList(ScriptHit) = .empty;
     const root_prefix_end = (std.mem.indexOfScalarPos(u8, node_path, "/root/".len, '/') orelse return out.items) + 1;
     const rel = node_path[root_prefix_end..];
     const dollar = try std.fmt.allocPrint(cli.allocator, "${s}", .{rel});
     const quoted = try std.fmt.allocPrint(cli.allocator, "\"{s}", .{rel});
+    // The node's own name, for a `%Unique` reference that does not spell the
+    // whole path.
+    const leaf = if (std.mem.lastIndexOfScalar(u8, rel, '/')) |slash| rel[slash + 1 ..] else rel;
+    const unique = try std.fmt.allocPrint(cli.allocator, "%{s}", .{leaf});
     for (doc.sections.items) |section| {
         if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
         const kind = section.header.getString("type") orelse continue;
@@ -1534,10 +1683,41 @@ fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const t
         var lines = std.mem.splitScalar(u8, text, '\n');
         while (lines.next()) |line| {
             line_no += 1;
-            if (std.mem.indexOf(u8, line, dollar) != null or std.mem.indexOf(u8, line, quoted) != null) {
-                try out.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ res_path, line_no, std.mem.trim(u8, line, " \t") }));
-            }
+            const hit = std.mem.indexOf(u8, line, dollar) != null or
+                std.mem.indexOf(u8, line, quoted) != null or
+                std.mem.indexOf(u8, line, unique) != null;
+            if (!hit) continue;
+            try out.append(cli.allocator, .{
+                .res_path = res_path,
+                .line_no = line_no,
+                .text = std.mem.trim(u8, line, " \t\r"),
+            });
         }
+    }
+    return out.items;
+}
+
+fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    for (try scriptReferencesToNode(cli, root, doc, node_path)) |hit| {
+        try out.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ hit.res_path, hit.line_no, hit.text }));
+    }
+    return out.items;
+}
+
+/// Messages for a structural change: the scripts that named the node before
+/// it moved or went away. `--project-root` is what makes the scan possible,
+/// so without one the change is silent, as it was before.
+fn scriptRefMessages(cli: *const app_mod.App, inv: *const spec.Invocation, doc: *const text_format.document.Document, node_path: []const u8, verb: []const u8) ![]const []const u8 {
+    const root = projectRootFrom(inv) orelse return &.{};
+    var out: std.ArrayList([]const u8) = .empty;
+    const hits = scriptReferencesToNode(cli, root, doc, node_path) catch return &.{};
+    for (hits) |hit| {
+        try out.append(cli.allocator, try std.fmt.allocPrint(
+            cli.allocator,
+            "{s}:{d} still names this node ({s}); it {s}, so the reference no longer resolves",
+            .{ hit.res_path, hit.line_no, hit.text, verb },
+        ));
     }
     return out.items;
 }
@@ -1580,7 +1760,7 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
 
     var messages: std.ArrayList([]const u8) = .empty;
     for (extracted.dropped_connections) |dropped| {
-        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "connection {s} crossed the boundary and was dropped; connect the instance from the parent scene with scene connection add, or add a signal to the new scene's root", .{dropped}));
+        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "connection {s} crossed the boundary and was dropped; add a signal to the new scene's root and connect the instance itself, which is the shape Godot expects. Connecting to a node *inside* the instance needs [editable] and is not something scene connection add can write yet", .{dropped}));
     }
     try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{scene_res_path}));
 
@@ -2258,6 +2438,14 @@ pub fn sceneCommands() spec.CommandSpec {
                 .handler = sceneNewHandler,
             },
             .{
+                .name = "describe",
+                .summary = "Everything about a scene in one call: nodes with properties, connections, references, scripts",
+                .description = "The tree with each node's properties, instanced nodes resolved to the class they really are (with --project-root), the [connection] sections, every external reference with whether it resolves, and the scripts attached to nodes. Replaces the node list, inspect, connection list, refs and node get calls a caller would otherwise make to learn one scene before changing it.",
+                .options = &node_list_options,
+                .positionals = &pos.scene_file,
+                .handler = sceneDescribeHandler,
+            },
+            .{
                 .name = "refs",
                 .summary = "List ext_resource references in a scene",
                 .description = "With a project root, resolves res:// paths to filesystem paths and reports whether each file exists.",
@@ -2713,4 +2901,25 @@ pub fn resourceCommands() spec.CommandSpec {
             },
         },
     };
+}
+
+test "describe merges the tree, connections, refs and scripts into one answer" {
+    // The composition is what matters here: the pieces have their own tests,
+    // and this is the call trial 19 wanted instead of seven.
+    const commands_root = @import("../commands.zig");
+    var found_describe = false;
+    var found_node_list = false;
+    for (commands_root.root.children) |group| {
+        if (!std.mem.eql(u8, group.name, "scene")) continue;
+        for (group.children) |child| {
+            if (std.mem.eql(u8, child.name, "describe")) found_describe = true;
+            if (std.mem.eql(u8, child.name, "node")) {
+                for (child.children) |leaf| {
+                    if (std.mem.eql(u8, leaf.name, "list")) found_node_list = true;
+                }
+            }
+        }
+    }
+    try std.testing.expect(found_describe);
+    try std.testing.expect(found_node_list);
 }

@@ -35,6 +35,23 @@ Every command returns those six fields. Command-specific output lives in `data`,
 
 With `--json`, stdout carries nothing but that document. Without it, results print as text and errors go to stderr as `error[kind]: message`.
 
+`ok` follows the exit code, which matters for the commands whose job is to
+answer a question. A `scene validate` that found errors, or a `project run`
+whose log held one, exits 1 — so it reports `ok: false` and a `failure` of kind
+`checks_failed`, and still carries the issues in `data`:
+
+```json
+{
+  "ok": false,
+  "command": ["scene", "validate"],
+  "data": { "issues": [ … ], "error_count": 2, "summary": "scene: 2 issue(s), 2 error(s)" },
+  "failure": { "kind": "checks_failed", "message": "scene: 2 issue(s), 2 error(s)", "details": null }
+}
+```
+
+So `ok`, `$?`, and the error flag an MCP client sets always agree, and a script
+can branch on any one of the three.
+
 ## Exit codes
 
 | Code | Meaning |

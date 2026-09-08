@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.15.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.16.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -176,6 +176,23 @@ properties
 .TP
 \fB\-\-normalize\-properties\fR
 Rewrite property values through Variant parse/format
+.SS godot\-cli scene describe
+Everything about a scene in one call: nodes with properties,
+connections, references, scripts
+.PP
+The tree with each node's properties, instanced nodes resolved
+to the class they really are (with \-\-project\-root), the
+[connection] sections, every external reference with whether
+it resolves, and the scripts attached to nodes. Replaces the
+node list, inspect, connection list, refs and node get calls
+a caller would otherwise make to learn one scene before changing
+it.
+.TP
+\fIfile\fR
+Scene file (.tscn)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (optional; ignored for file\-only reads)
 .SS godot\-cli scene refs
 List ext_resource references in a scene
 .PP

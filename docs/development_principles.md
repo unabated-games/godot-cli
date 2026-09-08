@@ -236,12 +236,35 @@ With `--json`, **stdout** is exclusively a single JSON document per invocation. 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `ok` | boolean | Always `true` on success |
+| `ok` | boolean | `true` when the command exited 0 |
 | `version` | string | Tool version |
 | `command` | string[] | Resolved command path |
 | `data` | any JSON value | Command-specific payload; `null` if none |
 | `messages` | string[] | Human-oriented lines |
-| `failure` | null | Always `null` on success |
+| `failure` | null | `null` when `ok` is `true` |
+
+#### A command that ran and answered "no"
+
+`scene validate` with issues, or `project run` whose log held an error, is not a
+failed invocation — it is a finished one whose answer is negative. It exits 1,
+so the envelope says `ok: false` and names the outcome, and it keeps `data` so
+the issues are still there to read:
+
+```json
+{
+  "ok": false,
+  "version": "0.15.0",
+  "command": ["scene", "validate"],
+  "data": { "issues": [ … ], "error_count": 2, "summary": "scene: 2 issue(s), 2 error(s)" },
+  "messages": [],
+  "failure": { "kind": "checks_failed", "message": "scene: 2 issue(s), 2 error(s)", "details": null }
+}
+```
+
+`ok`, the exit code, and the `isError` flag an MCP client sets therefore always
+agree. They did not before: a validate with errors returned `ok: true` next to
+`error_count: 2` and exit 1, so a client marked the call an error while the
+body said it was fine.
 
 #### Failure envelope
 

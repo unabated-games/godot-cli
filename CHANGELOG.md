@@ -15,13 +15,24 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-09-08
+
 ### Added
 
+- **`scene describe`**: the tree with every node's properties, connections, external references with whether they resolve, and the scripts attached, in one call. Trial 19 spent seven calls learning one existing scene before it could touch it.
+- **`scene node list` and `scene describe` resolve an instanced node to the class it really is** when given `--project-root`, instead of reporting `PackedScene` — the most-cited item in the backlog (trials 11, 12, 17, 18). The node also carries `instance_of: "PackedScene"` and the `res://` path it came from.
+- **`scene node remove`, `rename` and `reparent` list the script lines that named the node.** `$HUD/Score`, `get_node("HUD/Score")` and `%Score` all still parse after the change and resolve to nothing; the commands report each file and line now, the way `scene extract` already did. Trials 17 and 18.
 - **Two site guides the tool had outgrown.** "Verify a change by running the game" covers the loop `project run` exists for — run, read the frame and the log, click a button to prove its wiring, hold an input action for movement — with the headless and frame-numbering caveats; the older run-and-capture page stays as the by-hand version. "Refactor an existing project" covers `scene extract`, `project move`, rename and reparent, undo patches, and the script references a structural change leaves behind. Every command on both pages was run against a real project before publishing.
-- The landing page now shows the run loop and the class-table checks, and says an MCP agent can run the game and look at the frame; the agent-setup guide says the same where it explains the server.
+- The rules block on the agent-setup page and the skill's checklist name `scene describe` as the discovery step, so an agent reaches for one call instead of five.
+- The landing page shows the run loop and the class-table checks, and says an MCP agent can run the game and look at the frame; the agent-setup guide says the same where it explains the server.
+
+### Changed
+
+- **`ok` in the JSON envelope follows the exit code.** A `scene validate` that found errors, or a `project run` whose log held one, used to answer `ok: true` beside `error_count: 2` and exit 1, so an MCP client marked the call an error while the body said it was fine. Those commands report `ok: false` with a `checks_failed` failure carrying the summary now, and keep their `data` so the issues are still there to read. Trial 19; the envelope contract in `development_principles.md` and the scripting guide document the shape.
 
 ### Fixed
 
+- **A connection into an instance's child is no longer reported as missing.** A scene with `[editable path="Panel"]` and a connection to `Panel/CloseButton` is what Godot writes and the game runs clean, but `scene validate` called it `connection_node_missing` and failed — a false report on a correct scene, which is the worst kind for a check that gates an agent's work. An endpoint that descends into an instanced node is now left alone, since this document cannot see inside the other scene; a genuinely absent node is still caught. Trial 26.
 - `scene connection list` accepts `--project-root` like every sibling read command. The quickstart told agents to pass it and the command rejected it with `unknown_option`.
 
 ## [0.15.0] — 2026-09-08

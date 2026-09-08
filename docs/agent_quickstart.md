@@ -20,7 +20,7 @@ godot-cli ping --json
 | `scene validate`, `scene inspect`, `scene refs` | **Pass** : enables UID cache and `res://` resolution checks |
 | `project input *` | **Pass** : reads/writes `project.godot` under the project root |
 | `project settings *`, `project autoload *` | **Pass** : main scene, display, layer names, autoloads |
-| `scene node list`, `scene node get`, `scene diff` | **Optional** : accepted for uniformity; ignored (file-only reads) |
+| `scene node list`, `scene node get`, `scene describe`, `scene connection list`, `scene diff` | **Optional** : accepted everywhere; `node list` and `describe` use it to resolve an instanced node to the class it really is, rather than reporting `PackedScene` |
 
 Common `project.godot` keys: `application` → `run/main_scene`, `config/name`; `display` → `window/size/viewport_width`, `window/size/viewport_height`, `window/stretch/mode`; `rendering` and `physics` take the aliases in `project rendering apply` / `project physics apply`. `project apply` takes one intent with `settings`, `input`, `autoload`, `plugins`, `rendering`, and `physics` sections (`$GODOT_CLI_HOME/examples/intents/project_bootstrap.json`).
 
@@ -42,7 +42,7 @@ Through the MCP server there is no `project-root` argument. A server started wit
 ## Workflow
 
 ```text
-1. scene node list <scene> --json                     what is there
+1. scene describe <scene> --project-root . --json     what is there, in one call
 2. catalog list --project-root . --json               what exists to reuse
 3. edit: scene commands, or scene apply --intent      one write per change
 4. scene validate <scene> --project-root . --json     exit 1 on errors
@@ -74,6 +74,7 @@ godot-cli project move --project-root . --from scripts/player.gd --to scripts/he
 
 # check
 godot-cli scene validate scenes/main.tscn --project-root . --json
+godot-cli scene describe scenes/main.tscn --project-root . --json   # tree with properties, connections, refs, scripts
 godot-cli scene node list scenes/main.tscn --json
 godot-cli scene diff before.tscn scenes/main.tscn --properties --json
 ```
@@ -84,7 +85,7 @@ godot-cli scene diff before.tscn scenes/main.tscn --properties --json
 godot-cli project run --project-root . --json          # import, run 60 frames, capture the last frame and the log
 ```
 
-Read `data.frame` (a PNG) and `data.errors`. The command fails when Godot did not exit cleanly or the log holds an `ERROR` or `SCRIPT ERROR` line, so the change is not done until it passes. `--scene res://ui/menu.tscn` runs one scene, `--frames 5` is enough for a static screen, `--press move_right@10..40` holds an input action so the frame shows the player having moved, `--click /root/Main/HUD/PauseButton@20` clicks a node so a button's signal fires (the cursor then leaves the node, so the frame shows its normal style; `--keep-cursor` holds the hover style instead), `--headless` gives the log alone on a machine without a display, and `--user-arg` passes a flag your script can read to trigger a test path. The same loop by hand:
+Read `data.frame` (a PNG) and `data.errors`. A run whose log held an error comes back `ok: false` with a `checks_failed` failure and the data still filled in, the same shape `scene validate` uses when it finds issues. The command fails when Godot did not exit cleanly or the log holds an `ERROR` or `SCRIPT ERROR` line, so the change is not done until it passes. `--scene res://ui/menu.tscn` runs one scene, `--frames 5` is enough for a static screen, `--press move_right@10..40` holds an input action so the frame shows the player having moved, `--click /root/Main/HUD/PauseButton@20` clicks a node so a button's signal fires (the cursor then leaves the node, so the frame shows its normal style; `--keep-cursor` holds the hover style instead), `--headless` gives the log alone on a machine without a display, and `--user-arg` passes a flag your script can read to trigger a test path. The same loop by hand:
 
 ```bash
 mkdir -p capture && touch capture/.gdignore

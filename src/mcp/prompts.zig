@@ -39,7 +39,7 @@ pub const rules =
     \\   the cursor leaves the node after a click, so the frame shows its normal
     \\   style, and keep-cursor holds the hover style instead.
     \\
-    \\Workflow: scene_node_list, catalog_list, edit with one tool call per change
+    \\Workflow: scene_describe (or scene_node_list), catalog_list, edit with one tool call per change
     \\(or scene_apply with an intent for several), scene_validate, then project_run
     \\and read data.frame and data.errors; project_import alone refreshes UIDs after
     \\adding files. Read the godot-cli://docs/quickstart resource before the first edit

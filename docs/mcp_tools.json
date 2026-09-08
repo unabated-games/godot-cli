@@ -1,6 +1,6 @@
 {
   "name": "godot-cli",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "server": {
@@ -201,6 +201,28 @@
           "Main",
           "--root-type",
           "Node2D",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "scene_describe",
+      "argv": [
+        "scene",
+        "describe",
+        "<file.tscn>"
+      ],
+      "options": [
+        "--project-root"
+      ],
+      "description": "Everything about a scene in one call: nodes with their properties, instanced nodes resolved to the class they really are, connections, external references with whether they resolve, and the scripts attached. Replaces the node list, inspect, connection list, refs and node get calls otherwise needed to learn a scene.",
+      "json_request": {
+        "argv": [
+          "scene",
+          "describe",
+          "scenes/main.tscn",
+          "--project-root",
+          ".",
           "--json"
         ]
       }

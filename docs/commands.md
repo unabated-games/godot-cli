@@ -44,6 +44,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli uid session import`](#godot-cli-uid-session-import) | Import ext_resource ids from a Godot-saved scene |
 | [`godot-cli scene`](#godot-cli-scene) | Inspect and edit Godot scene files |
 | [`godot-cli scene new`](#godot-cli-scene-new) | Create a new empty scene file |
+| [`godot-cli scene describe`](#godot-cli-scene-describe) | Everything about a scene in one call: nodes with properties, connections, references, scripts |
 | [`godot-cli scene refs`](#godot-cli-scene-refs) | List ext_resource references in a scene |
 | [`godot-cli scene ext`](#godot-cli-scene-ext) | Add or remove external resources |
 | [`godot-cli scene ext add`](#godot-cli-scene-ext-add) | Add an ext_resource section |
@@ -370,6 +371,7 @@ godot-cli scene [options]
 | Subcommand | Summary |
 |------------|---------|
 | [`new`](#godot-cli-scene-new) | Create a new empty scene file |
+| [`describe`](#godot-cli-scene-describe) | Everything about a scene in one call: nodes with properties, connections, references, scripts |
 | [`refs`](#godot-cli-scene-refs) | List ext_resource references in a scene |
 | [`ext`](#godot-cli-scene-ext) | Add or remove external resources |
 | [`sub`](#godot-cli-scene-sub) | Add or remove sub-resources |
@@ -418,6 +420,28 @@ godot-cli scene new [options]
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
 | `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli scene describe`
+
+Everything about a scene in one call: nodes with properties, connections, references, scripts
+
+The tree with each node's properties, instanced nodes resolved to the class they really are (with --project-root), the [connection] sections, every external reference with whether it resolves, and the scripts attached to nodes. Replaces the node list, inspect, connection list, refs and node get calls a caller would otherwise make to learn one scene before changing it.
+
+```
+godot-cli scene describe [options] <file>
+```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene file (.tscn) |
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (optional; ignored for file-only reads) | — |
 
 ### `godot-cli scene refs`
 

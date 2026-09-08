@@ -130,7 +130,12 @@ pub fn emitFailure(
 /// The `--json` success envelope, without a trailing newline. The MCP server
 /// writes the same bytes into a tool result so agents see one shape everywhere.
 pub fn writeSuccessEnvelope(writer: *std.Io.Writer, path: []const []const u8, result: spec.Result) std.Io.Writer.Error!void {
-    try writer.writeAll("{\"ok\":true,\"version\":\"");
+    // `ok` follows the exit code. A validate that found errors exits 1, so it
+    // says ok: false and keeps its issues in `data`; anything else put the
+    // two in contradiction inside one document, and an MCP client that reads
+    // the exit code marked the call an error while the body said fine.
+    const failed = if (result.exit_code) |code| code != .success else false;
+    try writer.writeAll(if (failed) "{\"ok\":false,\"version\":\"" else "{\"ok\":true,\"version\":\"");
     try writer.writeAll(version.version);
     try writer.writeAll("\",\"command\":");
     try writeStringArrayJson(writer, path);
@@ -138,7 +143,26 @@ pub fn writeSuccessEnvelope(writer: *std.Io.Writer, path: []const []const u8, re
     try writeJsonValue(writer, result.data);
     try writer.writeAll(",\"messages\":");
     try writeStringArrayJson(writer, result.messages);
-    try writer.writeAll(",\"failure\":null}");
+    if (!failed) {
+        try writer.writeAll(",\"failure\":null}");
+        return;
+    }
+    try writer.writeAll(",\"failure\":{\"kind\":");
+    try std.json.Stringify.value(result.failure_kind orelse "checks_failed", .{}, writer);
+    try writer.writeAll(",\"message\":");
+    try std.json.Stringify.value(result.failure_message orelse summaryOf(result.data) orelse "the command ran and reported a problem; see data", .{}, writer);
+    try writer.writeAll(",\"details\":null}}");
+}
+
+/// The `summary` string most commands put in `data`, reused as the failure
+/// message so a caller reading only `failure` still learns what happened.
+fn summaryOf(data: std.json.Value) ?[]const u8 {
+    if (data != .object) return null;
+    const summary = data.object.get("summary") orelse return null;
+    return switch (summary) {
+        .string => |text| text,
+        else => null,
+    };
 }
 
 /// The `--json` failure envelope, without a trailing newline.
@@ -255,4 +279,37 @@ test "invalid UTF-8 in a result is located" {
     try obj.put(std.testing.allocator, "path", .{ .string = &bad });
     try std.testing.expectEqualStrings("path", firstInvalidString(.{ .object = obj }).?);
     try std.testing.expect(firstInvalidString(.{ .string = "fine" }) == null);
+}
+
+test "a command that ran and answered no says so, and keeps its data" {
+    const allocator = std.testing.allocator;
+    var buffer: std.Io.Writer.Allocating = .init(allocator);
+    defer buffer.deinit();
+
+    var data: std.json.ObjectMap = .{};
+    defer data.deinit(allocator);
+    try data.put(allocator, "error_count", .{ .integer = 2 });
+    try data.put(allocator, "summary", .{ .string = "scene: 2 issue(s), 2 error(s)" });
+
+    try writeSuccessEnvelope(&buffer.writer, &.{ "scene", "validate" }, .{
+        .data = .{ .object = data },
+        .exit_code = .failure,
+    });
+    const text = buffer.written();
+    // ok follows the exit code, the failure names the outcome, and the data
+    // survives: an MCP client's error flag and this body now agree.
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"ok\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"kind\":\"checks_failed\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"message\":\"scene: 2 issue(s), 2 error(s)\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"error_count\":2") != null);
+}
+
+test "a successful command is unchanged" {
+    const allocator = std.testing.allocator;
+    var buffer: std.Io.Writer.Allocating = .init(allocator);
+    defer buffer.deinit();
+    try writeSuccessEnvelope(&buffer.writer, &.{"ping"}, .{ .data = .{ .bool = true } });
+    const text = buffer.written();
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"ok\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"failure\":null") != null);
 }

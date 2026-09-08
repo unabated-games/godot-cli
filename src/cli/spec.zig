@@ -88,6 +88,13 @@ pub const Result = struct {
     data: std.json.Value = .null,
     messages: []const []const u8 = &.{},
     exit_code: ?ExitCode = null,
+    /// A command that ran but whose answer is "no" — a validate that found
+    /// issues, a run whose log held errors — sets `exit_code = .failure` and
+    /// may name the outcome here. The envelope then carries `ok: false`
+    /// alongside the data, so `ok`, the exit code, and an MCP client's error
+    /// flag all agree; before this they could disagree in the same document.
+    failure_kind: ?[]const u8 = null,
+    failure_message: ?[]const u8 = null,
 };
 
 pub const Invocation = struct {

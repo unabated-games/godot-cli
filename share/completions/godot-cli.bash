@@ -21,7 +21,7 @@ _godot_cli_children() {
             echo "import"
             ;;
         'scene')
-            echo "new refs ext sub inspect node connection extract instance template recipes plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
+            echo "new describe refs ext sub inspect node connection extract instance template recipes plan apply diff restore validate validate-batch set-property normalize retarget-ext round-trip compare-godot"
             ;;
         'scene ext')
             echo "add remove"
@@ -99,6 +99,9 @@ _godot_cli_options() {
             ;;
         'scene new')
             echo "--output --root-name --root-type --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'scene describe')
+            echo "--project-root"
             ;;
         'scene refs')
             echo "--project-root"
@@ -375,6 +378,7 @@ _godot_cli_takes_args() {
         'uid cache lookup') return 0 ;;
         'uid session import') return 0 ;;
         'scene new') return 0 ;;
+        'scene describe') return 0 ;;
         'scene refs') return 0 ;;
         'scene ext add') return 0 ;;
         'scene ext remove') return 0 ;;
