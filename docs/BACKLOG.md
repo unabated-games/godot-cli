@@ -1,7 +1,7 @@
 # Open asks
 
 **Nothing is outstanding.** Every ask from the agent trials and from the
-maintainers has shipped, as of v0.20.0 (2026-09-08). The record of what they
+maintainers has shipped, as of v0.20.1 (2026-09-09). The record of what they
 were is below, by release; the changelog carries the detail.
 
 ## How this list is kept

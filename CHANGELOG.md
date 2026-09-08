@@ -15,6 +15,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.20.1] — 2026-09-09
+
 ### Added
 
 - **The documentation caught up with eight releases in a day.** The validation guide lists the checks that arrived with the class table (`property_type_mismatch`, `unknown_signal`, `control_under_node2d`) and the `checks_failed` envelope; the project-settings guide carries the whole input vocabulary — every key, mouse button, joypad button and axis name, the modifier flags, and the per-event device; the batch guide covers `properties` on `node_set`, `unique_id`/`index`, and the id suffix; the instance guide covers connecting to a node inside an instance; the components guide covers `--signal-doc` and the prose now in `catalog list`; the refactor guide covers `--retarget-dropped-connections`, `--editable`, `--import` and `--rename-ids`. The README states the 4.6 minimum and shows the run loop.
