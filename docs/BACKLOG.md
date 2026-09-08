@@ -1,6 +1,6 @@
 # Open asks
 
-Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.17.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
+Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.18.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
 
 Items are grouped by area and ordered by how much they would change what an agent produces. Closed asks are listed at the end so the picture is complete.
 
@@ -10,23 +10,14 @@ Ranked by how much each would change what an agent produces, weighted by how
 often a trial actually hit it. The sections below carry the detail; this is the
 order to work through them.
 
-1. **The refactoring polish**: `scene extract --retarget-dropped-connections`, `project move --import`, fresh ext_resource ids, `--tags`/`--when-to-use`/`--signal-docs` (S each). Each removes a hand step from a refactor that otherwise works.
-2. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
-3. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
+1. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
+2. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
 
 ## Correctness and validation
 
 **Record child order and unique ids in undo ops.** Trials 18, 19. An undo patch for a removal re-adds the node at the end of its parent and with a fresh unique id, so the restore is not byte for byte. Size S to M.
 
 ## Refactoring an existing project
-
-**`scene extract --retarget-dropped-connections root`.** Trial 19. A connection that crosses the extraction boundary is dropped and listed; both existing-project trials then re-created it inside the new scene against the new root and moved the handler into a root script by hand. The option would re-create it and name the method to add. Size S.
-
-**`project move --import`.** Trials 17, 19. Validation reports `uid_path_mismatch` after a move until Godot's import refreshes the uid cache. The move says so now; running the import from the move would make "validate after every edit" hold for that step. Size S.
-
-**Fresh ext_resource ids on extract and move.** Trials 18, 19. The instance created by an extraction keeps the id of the ext_resource it replaced, and `project move` keeps `Script_player` pointing at `hero.gd`. Correct, but before-and-after diffs read oddly. An optional rename with a message. Size S.
-
-**`--tags` and `--when-to-use` on `scene extract`, `--signal-docs` on `catalog add`.** Trials 17, 19. So the catalog entry made during a refactor is as complete as one made deliberately. Size S.
 
 ## The MCP surface
 
@@ -65,4 +56,5 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.15.0: property type checking and unknown-signal detection in `scene validate`, from a generated Godot class table; a colliding generated sub_resource id takes a suffix instead of failing; `properties` on `node_set` and `scene set-property`; `unique_name` on the `node_add` op.
 - 0.16.0: `scene describe`; instanced nodes resolved to their real class; script references reported after remove, rename and reparent; `ok` following the exit code; the site brought up to date; `--project-root` on `scene connection list`.
 - 0.17.0: connecting a signal to a node inside an instance (marking it editable); `scene extract --editable`; scripted nodes' signals checked against their scripts; `mcp --toolset core`; the MCP cheat sheet resource.
+- 0.18.0: `scene extract --retarget-dropped-connections`, `--editable` and the catalog prose options; `project move --import` and `--rename-ids`; `catalog add --signal-doc`; `scene set-property` refusing a header attribute.
 - Unreleased: the site brought up to date — a "verify a change by running the game" how-to, a "refactor an existing project" how-to, the run loop and the class-table checks on the landing page, and `--project-root` accepted by `scene connection list` like its siblings.

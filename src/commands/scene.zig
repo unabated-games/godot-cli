@@ -5,6 +5,7 @@ const app_mod = @import("../cli/app.zig");
 const resource_uid = @import("../godot/resource_uid.zig");
 const scene_extract = @import("../godot/scene_extract.zig");
 const catalog_add = @import("../godot/catalog_add.zig");
+const catalog_cmd = @import("catalog.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
 const text_format = @import("../godot/text_format/root.zig");
 const id_validate = @import("../godot/id_validate.zig");
@@ -264,6 +265,22 @@ fn formatPropertyValueForWrite(
     return formatted;
 }
 
+/// What to use instead of set-property for a header attribute.
+fn headerAttributeHint(section_name: []const u8, attribute: []const u8) []const u8 {
+    if (std.mem.eql(u8, section_name, "ext_resource")) {
+        if (std.mem.eql(u8, attribute, "path")) return "path is an ext_resource header attribute, not a property: change it with scene retarget-ext --from <old> --to <new>, or move the file with project move, which rewrites every reference";
+        if (std.mem.eql(u8, attribute, "id")) return "id is a header attribute; nothing renames one in place, and every ExtResource(\"id\") would have to change with it";
+        return "this is an ext_resource header attribute, not a property";
+    }
+    if (std.mem.eql(u8, section_name, "node")) {
+        if (std.mem.eql(u8, attribute, "name")) return "name is a node header attribute: rename with scene node rename <scene> <path> --name <new>, which rewrites the descendants' parent attributes too";
+        if (std.mem.eql(u8, attribute, "parent")) return "parent is a node header attribute: move the node with scene node reparent <scene> <path> --parent <new>";
+        if (std.mem.eql(u8, attribute, "type")) return "type is a node header attribute and cannot be changed in place; remove the node and add it with the type you want";
+        return "this is a node header attribute, not a property";
+    }
+    return "this is a section header attribute, not a property; header attributes have their own commands";
+}
+
 fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
@@ -324,6 +341,18 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         }
         return error.Usage;
     };
+
+    // A section header's attributes are not properties: writing `path` as a
+    // body line on an ext_resource leaves the header untouched, so Godot
+    // keeps loading the old file while the scene gains a line that means
+    // nothing. Trial 28 corrupted a scene this way and hand-edited it back.
+    for (pairs) |pair| {
+        if (doc.sections.items[section_index].header.getString(pair.name) != null) {
+            const hint = headerAttributeHint(doc.sections.items[section_index].header.name, pair.name);
+            error_details.record(.{ .field = pair.name, .value = pair.value, .hint = hint });
+            return error.HeaderAttribute;
+        }
+    }
 
     for (pairs) |pair| {
         const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name);
@@ -1794,7 +1823,9 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
     defer doc.deinit(cli.allocator);
 
-    var extracted = scene_extract.extractSubtree(cli.allocator, &doc, node_path) catch |err| switch (err) {
+    var extracted = scene_extract.extractSubtreeWithOptions(cli.allocator, &doc, node_path, .{
+        .retarget_dropped = inv.flag("retarget-dropped-connections"),
+    }) catch |err| switch (err) {
         error.NodeNotFound => {
             error_details.record(.{ .field = "node", .value = node_path, .hint = "no node at this viewport path; scene node list shows them" });
             return error.NodeNotFound;
@@ -1825,6 +1856,9 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     defer added.deinit(cli.allocator);
 
     var messages: std.ArrayList([]const u8) = .empty;
+    for (extracted.retargeted_methods) |method| {
+        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "a connection was re-pointed at the new scene's root, which now needs `func {s}()` in a script on {s}; the parent scene is no longer part of that wiring", .{ method, scene_res_path }));
+    }
     for (extracted.dropped_connections) |dropped| {
         try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "connection {s} crossed the boundary and was dropped; re-create it with scene connection add, which marks the instance editable when the endpoint is a node inside it, or add a signal to the new scene's root and connect the instance itself, which is the shape Godot expects", .{dropped}));
     }
@@ -1846,7 +1880,17 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
             // Both scenes are written by now, so a catalog problem is reported
             // in messages rather than failing a command that did its work.
             const root = projectRootFrom(inv) orelse return error.Usage;
-            const options = catalog_add.Options{ .scene = scene_res_path, .id = id, .summary = inv.getOption("summary") };
+            // The entry a refactor produces should be as complete as one
+            // written deliberately, so extract takes the same prose options
+            // catalog add does (trials 17 and 19).
+            const options = catalog_add.Options{
+                .scene = scene_res_path,
+                .id = id,
+                .summary = inv.getOption("summary"),
+                .when_to_use = inv.getOption("when-to-use"),
+                .when_not_to_use = inv.getOption("when-not-to-use"),
+                .tags = try catalog_cmd.parseTagsOption(cli.allocator, inv.getOption("tags")),
+            };
             if (catalog_add.addManifest(cli.allocator, cli.io, root, options)) |manifest_const| {
                 var manifest = manifest_const;
                 manifest.deinit(cli.allocator);
@@ -2437,6 +2481,10 @@ pub fn sceneCommands() spec.CommandSpec {
     };
     const extract_options = [_]spec.OptionSpec{
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance left behind as editable, so a connection to a node inside it can be written without re-adding the instance" },
+        .{ .long = "retarget-dropped-connections", .kind = .flag, .description = "Re-point a connection whose emitter moved at the new scene's root instead of dropping it; the method it names is then the new root's to implement, and is listed in messages" },
+        .{ .long = "tags", .kind = .string, .description = "Comma-separated tags for the catalog entry (with --catalog-id)" },
+        .{ .long = "when-to-use", .kind = .string, .description = "When an agent should reach for the new component (with --catalog-id)" },
+        .{ .long = "when-not-to-use", .kind = .string, .description = "When an agent should use something else (with --catalog-id)" },
         .{ .long = "output", .kind = .path, .description = "Path of the new scene, relative to the project root (becomes res://<output>)", .required = true },
         .{ .long = "catalog-id", .kind = .string, .description = "Also register the new scene in the project catalog under this id (needs the project root)" },
         .{ .long = "summary", .kind = .string, .description = "Catalog summary for the new entry" },
@@ -2989,4 +3037,15 @@ test "describe merges the tree, connections, refs and scripts into one answer" {
     }
     try std.testing.expect(found_describe);
     try std.testing.expect(found_node_list);
+}
+
+test "set-property refuses a header attribute instead of writing a line Godot ignores" {
+    // A path written as a body line leaves the ext_resource header pointing
+    // at the old file, so the scene loads the wrong script and nothing says
+    // so. Trial 28 hand-edited a scene back after exactly that.
+    try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("ext_resource", "path"), "scene retarget-ext") != null);
+    try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("ext_resource", "path"), "project move") != null);
+    try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("node", "name"), "scene node rename") != null);
+    try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("node", "parent"), "scene node reparent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("sub_resource", "id"), "header attribute") != null);
 }

@@ -149,7 +149,7 @@ _godot_cli_options() {
             echo "--from --signal --to --method --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene extract')
-            echo "--editable --output --catalog-id --summary --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--editable --retarget-dropped-connections --tags --when-to-use --when-not-to-use --output --catalog-id --summary --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene instance add')
             echo "--parent --name --scene --catalog-id --editable --unique-name --properties --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -236,7 +236,7 @@ _godot_cli_options() {
             echo "--reference"
             ;;
         'catalog add')
-            echo "--project-root --id --summary --when-to-use --when-not-to-use --notes --tags --related-ids --update --output --dry-run"
+            echo "--project-root --id --summary --when-to-use --when-not-to-use --notes --tags --signal-doc --related-ids --update --output --dry-run"
             ;;
         'catalog relink')
             echo "--project-root --dry-run"
@@ -278,7 +278,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'project move')
-            echo "--from --to --dry-run --project-root"
+            echo "--rename-ids --godot --import --from --to --dry-run --project-root"
             ;;
         'project apply')
             echo "--project-root --intent --intent-json --file --dry-run"

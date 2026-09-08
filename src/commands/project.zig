@@ -903,7 +903,7 @@ fn moveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const from = inv.getOption("from") orelse return error.Usage;
     const to = inv.getOption("to") orelse return error.Usage;
 
-    var result = try project_move.moveResource(cli.allocator, cli.io, root, from, to, inv.flag("dry-run"));
+    var result = try project_move.moveResource(cli.allocator, cli.io, root, from, to, inv.flag("dry-run"), inv.flag("rename-ids"));
     defer result.deinit(cli.allocator);
 
     var files = std.json.Array.init(cli.allocator);
@@ -917,10 +917,26 @@ fn moveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "references_retargeted", .{ .integer = @intCast(result.references_retargeted) });
     try data.put(cli.allocator, "manifests_updated", .{ .integer = @intCast(result.manifests_updated) });
     try data.put(cli.allocator, "settings_updated", .{ .integer = @intCast(result.settings_updated) });
+    if (inv.flag("rename-ids")) try data.put(cli.allocator, "ids_renamed", .{ .integer = @intCast(result.ids_renamed) });
     try data.put(cli.allocator, "changed_files", .{ .array = files });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    // Godot's uid cache still maps the old path, so validation reports
+    // uid_path_mismatch until an import refreshes it. --import runs that here,
+    // which is what makes "validate after every edit" hold for a move.
+    var imported = false;
     if (!inv.flag("dry-run")) {
-        try data.put(cli.allocator, "note", .{ .string = "Godot's uid_cache.bin still maps the old path until the next import; scene validate reports uid_path_mismatch until project import (or project run) has run" });
+        if (inv.flag("import")) {
+            const godot = try godot_run.locateGodot(cli.allocator, cli.io, cli.environ, inv.getOption("godot"));
+            const outcome = try godot_run.runProcess(cli.allocator, cli.environ, root, &.{ godot, "--headless", "--path", ".", "--import", "--quit" });
+            imported = switch (outcome.term) {
+                .exited => |code| code == 0,
+                else => false,
+            };
+            try data.put(cli.allocator, "imported", .{ .bool = imported });
+        }
+        if (!imported) {
+            try data.put(cli.allocator, "note", .{ .string = "Godot's uid_cache.bin still maps the old path until the next import; scene validate reports uid_path_mismatch until project import (or project run) has run. Pass --import to do it here" });
+        }
     }
     const summary = try std.fmt.allocPrint(cli.allocator, "moved {s} to {s}; retargeted {d} reference(s) in {d} file(s), {d} manifest(s), {d} setting(s)", .{ result.from, result.to, result.references_retargeted, result.files_changed, result.manifests_updated, result.settings_updated });
     try data.put(cli.allocator, "summary", .{ .string = summary });
@@ -1188,6 +1204,9 @@ pub fn commands() spec.CommandSpec {
     };
 
     const move_options = [_]spec.OptionSpec{
+        .{ .long = "rename-ids", .kind = .flag, .description = "Re-seed ext_resource ids from the new file name, so a Script_player id stops naming a file called hero.gd; ids already in use are left alone" },
+        godot_option,
+        .{ .long = "import", .kind = .flag, .description = "Run Godot's headless import after the move, so its uid cache stops mapping the old path and validation stops reporting uid_path_mismatch" },
         .{ .long = "from", .kind = .string, .description = "Current path (res://scripts/player.gd or scripts/player.gd)", .required = true },
         .{ .long = "to", .kind = .string, .description = "New path", .required = true },
         .{ .long = "dry-run", .kind = .flag, .description = "Report what would change without moving or writing" },

@@ -977,6 +977,10 @@ godot-cli scene extract [options] <file> <node>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--editable` | — | Mark the instance left behind as editable, so a connection to a node inside it can be written without re-adding the instance | — |
+| `--retarget-dropped-connections` | — | Re-point a connection whose emitter moved at the new scene's root instead of dropping it; the method it names is then the new root's to implement, and is listed in messages | — |
+| `--tags` | `<value>` | Comma-separated tags for the catalog entry (with --catalog-id) | — |
+| `--when-to-use` | `<value>` | When an agent should reach for the new component (with --catalog-id) | — |
+| `--when-not-to-use` | `<value>` | When an agent should use something else (with --catalog-id) | — |
 | `--output` | `<path>` | Path of the new scene, relative to the project root (becomes res://&lt;output&gt;) (required) | — |
 | `--catalog-id` | `<value>` | Also register the new scene in the project catalog under this id (needs the project root) | — |
 | `--summary` | `<value>` | Catalog summary for the new entry | — |
@@ -1901,6 +1905,7 @@ godot-cli catalog add [options] <file>
 | `--when-not-to-use` | `<value>` | When an agent should use something else | — |
 | `--notes` | `<value>` | Edge cases and variant notes | — |
 | `--tags` | `<value>` | Comma-separated tags | — |
+| `--signal-doc` | `<value>` | Document a signal the root script declares: &lt;signal&gt;=&lt;what it means&gt;; repeatable, and fills the row catalog add scaffolds | — |
 | `--related-ids` | `<value>` | Comma-separated related catalog ids | — |
 | `--update` | — | Update an existing manifest, keeping prose already written | — |
 | `--output` | `<path>` | Manifest path (default: &lt;scene&gt;.manifest.json beside the scene) | — |
@@ -2175,6 +2180,9 @@ godot-cli project move [options]
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
+| `--rename-ids` | — | Re-seed ext_resource ids from the new file name, so a Script_player id stops naming a file called hero.gd; ids already in use are left alone | — |
+| `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
+| `--import` | — | Run Godot's headless import after the move, so its uid cache stops mapping the old path and validation stops reporting uid_path_mismatch | — |
 | `--from` | `<value>` | Current path (res://scripts/player.gd or scripts/player.gd) (required) | — |
 | `--to` | `<value>` | New path (required) | — |
 | `--dry-run` | — | Report what would change without moving or writing | — |

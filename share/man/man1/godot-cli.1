@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.17.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.18.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -774,6 +774,20 @@ Node by viewport path, e.g. /root/Main/Player
 \fB\-\-editable\fR
 Mark the instance left behind as editable, so a connection
 to a node inside it can be written without re\-adding the instance
+.TP
+\fB\-\-retarget\-dropped\-connections\fR
+Re\-point a connection whose emitter moved at the new scene's
+root instead of dropping it; the method it names is then the
+new root's to implement, and is listed in messages
+.TP
+\fB\-\-tags\fR \fIvalue\fR
+Comma\-separated tags for the catalog entry (with \-\-catalog\-id)
+.TP
+\fB\-\-when\-to\-use\fR \fIvalue\fR
+When an agent should reach for the new component (with \-\-catalog\-id)
+.TP
+\fB\-\-when\-not\-to\-use\fR \fIvalue\fR
+When an agent should use something else (with \-\-catalog\-id)
 .TP
 \fB\-\-output\fR \fIpath\fR
 Path of the new scene, relative to the project root (becomes
@@ -1760,6 +1774,10 @@ Edge cases and variant notes
 \fB\-\-tags\fR \fIvalue\fR
 Comma\-separated tags
 .TP
+\fB\-\-signal\-doc\fR \fIvalue\fR
+Document a signal the root script declares: <signal>=<what
+it means>; repeatable, and fills the row catalog add scaffolds
+.TP
 \fB\-\-related\-ids\fR \fIvalue\fR
 Comma\-separated related catalog ids
 .TP
@@ -2008,6 +2026,19 @@ Renames the file with its .uid and .import sidecars, rewrites
 every ext_resource path in the project's scenes and resources,
 repoints catalog manifests, and updates project.godot settings
 such as the main scene and autoloads. Paths are res:// or project\-relative.
+.TP
+\fB\-\-rename\-ids\fR
+Re\-seed ext_resource ids from the new file name, so a Script_player
+id stops naming a file called hero.gd; ids already in use are
+left alone
+.TP
+\fB\-\-godot\fR \fIpath\fR
+Godot binary; default $GODOT, then godot on PATH, then the
+macOS app bundle
+.TP
+\fB\-\-import\fR
+Run Godot's headless import after the move, so its uid cache
+stops mapping the old path and validation stops reporting uid_path_mismatch
 .TP
 \fB\-\-from\fR \fIvalue\fR
 Current path (res://scripts/player.gd or scripts/player.gd)

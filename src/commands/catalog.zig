@@ -8,6 +8,7 @@ const catalog_scan = @import("../godot/catalog_scan.zig");
 const catalog_show = @import("../godot/catalog_show.zig");
 const catalog_search = @import("../godot/catalog_search.zig");
 const catalog_export = @import("../godot/catalog_export.zig");
+const error_details = @import("../godot/error_details.zig");
 const node_tree = @import("../godot/node_tree.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
 
@@ -188,7 +189,24 @@ fn buildShowJson(allocator: std.mem.Allocator, shown: *const catalog_show.ShowRe
     return .{ .object = obj };
 }
 
-fn parseTagsOption(allocator: std.mem.Allocator, text: ?[]const u8) ![]const []const u8 {
+/// `--signal-doc pressed=Fired when the player confirms`, repeatable.
+fn parseSignalDocs(allocator: std.mem.Allocator, inv: *const spec.Invocation) ![]const catalog_add.SignalDoc {
+    const texts = try inv.getOptionAll(allocator, "signal-doc");
+    var out: std.ArrayList(catalog_add.SignalDoc) = .empty;
+    for (texts) |text| {
+        const equals = std.mem.indexOfScalar(u8, text, '=') orelse {
+            error_details.record(.{ .field = "signal-doc", .value = text, .hint = "write <signal>=<documentation>, e.g. pressed=Fired when the player confirms" });
+            return error.InvalidValue;
+        };
+        try out.append(allocator, .{
+            .name = std.mem.trim(u8, text[0..equals], " "),
+            .doc = std.mem.trim(u8, text[equals + 1 ..], " "),
+        });
+    }
+    return out.items;
+}
+
+pub fn parseTagsOption(allocator: std.mem.Allocator, text: ?[]const u8) ![]const []const u8 {
     const raw = text orelse return &.{};
     if (raw.len == 0) return &.{};
     var items: std.ArrayList([]const u8) = .empty;
@@ -223,6 +241,7 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .when_not_to_use = inv.getOption("when-not-to-use"),
         .notes = inv.getOption("notes"),
         .tags = tags,
+        .signal_docs = try parseSignalDocs(cli.allocator, inv),
         .related_ids = related,
         .update = inv.flag("update"),
         .output = inv.getOption("output"),
@@ -598,6 +617,7 @@ pub fn commands() spec.CommandSpec {
         .{ .long = "when-not-to-use", .kind = .string, .description = "When an agent should use something else" },
         .{ .long = "notes", .kind = .string, .description = "Edge cases and variant notes" },
         .{ .long = "tags", .kind = .string, .description = "Comma-separated tags" },
+        .{ .long = "signal-doc", .kind = .string, .description = "Document a signal the root script declares: <signal>=<what it means>; repeatable, and fills the row catalog add scaffolds", .repeatable = true },
         .{ .long = "related-ids", .kind = .string, .description = "Comma-separated related catalog ids" },
         .{ .long = "update", .kind = .flag, .description = "Update an existing manifest, keeping prose already written" },
         .{ .long = "output", .kind = .path, .description = "Manifest path (default: <scene>.manifest.json beside the scene)" },

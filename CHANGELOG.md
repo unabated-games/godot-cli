@@ -15,6 +15,20 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-09-08
+
+### Added
+
+- **`scene extract --retarget-dropped-connections`** re-points a connection whose emitter moved at the new scene's root instead of dropping it, and names the method the root now needs. Both existing-project trials did that by hand.
+- **`scene extract` takes the catalog prose options** — `--tags`, `--when-to-use`, `--when-not-to-use` beside `--summary` — so the entry a refactor produces is as complete as one written deliberately. Trials 17 and 19.
+- **`catalog add --signal-doc <signal>=<what it means>`**, repeatable, fills the rows `catalog add` scaffolds for a root script's signals instead of leaving them blank to edit by hand.
+- **`project move --import`** runs Godot's headless import after the move, so its uid cache stops mapping the old path and `scene validate` stops reporting `uid_path_mismatch` — which makes "validate after every edit" hold for a move. Trials 17 and 19.
+- **`project move --rename-ids`** re-seeds an `ext_resource` id from the new file name, so a `Script_player` id stops naming a file called `hero.gd`. Ids already in use, and Godot's own `1_ab12c` form, are left alone.
+
+### Fixed
+
+- **`scene set-property` refuses a section header attribute** instead of writing a body line the engine ignores. Setting `path` on an `ext_resource` left the header pointing at the old file and added a meaningless `path = …` line, and the command reported success; trial 28 corrupted a scene that way and hand-edited it back. The failure now names the command that does the job — `scene retarget-ext` or `project move` for a path, `scene node rename` or `reparent` for a node's name or parent.
+
 ## [0.17.0] — 2026-09-08
 
 ### Added

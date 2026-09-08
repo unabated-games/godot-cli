@@ -34,12 +34,27 @@ pub const Result = struct {
     moved_connections: usize,
     /// Human-readable descriptions of connections that crossed the boundary.
     dropped_connections: []const []const u8,
+    /// With `retarget_dropped`, the methods the new scene's root now needs,
+    /// one per connection that was re-pointed at it.
+    retargeted_methods: []const []const u8,
+};
+
+pub const Options = struct {
+    /// Re-point a connection whose emitter is inside the subtree at the new
+    /// scene's root, instead of dropping it. Both existing-project trials did
+    /// this by hand: the emitter keeps its signal, the new root gains the
+    /// handler, and the parent scene is no longer part of the wiring.
+    retarget_dropped: bool = false,
 };
 
 /// Take `node_path` and everything under it out of `doc` into a new document.
 /// The caller adds the instance to `doc` (so id seeding stays in one place)
 /// and writes both files.
 pub fn extractSubtree(allocator: std.mem.Allocator, doc: *document.Document, node_path: []const u8) Error!Result {
+    return extractSubtreeWithOptions(allocator, doc, node_path, .{});
+}
+
+pub fn extractSubtreeWithOptions(allocator: std.mem.Allocator, doc: *document.Document, node_path: []const u8, options: Options) Error!Result {
     var list = node_tree.collectNodes(allocator, doc) catch return error.OutOfMemory;
     defer list.deinit(allocator);
 
@@ -143,6 +158,8 @@ pub fn extractSubtree(allocator: std.mem.Allocator, doc: *document.Document, nod
     var moved_connections: usize = 0;
     var dropped: std.ArrayList([]const u8) = .empty;
     errdefer dropped.deinit(allocator);
+    var retargeted: std.ArrayList([]const u8) = .empty;
+    errdefer retargeted.deinit(allocator);
     var remove_indices: std.ArrayList(usize) = .empty;
     defer remove_indices.deinit(allocator);
     try remove_indices.appendSlice(allocator, node_indices.items);
@@ -167,8 +184,23 @@ pub fn extractSubtree(allocator: std.mem.Allocator, doc: *document.Document, nod
             } else if (from_in or to_in) {
                 const signal = section.header.getString("signal") orelse "";
                 const method = section.header.getString("method") orelse "";
-                try dropped.append(allocator, try std.fmt.allocPrint(allocator, "signal {s} from {s} to {s} method {s}", .{ signal, from, to, method }));
-                try remove_indices.append(allocator, index);
+                // The emitter moved and the receiver did not: the connection
+                // can live in the new scene, pointed at its root, which is
+                // the shape a self-contained scene wants.
+                if (options.retarget_dropped and from_in and !to_in) {
+                    var cloned = try cloneSection(allocator, section);
+                    const new_from = try rewriteRelative(allocator, from, target_rel, target_prefix);
+                    defer allocator.free(new_from);
+                    try cloned.header.setStringField(allocator, "from", new_from);
+                    try cloned.header.setStringField(allocator, "to", ".");
+                    try new_doc.sections.append(allocator, cloned);
+                    try retargeted.append(allocator, try allocator.dupe(u8, method));
+                    try remove_indices.append(allocator, index);
+                    moved_connections += 1;
+                } else {
+                    try dropped.append(allocator, try std.fmt.allocPrint(allocator, "signal {s} from {s} to {s} method {s}", .{ signal, from, to, method }));
+                    try remove_indices.append(allocator, index);
+                }
             }
         } else if (std.mem.eql(u8, section.header.name, "editable")) {
             const path = section.header.getString("path") orelse continue;
@@ -203,6 +235,7 @@ pub fn extractSubtree(allocator: std.mem.Allocator, doc: *document.Document, nod
         .moved_sub = moved_sub,
         .moved_connections = moved_connections,
         .dropped_connections = try dropped.toOwnedSlice(allocator),
+        .retargeted_methods = try retargeted.toOwnedSlice(allocator),
     };
 }
 

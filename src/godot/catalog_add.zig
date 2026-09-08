@@ -26,6 +26,11 @@ pub const Error = error{
     InvalidManifest,
 };
 
+pub const SignalDoc = struct {
+    name: []const u8,
+    doc: []const u8,
+};
+
 pub const Options = struct {
     /// `res://` path of the scene being described.
     scene: []const u8,
@@ -35,6 +40,9 @@ pub const Options = struct {
     when_not_to_use: ?[]const u8 = null,
     notes: ?[]const u8 = null,
     tags: []const []const u8 = &.{},
+    /// Documentation for a signal the root script declares, so an entry
+    /// written during a refactor is as complete as one written deliberately.
+    signal_docs: []const SignalDoc = &.{},
     related_ids: []const []const u8 = &.{},
     /// Update an existing manifest in place instead of refusing to overwrite.
     update: bool = false,
@@ -183,7 +191,7 @@ pub fn addManifest(
     const scene_uid = try readSceneHeaderUid(allocator, io, scene_fs_path);
     errdefer allocator.free(scene_uid);
 
-    const signals = try scaffoldSignals(allocator, io, project_root, options.scene, prose.signals);
+    const signals = try scaffoldSignals(allocator, io, project_root, options.scene, prose.signals, options.signal_docs);
     errdefer {
         for (signals) |*row| row.deinit(allocator);
         allocator.free(signals);
@@ -367,6 +375,7 @@ fn scaffoldSignals(
     project_root: []const u8,
     scene_res_path: []const u8,
     existing: []const catalog_scan.DocRow,
+    supplied: []const SignalDoc,
 ) Error![]catalog_scan.DocRow {
     var rows: std.ArrayList(catalog_scan.DocRow) = .empty;
     errdefer {
@@ -390,9 +399,15 @@ fn scaffoldSignals(
 
                 for (iface.signals) |signal| {
                     const prior = findRow(existing, signal.name);
+                    // An explicit --signal-doc wins over what was there, so a
+                    // caller can fill the row in as it is created.
+                    var doc_text: []const u8 = if (prior) |p| p.doc else "";
+                    for (supplied) |given| {
+                        if (std.mem.eql(u8, given.name, signal.name)) doc_text = given.doc;
+                    }
                     try rows.append(allocator, .{
                         .name = try allocator.dupe(u8, signal.name),
-                        .doc = try allocator.dupe(u8, if (prior) |p| p.doc else ""),
+                        .doc = try allocator.dupe(u8, doc_text),
                         .connect_example = try allocator.dupe(u8, if (prior) |p| p.connect_example else ""),
                         .when_to_call = try allocator.dupe(u8, ""),
                     });

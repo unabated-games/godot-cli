@@ -241,6 +241,7 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
         .{ .err = "UnknownJoypadButton", .kind = "unknown_joypad_button", .message = "no joypad button with that name" },
         .{ .err = "UnknownJoypadAxis", .kind = "unknown_joypad_axis", .message = "no joypad axis with that name" },
         .{ .err = "UnknownMouseButton", .kind = "unknown_mouse_button", .message = "no mouse button with that name" },
+        .{ .err = "HeaderAttribute", .kind = "header_attribute", .message = "that name is a section header attribute, not a property" },
         .{ .err = "InvalidEvent", .kind = "invalid_event", .message = "no input event type with that name" },
         .{ .err = "UnknownKey", .kind = "unknown_key", .message = "no key with that name" },
     };

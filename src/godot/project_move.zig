@@ -27,6 +27,8 @@ pub const Result = struct {
     sidecars_moved: usize,
     files_changed: usize,
     references_retargeted: usize,
+    /// ext_resource ids re-seeded from the new file name (--rename-ids).
+    ids_renamed: usize = 0,
     manifests_updated: usize,
     settings_updated: usize,
     changed_files: [][]const u8,
@@ -55,6 +57,31 @@ pub fn normalizeResPath(allocator: std.mem.Allocator, project_root: []const u8, 
     return try std.fmt.allocPrint(allocator, "res://{s}", .{rel});
 }
 
+/// After the path is retargeted, an id seeded from the old file's name still
+/// names it (`Script_player` pointing at `hero.gd`). Re-seed it from the new
+/// name so a diff reads the way the move did. Best effort: a name already in
+/// use is left alone, since the id is arbitrary and correctness comes first.
+fn renameIdsForMovedFile(allocator: std.mem.Allocator, doc: *document.Document, to_path: []const u8) !usize {
+    const basename = std.fs.path.basename(to_path);
+    const stem = if (std.mem.lastIndexOfScalar(u8, basename, '.')) |dot| basename[0..dot] else basename;
+
+    var renamed: usize = 0;
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const path = section.header.getString("path") orelse continue;
+        if (!std.mem.eql(u8, path, to_path)) continue;
+        const old_id = section.header.getString("id") orelse continue;
+        const res_type = section.header.getString("type") orelse continue;
+        // Only ids of godot-cli's own `{Type}_{hint}` shape are re-seeded;
+        // Godot's `1_ab12c` form names no file and needs no rename.
+        if (!std.mem.startsWith(u8, old_id, res_type)) continue;
+        const new_id = try std.fmt.allocPrint(allocator, "{s}_{s}", .{ res_type, stem });
+        defer allocator.free(new_id);
+        if (try text_batch.renameExtResourceId(doc, allocator, old_id, new_id)) |_| renamed += 1;
+    }
+    return renamed;
+}
+
 pub fn moveResource(
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -62,6 +89,7 @@ pub fn moveResource(
     from_in: []const u8,
     to_in: []const u8,
     dry_run: bool,
+    rename_ids: bool,
 ) Error!Result {
     const from = try normalizeResPath(allocator, project_root, from_in);
     errdefer allocator.free(from);
@@ -108,6 +136,7 @@ pub fn moveResource(
     try collectFiles(allocator, io, project_root, &files);
 
     var files_changed: usize = 0;
+    var ids_renamed: usize = 0;
     var references: usize = 0;
     var manifests_updated: usize = 0;
     for (files.items) |file_path| {
@@ -130,6 +159,7 @@ pub fn moveResource(
         defer doc.deinit(allocator);
         const count = text_batch.retargetExtResourcePaths(&doc, allocator, from, to) catch return error.OutOfMemory;
         if (count == 0) continue;
+        if (rename_ids) ids_renamed += renameIdsForMovedFile(allocator, &doc, to) catch 0;
         if (!dry_run) writer.writeFile(allocator, file_path, &doc, null) catch return error.Io;
         files_changed += 1;
         references += count;
@@ -176,6 +206,7 @@ pub fn moveResource(
         .sidecars_moved = sidecars_moved,
         .files_changed = files_changed,
         .references_retargeted = references,
+        .ids_renamed = ids_renamed,
         .manifests_updated = manifests_updated,
         .settings_updated = settings_updated,
         .changed_files = try changed.toOwnedSlice(allocator),
