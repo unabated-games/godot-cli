@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.14.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.15.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -1129,10 +1129,17 @@ normalised the way the editor writes it unless \-\-raw\-value.
 Scene or resource file (.tscn or .tres)
 .TP
 \fB\-\-property\fR \fIvalue\fR
-Property name to set
+Property name to set; repeat with \-\-value for several
 .TP
 \fB\-\-value\fR \fIvalue\fR
-Property value (normalized unless \-\-raw\-value)
+Property value (normalized unless \-\-raw\-value), one per
+\-\-property
+.TP
+\fB\-\-properties\fR \fIvalue\fR
+JSON object of property name to value, instead of or as well
+as \-\-property/\-\-value. Numbers and booleans are JSON; a
+string is Variant text and carries its own quotes ("text":
+"\e"Score\e"")
 .TP
 \fB\-\-raw\-value\fR
 Write value verbatim without Variant normalization

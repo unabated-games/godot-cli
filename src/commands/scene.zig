@@ -268,8 +268,13 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
     const input_path = inv.positionals[0];
-    const property_name = inv.getOption("property") orelse return error.Usage;
-    const property_value = inv.getOption("value") orelse return error.Usage;
+    // --property/--value, or a --properties object, the way `node add` takes
+    // them; one property at a time was the asymmetry agents kept tripping on.
+    const pairs = try collectPropertyPairs(cli, inv);
+    if (pairs.len == 0) {
+        error_details.record(.{ .field = "property", .hint = "give --property with --value, or --properties with a JSON object" });
+        return error.Usage;
+    }
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
 
@@ -320,10 +325,11 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         return error.Usage;
     };
 
-    const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
-    defer cli.allocator.free(written_value);
-
-    try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, property_name, written_value);
+    for (pairs) |pair| {
+        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name);
+        defer cli.allocator.free(written_value);
+        try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, pair.name, written_value);
+    }
 
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
@@ -331,16 +337,24 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     }
 
     const section = doc.sections.items[section_index];
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
-        "updated {s} property {s} on section line {d}",
-        .{ kind, property_name, section.line },
-    );
+    const summary = if (pairs.len == 1)
+        try std.fmt.allocPrint(
+            cli.allocator,
+            "updated {s} property {s} on section line {d}",
+            .{ kind, pairs[0].name, section.line },
+        )
+    else
+        try std.fmt.allocPrint(
+            cli.allocator,
+            "updated {d} {s} properties on section line {d}",
+            .{ pairs.len, kind, section.line },
+        );
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = output_path });
-    try data.put(cli.allocator, "property", .{ .string = property_name });
-    try data.put(cli.allocator, "value", .{ .string = property_value });
+    try data.put(cli.allocator, "property", .{ .string = pairs[0].name });
+    try data.put(cli.allocator, "value", .{ .string = pairs[0].value });
+    try data.put(cli.allocator, "property_count", .{ .integer = @intCast(pairs.len) });
     try data.put(cli.allocator, "section_line", .{ .integer = @intCast(section.line) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     try data.put(cli.allocator, "summary", .{ .string = summary });
@@ -2060,8 +2074,9 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
     } ++ id_session_options;
     const set_property_options = [_]spec.OptionSpec{
-        .{ .long = "property", .kind = .string, .description = "Property name to set", .required = true },
-        .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value)", .required = true },
+        .{ .long = "property", .kind = .string, .description = "Property name to set; repeat with --value for several", .repeatable = true },
+        .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value), one per --property", .repeatable = true },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
         .{ .long = "node", .kind = .string, .description = "Target node by viewport path (e.g. /root/Main/Player)" },
         .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },

@@ -15,6 +15,21 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-09-08
+
+### Added
+
+- **`scene validate` type-checks property values against the node's class.** `visible = Vector2(1, 2)` or `text = 5` used to pass every check and run: Godot coerces the value, the file loads, and only the running frame shows the damage. Asked for by trials 17, 18 and 19, and the largest remaining gap in "the file is right". Property and signal types come from a table generated from Godot's own class reference XML (`tools/gen_class_table.py`, 520 classes, 3933 properties, Godot 4.8.0) and committed, so no engine checkout is needed.
+- **A connection to a signal the emitter's class does not emit is an error** (`unknown_signal`) — `pressd` for `pressed` used to cost a whole run to find. Trial 19.
+- Both checks are conservative by construction: a class or property the table does not carry (`theme_override_*`, `metadata/*`, a script's exported variables), a value that does not parse, and a connection from a scripted node are all left alone. Verified against every scene the trials have produced — 38 of them — with no false report.
+- The validator's `control_under_node2d` warning now knows every Control and Node2D class rather than the fifty each its hand-written lists named.
+
+### Changed
+
+- **A generated `sub_resource` id steps aside instead of colliding.** The id is seeded from the scene path and the resource type, so a second `sub_add` of one type in a scene produced the same id and failed `DuplicateResourceId`. It now takes a numbered suffix (`StyleBoxFlat_ab12c_2`), which Godot preserves through a save. Three trials in a row hit this; the last one hand-edited the `.tscn` to get past it, which is the one thing the tool exists to prevent. An `id_hint` you chose yourself still fails when it collides — that name is yours, so a clash is worth hearing about.
+- **`node_set` takes a `properties` object**, like `node_add`, instead of one property and value per op; `scene set-property` likewise takes `--properties` and repeatable `--property`/`--value`. Two trials and the maintainer each wrote the object form first and had it rejected.
+- **`node_add` takes `unique_name`**, the field its `add_node` recipe already took. It used to be dropped silently, and since 0.13.0 was rejected outright.
+
 ## [0.14.0] — 2026-09-08
 
 ### Fixed

@@ -123,11 +123,11 @@ fn opRow(comptime name: []const u8, comptime fields: []const []const u8) OpField
 }
 
 const op_fields = [_]OpFields{
-    opRow("node_add", &.{ "parent", "name", "type", "properties" }),
+    opRow("node_add", &.{ "parent", "name", "type", "properties", "unique_name" }),
     opRow("node_remove", &.{ "path", "recursive" }),
     opRow("node_rename", &.{ "path", "name" }),
     opRow("node_reparent", &.{ "path", "parent" }),
-    opRow("node_set", &.{ "path", "property", "value" }),
+    opRow("node_set", &.{ "path", "property", "value", "properties" }),
     opRow("ext_add", &.{ "type", "path", "id_hint" }),
     opRow("ext_remove", &.{"id"}),
     opRow("sub_add", &.{ "type", "id_hint", "properties" }),
@@ -192,6 +192,10 @@ fn applyOneOp(
         defer added.deinit(allocator);
         if (op_value.object.get("properties")) |props| {
             try applyNodeProperties(allocator, doc, added.path, props);
+        }
+        // The add_node recipe takes unique_name; the op silently dropped it.
+        if (readBool(op_value.object.get("unique_name")) orelse false) {
+            try scene_edit.setNodeProperty(allocator, doc, added.path, "unique_name_in_owner", "true");
         }
         if (options.undo) |recorder| {
             try scene_undo.recordNodeAddUndo(recorder, added.path);
@@ -282,6 +286,30 @@ fn applyOneOp(
 
     if (std.mem.eql(u8, op_name, "node_set")) {
         const path = try requiredString(op_value.object, "path");
+        // node_add takes a properties object, so this is what callers try
+        // first; it used to be rejected as a missing `property`.
+        if (op_value.object.get("properties")) |props| {
+            if (op_value.object.get("property") != null) {
+                error_details.record(.{ .field = "properties", .hint = "give either one property and value, or a properties object, not both" });
+                return error.InvalidPatch;
+            }
+            if (props != .object) {
+                error_details.record(.{ .field = "properties", .hint = "a JSON object of property name to value" });
+                return error.InvalidPatch;
+            }
+            if (options.undo) |recorder| {
+                var it = props.object.iterator();
+                while (it.next()) |entry| {
+                    if (try scene_undo.readNodePropertyRaw(allocator, doc, path, entry.key_ptr.*)) |old_value| {
+                        defer allocator.free(old_value);
+                        try scene_undo.recordNodeSetUndo(recorder, path, entry.key_ptr.*, old_value);
+                    }
+                }
+            }
+            try applyNodeProperties(allocator, doc, path, props);
+            const count = props.object.count();
+            return std.fmt.allocPrint(allocator, "set {d} {s} on {s}", .{ count, if (count == 1) "property" else "properties", path });
+        }
         const property = try requiredString(op_value.object, "property");
         const value = try requiredPropertyValue(allocator, op_value.object, "value");
         defer allocator.free(value);
@@ -654,10 +682,13 @@ fn generatedExtId(allocator: std.mem.Allocator, doc: *const document.Document, s
     return scene_id.formatExtResourceId(allocator, @intCast(index));
 }
 
+/// The id is seeded from the scene path and the type, so two `sub_add` ops of
+/// one type in a scene generate the same id. Three trials hit that collision;
+/// one of them hand-edited the scene to get past it. A generated id steps
+/// aside instead — `id_hint` is still the way to choose a stable name, and an
+/// explicit hint that collides still fails, because that one is the caller's.
 fn generatedSubId(allocator: std.mem.Allocator, doc: *document.Document, seed_path: []const u8, res_type: []const u8) Error![]const u8 {
-    _ = doc;
-    scene_resources.seedResourceIds(seed_path);
-    return scene_id.formatSubResourceId(allocator, res_type);
+    return scene_resources.generateFreeSubId(allocator, doc, seed_path, res_type);
 }
 
 const scene_id = @import("scene_id.zig");
@@ -917,7 +948,7 @@ test "an unknown field on an op is rejected and names the fields the op takes" {
     try std.testing.expectEqual(@as(usize, 2), doc.sections.items.len);
 }
 
-test "a colliding generated id names id_hint and the op that failed" {
+test "two sub_add ops of one type get different ids instead of colliding" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -934,19 +965,89 @@ test "a colliding generated id names id_hint and the op that failed" {
         \\{
         \\  "ops": [
         \\    { "op": "sub_add", "type": "StyleBoxFlat" },
+        \\    { "op": "sub_add", "type": "StyleBoxFlat" },
         \\    { "op": "sub_add", "type": "StyleBoxFlat" }
         \\  ]
         \\}
     ;
-    try std.testing.expectError(error.DuplicateResourceId, applyPatchJson(allocator, &doc, patch, .{ .seed_path = "res://main.tscn" }));
+    var result = try applyPatchJson(allocator, &doc, patch, .{ .seed_path = "res://main.tscn" });
+    defer result.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 3), result.applied_count);
 
+    var ids: std.ArrayList([]const u8) = .empty;
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "sub_resource")) continue;
+        try ids.append(allocator, section.header.getString("id").?);
+    }
+    try std.testing.expectEqual(@as(usize, 3), ids.items.len);
+    for (ids.items, 0..) |id, i| {
+        for (ids.items[i + 1 ..]) |other| try std.testing.expect(!std.mem.eql(u8, id, other));
+    }
+    try std.testing.expect(std.mem.endsWith(u8, ids.items[1], "_2"));
+    try std.testing.expect(std.mem.endsWith(u8, ids.items[2], "_3"));
+}
+
+test "an id_hint the caller chose still fails when it collides, naming id_hint" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const source =
+        \\[gd_scene load_steps=2 format=3]
+        \\
+        \\[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hover"]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    const patch =
+        \\{ "ops": [ { "op": "sub_add", "type": "StyleBoxFlat", "id_hint": "hover" } ] }
+    ;
+    try std.testing.expectError(error.DuplicateResourceId, applyPatchJson(allocator, &doc, patch, .{ .seed_path = "res://main.tscn" }));
     var details = (error_details.takeJson(allocator) catch null) orelse return error.TestExpectedEqual;
     defer details.deinit(allocator);
     try std.testing.expectEqualStrings("id_hint", details.get("field").?.string);
-    try std.testing.expectEqualStrings("sub_add", details.get("op").?.string);
-    try std.testing.expectEqual(@as(i64, 1), details.get("step").?.integer);
-    try std.testing.expect(std.mem.indexOf(u8, details.get("hint").?.string, "id_hint") != null);
+    try std.testing.expectEqual(@as(i64, 0), details.get("step").?.integer);
     scene_resources.releaseConflictDetails(allocator);
+}
+
+test "node_set takes a properties object, and node_add takes unique_name" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const source =
+        \\[gd_scene load_steps=2 format=3]
+        \\
+        \\[node name="Main" type="Control"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    const patch =
+        \\{
+        \\  "ops": [
+        \\    { "op": "node_set", "path": "/root/Main", "properties": { "anchor_right": 1.0, "anchor_bottom": 1.0 } },
+        \\    { "op": "node_add", "parent": "/root/Main", "name": "Score", "type": "Label", "unique_name": true }
+        \\  ]
+        \\}
+    ;
+    var result = try applyPatchJson(allocator, &doc, patch, .{ .seed_path = "res://main.tscn" });
+    defer result.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 2), result.applied_count);
+
+    const text = try @import("text_format/roundtrip.zig").writeDocumentPreserving(allocator, &doc);
+    try std.testing.expect(std.mem.indexOf(u8, text, "anchor_right = 1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "anchor_bottom = 1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "unique_name_in_owner = true") != null);
+
+    // One property and a properties object in the same op is a mistake, not a merge.
+    const both =
+        \\{ "ops": [ { "op": "node_set", "path": "/root/Main", "property": "visible", "value": "false", "properties": { "visible": "true" } } ] }
+    ;
+    try std.testing.expectError(error.InvalidPatch, applyPatchJson(allocator, &doc, both, .{ .seed_path = "res://main.tscn" }));
 }
 
 test "every op the dispatcher knows has a field row" {

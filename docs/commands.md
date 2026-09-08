@@ -1290,8 +1290,9 @@ godot-cli scene set-property [options] <file>
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
-| `--property` | `<value>` | Property name to set (required) | — |
-| `--value` | `<value>` | Property value (normalized unless --raw-value) (required) | — |
+| `--property` | `<value>` | Property name to set; repeat with --value for several | — |
+| `--value` | `<value>` | Property value (normalized unless --raw-value), one per --property | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
 | `--raw-value` | — | Write value verbatim without Variant normalization | — |
 | `--node` | `<value>` | Target node by viewport path (e.g. /root/Main/Player) | — |
 | `--node-name` | `<value>` | Target node section by name attribute | — |

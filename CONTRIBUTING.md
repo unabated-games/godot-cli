@@ -34,6 +34,15 @@ completions are generated from the `CommandSpec` tree in `src/commands.zig`. Add
 a command or an option and they change — run `zig build docs` and commit the
 result, or CI will tell you about it.
 
+`src/godot/class_table.zig` is generated too, from Godot's own class reference
+XML — it is what `scene validate` checks property types and signal names
+against. It is committed so users need no engine checkout; refresh it against a
+newer engine like this, and commit the result:
+
+```bash
+tools/gen_class_table.py ~/src/godot > src/godot/class_table.zig && zig fmt src/godot/class_table.zig
+```
+
 The Godot round-trip suite needs a Godot 4.7 install:
 
 ```bash

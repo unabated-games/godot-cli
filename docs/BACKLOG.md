@@ -1,24 +1,33 @@
 # Open asks
 
-Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.14.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
+Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.15.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
 
 Items are grouped by area and ordered by how much they would change what an agent produces. Closed asks are listed at the end so the picture is complete.
 
+## Next up, in order
+
+Ranked by how much each would change what an agent produces, weighted by how
+often a trial actually hit it. The sections below carry the detail; this is the
+order to work through them.
+
+1. **The site describes the tool as it was at 0.10.0** (M). The only item here that decides whether anyone adopts the tool at all — `project run`, clicks, `scene extract`, the input map and the existing-project workflow are all invisible to a new reader. Four releases stale now.
+2. **The `scene validate` envelope over MCP** (S). Newly urgent: 0.15.0 adds two more error kinds to validate, so more sessions meet an envelope that says `ok: true` next to `error_count: 2` and exit 1, and an MCP client marks the whole call an error.
+3. **Real root type for instanced nodes in `scene node list`** (S). The most-cited item in this file — trials 11, 12, 17 and 18 — and the answer is already in a file the command is handed.
+4. **A `script_refs` check after removes, renames, and reparents** (M). The same class of silent breakage as the property and signal checks that just shipped: the scene is right, a script's `$Path` is not, and only a run finds it.
+5. **A `scene describe` discovery command** (M). Seven calls to learn one existing scene; the refactoring workflow starts with this every time.
+6. **Check a scripted node's signals against its script** (S). Closes the hole the new `unknown_signal` check deliberately leaves open, and lets `scene connection add` refuse a typo at write time.
+7. **A core toolset, and an MCP-shaped cheat sheet** (S each). Six trials between them. Cheap, and they cut what every MCP session pays before it does anything.
+8. **The refactoring polish**: `scene extract --retarget-dropped-connections`, `project move --import`, fresh ext_resource ids, `--tags`/`--when-to-use`/`--signal-docs` (S each). Each removes a hand step from a refactor that otherwise works.
+9. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
+10. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
+
 ## Correctness and validation
 
-**Type-check property values against the node class.** Asked by trials 17, 18, 19. A `visible = Vector2(1, 2)` or `font_size = "big"` passes `scene validate` and runs clean; Godot coerces it and only the frame shows the damage. On an existing project a silently coerced value looks like existing behaviour. Needs a table of common classes and their property types, generated from Godot's class reference XML in the engine checkout for Control, Node2D, and the usual subclasses. Size L. This is the largest remaining gap in "the file is right".
-
-**Warn when a connected signal does not exist on the node type or its script.** Trial 19. A typo in `--signal` validates clean and fails only at run time. Needs the same class table for builtin signals, plus the existing GDScript signal scan for script-declared ones. Size M, and cheap once the class table exists.
+**Check a scripted node's signals against its script.** The `unknown_signal` check skips any node carrying a script, because a script may declare its own signals and the document-level validator cannot read the file. `gdscript_scan` already parses `signal` declarations, so with the project root the check could cover scripted nodes too, and `scene connection add` could refuse a typo at write time rather than at the validate step after it. Size S.
 
 **Record child order and unique ids in undo ops.** Trials 18, 19. An undo patch for a removal re-adds the node at the end of its parent and with a fresh unique id, so the restore is not byte for byte. Size S to M.
 
 **Real root type for instanced nodes in `scene node list`.** Trials 11, 12, 17, 18. Instanced nodes report `PackedScene`. Reading the instanced scene's root type needs the project root, which `scene node list` accepts and ignores today. Size S.
-
-**`unique_name` on the `node_add` patch op.** Trial 23. The `add_node` *recipe* takes `unique_name`, the `node_add` *op* does not — it was silently dropped before, and is now rejected with the fields it accepts, which cost the trial a step. Either accept it on the op (expanding to `unique_name_in_owner` the way the recipe does) or say so in the hint. Size S.
-
-**Make two sub-resources of one type just work.** Trials 20, 21, 23 all hit the generated-id collision. 21 recovered with `id_hint` from the new hint; 23 hand-edited the `.tscn` instead — breaking rule 1 to get past a tool error, which is the failure mode the whole tool exists to prevent. The hint is not enough on its own: `sub_add` should suffix a colliding generated id (`StyleBoxFlat_ab12c_2`) rather than fail, keeping `id_hint` for when the caller wants a stable name. Size S, and the most valuable S left.
-
-**A `properties` object on `node_set`.** Trial 21, and the maintainer hit it the same day. `node_add` takes `properties`, `node_set` takes one `property` and `value`, so the obvious `{"op": "node_set", "path": ..., "properties": {...}}` is rejected and the caller writes one op per property. The rejection now lists the fields, which is how the trial recovered, but accepting a `properties` object (expanded to one set each) would remove the step. `scene set-property` has the same asymmetry against `scene node add --properties`. Size S.
 
 **The `scene validate` envelope over MCP.** Trial 19. Issues come back as `ok: true` with `error_count: 1` and exit code 1, so the MCP client marks the result as an error while the JSON says ok. Either `ok: false` with a failure, or a normal result with issues. This is a design decision about the envelope that every validate-shaped command shares. Size S once decided.
 
@@ -76,3 +85,4 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.12.0: `scene extract` with catalog registration and script-reference messages; the recursive-remove undo fix; properties on `scene node get`; op aliases; scalar `node_set` values; details on every failure; `control_under_node2d`; `--frame-at`; the reparent undo fix; snapshot cleanup on a rejected apply.
 - 0.13.0: the cursor moves off the node after `project run --click`, so the frame shows the `normal` style, with `--keep-cursor` to hold the hover style; unknown fields on patch ops and intent steps rejected with the accepted list; `id_hint` named when a generated id collides; `step` on every patch op failure.
 - 0.14.0: the whole of Godot's keyboard and controller reachable from `project input apply`, with mouse buttons, modifier flags, raw numbers, the reference in its help, and the `axis_value` float fix; `project run --press`/`--click` working on projects with autoloads; a headless `--click` saying it verified nothing.
+- 0.15.0: property type checking and unknown-signal detection in `scene validate`, from a generated Godot class table; a colliding generated sub_resource id takes a suffix instead of failing; `properties` on `node_set` and `scene set-property`; `unique_name` on the `node_add` op.

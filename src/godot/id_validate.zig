@@ -6,6 +6,7 @@ const resource_uid = @import("resource_uid.zig");
 const uid_cache = @import("uid_cache.zig");
 const project_config = @import("project_config.zig");
 const document = @import("text_format/document.zig");
+const class_info = @import("class_info.zig");
 const node_section_order = @import("node_section_order.zig");
 const scene_connections = @import("scene_connections.zig");
 const resource_uid_lookup = @import("resource_uid_lookup.zig");
@@ -485,6 +486,8 @@ pub fn validateDocument(
     }
 
     try warnControlsUnderNode2D(allocator, doc, &report);
+    try checkPropertyTypes(allocator, doc, &report);
+    try checkConnectionSignals(allocator, doc, &report);
     return report;
 }
 
@@ -507,15 +510,112 @@ fn warnControlsUnderNode2D(allocator: std.mem.Allocator, doc: *const document.Do
 }
 
 fn isControlClass(name: []const u8) bool {
-    const classes = [_][]const u8{ "Control", "Label", "Button", "CheckButton", "CheckBox", "OptionButton", "MenuButton", "LinkButton", "TextureButton", "Panel", "PanelContainer", "MarginContainer", "VBoxContainer", "HBoxContainer", "GridContainer", "CenterContainer", "BoxContainer", "AspectRatioContainer", "ScrollContainer", "TabContainer", "SplitContainer", "HSplitContainer", "VSplitContainer", "FlowContainer", "HFlowContainer", "VFlowContainer", "ColorRect", "TextureRect", "NinePatchRect", "ProgressBar", "TextureProgressBar", "LineEdit", "TextEdit", "CodeEdit", "RichTextLabel", "ItemList", "Tree", "HSlider", "VSlider", "SpinBox", "HSeparator", "VSeparator", "TabBar", "Window", "SubViewportContainer", "VideoStreamPlayer", "ColorPicker", "ColorPickerButton", "GraphEdit", "MenuBar" };
-    for (classes) |c| if (std.mem.eql(u8, c, name)) return true;
-    return false;
+    return class_info.descendsFrom(name, "Control");
 }
 
 fn isNode2DClass(name: []const u8) bool {
-    const classes = [_][]const u8{ "Node2D", "Sprite2D", "CharacterBody2D", "StaticBody2D", "RigidBody2D", "Area2D", "AnimatedSprite2D", "Camera2D", "CollisionShape2D", "Polygon2D", "Line2D", "Path2D", "PathFollow2D", "TileMapLayer", "TileMap", "Marker2D", "Parallax2D", "ParallaxBackground", "Bone2D", "Skeleton2D", "Light2D", "PointLight2D", "DirectionalLight2D", "CanvasModulate", "CPUParticles2D", "GPUParticles2D", "RayCast2D", "ShapeCast2D" };
-    for (classes) |c| if (std.mem.eql(u8, c, name)) return true;
+    return class_info.descendsFrom(name, "Node2D");
+}
+
+/// A signal a node's class does not emit connects cleanly and fails only when
+/// the game runs: `pressd` for `pressed` costs a whole run to find. Trial 19
+/// asked for this.
+///
+/// A node carrying a script is left alone, because a script may declare its
+/// own signals and this check cannot see the file from here; `scene
+/// connection add` does read the script when it has the project root.
+fn checkConnectionSignals(allocator: std.mem.Allocator, doc: *const document.Document, report: *Report) !void {
+    const node_tree = @import("node_tree.zig");
+    var list = node_tree.collectNodes(allocator, doc) catch return;
+    defer list.deinit(allocator);
+
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "connection")) continue;
+        const signal = section.header.getString("signal") orelse continue;
+        const from = section.header.getString("from") orelse continue;
+
+        const path = if (std.mem.eql(u8, from, "."))
+            list.nodes[0].path
+        else
+            try std.fmt.allocPrint(allocator, "{s}/{s}", .{ list.nodes[0].path, from });
+        defer if (!std.mem.eql(u8, from, ".")) allocator.free(path);
+
+        const node = node_tree.findByPath(&list, path) orelse continue;
+        // An instanced node's class lives in the other scene, and a scripted
+        // node may declare the signal itself.
+        if (node.instance != null) continue;
+        if (nodeHasScript(section_for(doc, node.section_index))) continue;
+
+        const known = class_info.hasSignal(node.node_type, signal) orelse continue;
+        if (known) continue;
+
+        const msg = try std.fmt.allocPrint(
+            allocator,
+            "{s} does not emit a signal named {s}, so this connection never fires; check the spelling against the class, or declare it in the node's script",
+            .{ node.node_type, signal },
+        );
+        defer allocator.free(msg);
+        try report.add(allocator, .err, "unknown_signal", msg, section.line);
+    }
+}
+
+fn section_for(doc: *const document.Document, index: usize) ?*const document.Section {
+    if (index >= doc.sections.items.len) return null;
+    return &doc.sections.items[index];
+}
+
+fn nodeHasScript(section: ?*const document.Section) bool {
+    const s = section orelse return false;
+    for (s.properties.items) |line| {
+        const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+        if (std.mem.eql(u8, std.mem.trim(u8, line.raw[0..equals], " \t"), "script")) return true;
+    }
     return false;
+}
+
+/// A property whose value is the wrong Variant type for its class passes
+/// every other check and runs: Godot coerces it, and only the frame shows the
+/// damage. Trials 17, 18 and 19 each asked for this.
+///
+/// Conservative by construction: a class the table does not carry, a property
+/// it does not declare (theme overrides, a script's exports, `metadata/*`),
+/// and a value that does not parse are all left alone, because a false report
+/// on a correct scene costs more than a missed one.
+fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Document, report: *Report) !void {
+    const variant_parse = @import("variant/parse.zig");
+    for (doc.sections.items) |*section| {
+        // Nodes, and the resources beside them: a sub_resource's bg_color is
+        // as wrong as a node's, and both carry their class in `type`.
+        const is_node = std.mem.eql(u8, section.header.name, "node");
+        const is_resource = std.mem.eql(u8, section.header.name, "sub_resource") or
+            std.mem.eql(u8, section.header.name, "resource");
+        if (!is_node and !is_resource) continue;
+        const node_type = section.header.getString("type") orelse continue;
+        if (class_info.findClass(node_type) == null) continue;
+
+        for (section.properties.items) |line| {
+            const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+            const name = std.mem.trim(u8, line.raw[0..equals], " \t");
+            const value_text = std.mem.trim(u8, line.raw[equals + 1 ..], " \t");
+            if (name.len == 0 or value_text.len == 0) continue;
+
+            const property = class_info.findProperty(node_type, name) orelse continue;
+            if (property.kinds.len == 0) continue;
+
+            var value = variant_parse.parsePropertyValue(allocator, value_text) catch continue;
+            defer value.deinit(allocator);
+            const kind = @tagName(value.kind);
+            if (class_info.kindFits(property, kind)) continue;
+
+            const msg = try std.fmt.allocPrint(
+                allocator,
+                "{s}.{s} is {s}, and this value is {s}: Godot coerces it and the file still loads, so only the running frame shows the damage",
+                .{ node_type, name, property.type_name, kind },
+            );
+            defer allocator.free(msg);
+            try report.add(allocator, .err, "property_type_mismatch", msg, section.line);
+        }
+    }
 }
 
 test "detect duplicate scene ids" {
@@ -597,4 +697,86 @@ test "detect dangling ext resource reference" {
     defer report.deinit(allocator);
 
     try std.testing.expect(hasErrors(&report));
+}
+
+test "a property whose value is the wrong type for its class is an error" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Main" type="Control"]
+        \\visible = Vector2(1, 2)
+        \\anchor_right = 1.0
+        \\anchor_bottom = 1
+        \\
+        \\[node name="Score" type="Label" parent="."]
+        \\text = 5
+        \\theme_override_font_sizes/font_size = 32
+        \\metadata/level = "one"
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var report = try validateDocument(allocator, &doc, .{});
+    defer report.deinit(allocator);
+
+    var mismatches: usize = 0;
+    for (report.issues.items) |issue| {
+        if (std.mem.eql(u8, issue.kind, "property_type_mismatch")) mismatches += 1;
+    }
+    // visible (bool <- Vector2) and text (String <- int). A whole float
+    // written as an integer is how Godot writes it, a theme override is not a
+    // class property, and metadata is free-form: none of those is a mismatch.
+    try std.testing.expectEqual(@as(usize, 2), mismatches);
+}
+
+test "a connection to a signal the class does not emit is an error" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Main" type="Control"]
+        \\
+        \\[node name="Play" type="Button" parent="."]
+        \\
+        \\[connection signal="pressed" from="Play" to="." method="_on_play_pressed"]
+        \\[connection signal="mouse_entered" from="Play" to="." method="_on_hover"]
+        \\[connection signal="pressd" from="Play" to="." method="_on_typo"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var report = try validateDocument(allocator, &doc, .{});
+    defer report.deinit(allocator);
+
+    var unknown: usize = 0;
+    for (report.issues.items) |issue| {
+        if (std.mem.eql(u8, issue.kind, "unknown_signal")) unknown += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 1), unknown);
+}
+
+test "a scripted node's connection is left alone, since a script declares signals" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="Script" path="res://main.gd" id="Script_main"]
+        \\
+        \\[node name="Main" type="Control"]
+        \\
+        \\[node name="Spawner" type="Node2D" parent="."]
+        \\script = ExtResource("Script_main")
+        \\
+        \\[connection signal="wave_finished" from="Spawner" to="." method="_on_wave"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var report = try validateDocument(allocator, &doc, .{});
+    defer report.deinit(allocator);
+
+    for (report.issues.items) |issue| {
+        try std.testing.expect(!std.mem.eql(u8, issue.kind, "unknown_signal"));
+    }
 }

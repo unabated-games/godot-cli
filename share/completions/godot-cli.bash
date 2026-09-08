@@ -176,7 +176,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'scene set-property')
-            echo "--property --value --raw-value --node --node-name --section-id --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--property --value --properties --raw-value --node --node-name --section-id --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene normalize')
             echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"

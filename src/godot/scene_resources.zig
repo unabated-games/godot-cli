@@ -259,6 +259,32 @@ pub fn addExtResourceWithId(
     };
 }
 
+/// A generated sub_resource id that nothing in the document holds yet.
+///
+/// The id is seeded from the scene path and the resource type, so a second
+/// sub-resource of one type in a scene would otherwise generate the id the
+/// first one already has. Three agent trials hit that; one hand-edited the
+/// scene to get past it. Caller owns the result.
+pub fn generateFreeSubId(
+    allocator: std.mem.Allocator,
+    doc: *const document.Document,
+    seed_path: []const u8,
+    res_type: []const u8,
+) Error![]u8 {
+    seedResourceIds(seed_path);
+    const base = try scene_id.formatSubResourceId(allocator, res_type);
+    if (findResourceSectionIndex(doc, "sub_resource", base) == null) return base;
+    defer allocator.free(base);
+
+    var suffix: u32 = 2;
+    while (suffix < 1000) : (suffix += 1) {
+        const candidate = try std.fmt.allocPrint(allocator, "{s}_{d}", .{ base, suffix });
+        if (findResourceSectionIndex(doc, "sub_resource", candidate) == null) return candidate;
+        allocator.free(candidate);
+    }
+    return error.DuplicateResourceId;
+}
+
 pub fn addSubResource(
     allocator: std.mem.Allocator,
     doc: *document.Document,
@@ -266,8 +292,7 @@ pub fn addSubResource(
     res_type: []const u8,
     properties: []const PropertyInput,
 ) Error!AddSubResult {
-    seedResourceIds(seed_path);
-    const generated_id = try scene_id.formatSubResourceId(allocator, res_type);
+    const generated_id = try generateFreeSubId(allocator, doc, seed_path, res_type);
     defer allocator.free(generated_id);
     return addSubResourceWithId(allocator, doc, res_type, generated_id, properties);
 }
@@ -429,6 +454,12 @@ fn firstBodySectionIndex(doc: *const document.Document) usize {
         if (std.mem.eql(u8, item.header.name, "node") or std.mem.eql(u8, item.header.name, "resource")) return index;
     }
     return doc.sections.items.len;
+}
+
+/// Whether a resource section of that kind already carries the id. Callers
+/// generating an id use it to pick a free one instead of failing.
+pub fn resourceIdTaken(doc: *const document.Document, section_name: []const u8, id: []const u8) bool {
+    return findResourceSectionIndex(doc, section_name, id) != null;
 }
 
 fn findResourceSectionIndex(doc: *const document.Document, section_name: []const u8, id: []const u8) ?usize {

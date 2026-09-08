@@ -650,17 +650,19 @@ Every `properties` value, `node_set` value, and `instance_override` value is God
                "hint": "not valid Variant text; for a string write \"\\\"Paused\\\"\"" } } }
 ```
 
+`scene validate` checks the value against the property's type on the node's class, so `visible = Vector2(1, 2)` or `text = 5` is an error (`property_type_mismatch`) rather than something Godot silently coerces and only the frame reveals. It checks connections the same way: a signal the emitter's class does not emit is `unknown_signal`. Both are conservative — a class or property the table does not carry (a `theme_override_*` entry, `metadata/*`, a script's exports) and a connection from a scripted node are left alone, so a correct scene is never flagged.
+
 A missing required field fails the same way with `"kind": "missing_field"` and the op and field in `details`. The CLI commands (`set-property`, `node add --property`, `sub add --property`) apply the same check unless `--raw-value` is passed.
 
 ### Patch op reference
 
 | `op` | Required fields | Notes |
 |------|-----------------|-------|
-| `node_add` | `parent`, `name`, `type` | Optional `properties` object; set `unique_name_in_owner`: true for `%Name` access |
+| `node_add` | `parent`, `name`, `type` | Optional `properties` object, and `unique_name`: true for `%Name` access (the same field the `add_node` recipe takes) |
 | `node_remove` | `path` | Optional `recursive`: true |
 | `node_rename` | `path`, `name` | |
 | `node_reparent` | `path`, `parent` | Viewport path for new parent |
-| `node_set` | `path`, `property`, `value` | |
+| `node_set` | `path`, `property`, `value` | Or one `properties` object instead of the pair, as `node_add` takes |
 | `ext_add` | `type`, `path` | Optional `id_hint` → id `{Type}_{hint}` (e.g. `Texture2D_icon`) |
 | `ext_remove` | `id` | Fails if resource is referenced |
 | `sub_add` | `type` | Optional `id_hint` → id `{Type}_{hint}`; optional `properties` |
@@ -670,7 +672,7 @@ A missing required field fails the same way with `"kind": "missing_field"` and t
 | `connection_add` | `from`, `signal`, `to`, `method` | Viewport paths; optional `deferred`, `one_shot` (bools), `binds` (array text), `unbinds` (int) |
 | `connection_remove` | `from`, `signal`, `to` | Optional `method`; without it every connection of that signal between the nodes goes |
 
-`id_hint` lets later ops reference stable ids in `ExtResource("…")` / `SubResource("…")` strings. Without it the id is generated from the resource type and the scene, so **two `sub_add` ops of the same type in one patch collide** (`DuplicateResourceId`); give each one an `id_hint`:
+`id_hint` lets later ops reference stable ids in `ExtResource("…")` / `SubResource("…")` strings, and is how you name a sub-resource a later op will point at. Without it the id is generated from the resource type and the scene, and a second one of the same type takes a numbered suffix (`StyleBoxFlat_ab12c`, `StyleBoxFlat_ab12c_2`) rather than failing. An `id_hint` you chose yourself still fails when it collides, since that is your name to pick:
 
 ```json
 { "ops": [
