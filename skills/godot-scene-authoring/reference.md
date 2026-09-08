@@ -20,7 +20,7 @@ Scene root in editor = `/root/<RootNodeName>/…`
 | `Main` | `/root/Main/Player` |
 | `Root` | `/root/Root/HUD` |
 
-Always confirm with `scene node list --json` before setting `parent` in intents. `--project-root` is not needed for `scene node list` (optional; ignored if passed).
+Always confirm with `scene describe --json` (or `scene node list`) before setting `parent` in intents. Pass `--project-root` and an instanced node reports the class it really is rather than `PackedScene`.
 
 ## Catalog
 
@@ -104,6 +104,11 @@ Example: `$GODOT_CLI_HOME/examples/batch/apply_validate.json`
 | Wrong parent path | `scene node list --json` |
 | Builtin instancing error | Use `scene node add --type` instead |
 | Batch `--request` fails | Use `batch --file` or `batch --json-body` |
+| `property_type_mismatch` | The value is the wrong Variant type for that class property, e.g. `visible = Vector2(1, 2)` |
+| `unknown_signal` | The class does not emit that signal and the node's script does not declare it; check the spelling |
+| `header_attribute` | `path`, `name`, `parent` and `type` live in a section header: use `scene retarget-ext`, `project move`, `scene node rename` or `reparent` |
+| `invalid_patch` naming a field | The op does not take that field; the hint lists the ones it does |
+| Click verified nothing | `--click` needs a window; under `--headless` the viewport is 64x64 and a click outside it fails the run |
 
 ## JSON output
 
@@ -113,4 +118,4 @@ Every command supports `--json`. Response envelope:
 { "ok": true, "data": { ... }, "messages": [] }
 ```
 
-On failure: `"ok": false`, non-zero exit. Parse `data` and `messages` before proceeding.
+`ok` follows the exit code. A command that ran but answered no — a `scene validate` that found issues, a `project run` whose log held an error — reports `ok: false` with `failure.kind: "checks_failed"` **and** keeps its findings in `data`, so read `data` on failure too. A failure caused by the call itself carries `details` naming the field, the value, and what would have been accepted.

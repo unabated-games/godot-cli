@@ -59,10 +59,25 @@ Connect signals in the scene, not in _ready():
 
 Finish every change with:
   godot-cli scene validate <scene> --project-root . --json
-  godot-cli scene node list <scene> --json
+  godot-cli project run --project-root . --json
+
+Validation checks property values against the node's class and connections
+against the signals that class emits, so a wrong type or a misspelled signal
+is an error there rather than a surprise at run time. The run returns the last
+frame and every error line from the log, and fails on any of them: read the
+frame as well as the log, because a run can pass with a broken layout. To prove
+a button works, click it:
+  godot-cli project run --project-root . --frames 30 \
+    --click <node path>@20 --json
 ```
 
 Add the [Godot basics]({{ base_url }}/how-to/godot-basics/) to the same file if the agent is new to Godot; the layout mistakes in the trials came from not knowing them, not from ignoring the rules.
+
+The last two lines are the ones that change what an agent delivers. Every trial
+that ran the game caught something the file alone could not show — a panel
+drawing nothing because it sat under a `Node2D`, a button whose signal was
+never wired, a layout that validated cleanly and looked wrong. An agent that
+stops at `scene validate` reports "done" from a file it has never seen drawn.
 
 ## 3. Give it your components
 

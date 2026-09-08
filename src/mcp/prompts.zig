@@ -18,9 +18,10 @@ pub const rules =
     \\   .tscn, .tres, or project.godot text, and never build static UI or level
     \\   structure in _ready() with load().instantiate(); that is for things the
     \\   game spawns while playing.
-    \\2. Discover before editing: scene_node_list for viewport paths
-    \\   (/root/<Root>/...), catalog_list and catalog_show for components the
-    \\   project already has.
+    \\2. Discover before editing: scene_describe for the whole scene in one call
+    \\   (tree with properties, connections, references, scripts), catalog_list
+    \\   for components the project already has, with the prose that says which
+    \\   to pick.
     \\3. A project catalog id is instanced (scene_instance_add with catalog-id); a
     \\   godot/... builtin is a plain node (scene_node_add with type), never instanced.
     \\4. Presentation lives on nodes (anchor_*, grow_*, theme_override_*,
@@ -28,13 +29,18 @@ pub const rules =
     \\   resources in .tres files (resource_new). None of them in _ready().
     \\5. Values are Godot Variant text: Vector2(1, 2), 1.5, true, and a string
     \\   carries its own quotes, "\"Paused\"". A bare word is rejected before
-    \\   anything is written, and so is a field the op or recipe does not take;
-    \\   two sub_add ops of one type need an id_hint each or their ids collide.
+    \\   anything is written, and so is a field the op or recipe does not take.
+    \\   Name a sub_resource with id_hint when a later op must reference it; two
+    \\   unnamed ones of the same type no longer collide.
     \\6. Move files with project_move, never mv; a plain move leaves every res://
     \\   reference stale.
     \\7. Validate after every edit with scene_validate, then project_run and read
     \\   the returned image, data.log_tail, and data.errors before reporting done.
-    \\   It fails when the log holds an ERROR or SCRIPT ERROR line. Prove behaviour
+    \\   Validate checks property values against the node's class and connections
+    \\   against the signals the class emits, so a wrong type or a misspelled
+    \\   signal fails there rather than at run time; it answers ok: false with a
+    \\   checks_failed failure and keeps the issues in data. project_run fails
+    \\   when the log holds an ERROR or SCRIPT ERROR line. Prove behaviour
     \\   with press (move_right@5..40) and click (/root/Main/HUD/PauseButton@20);
     \\   the cursor leaves the node after a click, so the frame shows its normal
     \\   style, and keep-cursor holds the hover style instead.

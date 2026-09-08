@@ -29,19 +29,21 @@ Use `godot-cli` on PATH. Never reference the godot-cli source tree; docs and exa
 | `$GODOT_CLI_HOME/docs/mcp_tools.json` | Command JSON shapes |
 | `$GODOT_CLI_HOME/examples/intents/` | Copy-paste intent files |
 
-If the client is connected to `godot-cli mcp` instead, the same commands are tools named `scene_node_add`, `catalog_list`, and so on, with the docs above available as `godot-cli://docs/...` resources; the rules below apply unchanged.
+Targets **Godot 4.6 and later**: every node line carries the `unique_id` the engine added in 4.6.
+
+If the client is connected to `godot-cli mcp` instead, the same commands are tools named `scene_node_add`, `catalog_list`, and so on, with the docs above available as `godot-cli://docs/...` resources; the rules below apply unchanged. `godot-cli://docs/mcp-cheatsheet` is this surface in tool-and-arguments form, and a server started with `--toolset core` serves the thirteen tools that cover most sessions rather than all ninety-one.
 
 Work from the Godot project root (`project.godot`). Pass `--json` on every command and `--project-root .` for writes, catalog, validate, apply, and project commands.
 
 ## Rules
 
 1. Structure lives in the scene file, as the editor writes it. No hand-edited `.tscn`, no `load().instantiate()` in `_ready()` for static UI or levels.
-2. Discover before editing: `scene node list`, `catalog list`, `catalog show <id>`.
+2. Discover before editing: `scene describe` for the whole scene in one call, `catalog list` for what the project already has (its `when_to_use` / `when_not_to_use` prose says which to pick).
 3. Project catalog ids are instanced with `--catalog-id`; `godot/...` builtins are plain nodes.
 4. Presentation on nodes, signals as `[connection]` sections (`scene connection add`), resources as `.tres` (`resource new`).
 5. Values are Variant text; strings carry their own quotes (`"\"Paused\""`).
 6. Files move with `project move`, never `mv`.
-7. Validate after every edit; run the game and read the frame and the log before reporting done.
+7. Validate after every edit; run the game and read the frame and the log before reporting done. Validate type-checks property values against the node's class and connections against the signals it emits, so a wrong type or a misspelled signal fails there rather than at run time.
 
 ## Workflow checklist
 
@@ -66,7 +68,11 @@ godot-cli scene apply scenes/main.tscn --intent intents/hud.json --project-root 
 godot-cli scene apply scenes/main.tscn --patch patch.json --dry-run --project-root . --json
 godot-cli resource new --output materials/wood.tres --type StandardMaterial3D --property roughness --value 0.8 --project-root .
 godot-cli project apply --project-root . --intent intents/project_bootstrap.json --json
-godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
+godot-cli scene describe scenes/main.tscn --project-root . --json   # tree, properties, connections, refs, scripts
+godot-cli scene extract scenes/main.tscn /root/Main/HUD --output ui/hud.tscn --catalog-id ui/hud \
+  --retarget-dropped-connections --project-root .   # subtree to its own scene, instanced back, wiring kept
+godot-cli project input apply --project-root . --intent-json '{"actions":[{"name":"jump","events":[{"type":"key","keycode":"space"},{"type":"joypad_button","button":"a","device":0}]}]}' --json
+godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd --import --rename-ids
 godot-cli batch --file workflow.json --json
 godot-cli project run --project-root . --frames 30 --click /root/Main/HUD/Play@20 --json   # click a node; the cursor then leaves it, so the frame shows the normal style (--keep-cursor holds the hover style)
 godot-cli scene validate scenes/main.tscn --project-root . --json

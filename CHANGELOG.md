@@ -20,6 +20,12 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 - **The documentation caught up with eight releases in a day.** The validation guide lists the checks that arrived with the class table (`property_type_mismatch`, `unknown_signal`, `control_under_node2d`) and the `checks_failed` envelope; the project-settings guide carries the whole input vocabulary — every key, mouse button, joypad button and axis name, the modifier flags, and the per-event device; the batch guide covers `properties` on `node_set`, `unique_id`/`index`, and the id suffix; the instance guide covers connecting to a node inside an instance; the components guide covers `--signal-doc` and the prose now in `catalog list`; the refactor guide covers `--retarget-dropped-connections`, `--editable`, `--import` and `--rename-ids`. The README states the 4.6 minimum and shows the run loop.
 - A test that fails if `agent_quickstart.md` stops naming a tool the `--toolset core` list serves, since two lists of the same thing drift.
 
+### Fixed
+
+- **The MCP session prompt told agents something that had stopped being true.** It said two `sub_add` ops of one type need an `id_hint` each or their ids collide — which 0.15.0 fixed by giving a colliding generated id a numbered suffix. It now says `id_hint` is for naming a sub-resource a later op must reference. The prompt also leads with `scene_describe` for discovery and says what `scene_validate` checks.
+- **The rules block people paste into `AGENTS.md` never told an agent to run the game.** It finished with `scene validate` and `scene node list`, so an agent following it reported "done" from a file it had never seen drawn. It finishes with `scene validate` and `project run` now, with a click example for proving a button works, and says why that line is the one that changes what an agent delivers.
+- The skill and its reference name `scene describe`, the validate checks, `scene extract`, the input map, `project move --import --rename-ids`, the `checks_failed` envelope, and the new failure kinds in its troubleshooting table.
+
 ## [0.20.0] — 2026-09-08
 
 ### Added
