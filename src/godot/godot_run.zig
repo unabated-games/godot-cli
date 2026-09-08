@@ -40,8 +40,12 @@ pub const Options = struct {
     /// shows its hover style. By default the cursor is moved off-screen after
     /// the release and the node draws normally again.
     keep_cursor: bool = false,
-    /// Also keep this frame (as Godot numbers them, from 0), for a mid-run state.
-    frame_at: ?u32 = null,
+    /// Also keep these frames (as Godot numbers them, from 0): frame 0 for a
+    /// before-and-after pair, a mid-run number for a state such as a menu
+    /// part-way open.
+    frames_at: []const u32 = &.{},
+    /// Lines of the log to return inline.
+    log_lines: usize = 40,
 };
 
 pub const Click = struct {
@@ -100,8 +104,8 @@ pub const Result = struct {
     duration_ms: i64,
     /// Path of the generated press script, when one was used.
     driver_script: ?[]const u8 = null,
-    /// The frame kept for `frame_at`, when it was written.
-    frame_at_path: ?[]const u8 = null,
+    /// Paths of the frames kept for `frames_at`, in the order asked for.
+    frame_at_paths: []const []const u8 = &.{},
 };
 
 pub const Error = error{
@@ -233,7 +237,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
 
     result.errors = try errorLines(allocator, io, result.log_path);
     const log_text = std.Io.Dir.cwd().readFileAlloc(io, result.log_path, allocator, .unlimited) catch "";
-    result.log_tail = try tail(allocator, log_text, 40);
+    result.log_tail = try tail(allocator, log_text, options.log_lines);
     result.duration_ms = started.durationTo(.now(io, .real)).raw.toMilliseconds();
     return result;
 }
@@ -313,6 +317,14 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        at = (node as Node2D).get_global_transform_with_canvas().origin
         \\    else:
         \\        push_error("godot-cli: " + path + " is not a Control or Node2D")
+        \\        return
+        \\    # A click outside the viewport reaches nothing, and used to do so
+        \\    # in silence: the run passed while the button was never pressed.
+        \\    # Headless is where this bites, since that display server pins
+        \\    # the window to 64x64 and ignores any attempt to resize it.
+        \\    if pressed and not Rect2(Vector2.ZERO, Vector2(root.size)).has_point(at):
+        \\        var why := " (this run is headless, where the viewport is " + str(root.size) + " whatever the project's window size says; run with a window to click a node laid out beyond it)" if DisplayServer.get_name() == "headless" else ""
+        \\        push_error("godot-cli: " + path + " is at " + str(at) + ", outside the " + str(root.size) + " viewport, so the click cannot reach it" + why)
         \\        return
         \\    var event := InputEventMouseButton.new()
         \\    event.button_index = MOUSE_BUTTON_LEFT
@@ -403,17 +415,27 @@ fn collectFrames(allocator: std.mem.Allocator, io: std.Io, options: Options, res
     };
     result.frame = std.fs.path.join(allocator, &.{ dir_path, last }) catch return error.OutOfMemory;
 
-    var keep_named: ?[]const u8 = null;
-    if (options.frame_at) |wanted| {
-        keep_named = std.fmt.allocPrint(allocator, "shot{d:0>8}.png", .{wanted}) catch return error.OutOfMemory;
-        for (frames.items) |name| if (std.mem.eql(u8, name, keep_named.?)) {
-            result.frame_at_path = std.fs.path.join(allocator, &.{ dir_path, name }) catch return error.OutOfMemory;
+    var keep_names: std.ArrayList([]const u8) = .empty;
+    var kept_paths: std.ArrayList([]const u8) = .empty;
+    for (options.frames_at) |wanted| {
+        const name = std.fmt.allocPrint(allocator, "shot{d:0>8}.png", .{wanted}) catch return error.OutOfMemory;
+        keep_names.append(allocator, name) catch return error.OutOfMemory;
+        for (frames.items) |written| if (std.mem.eql(u8, written, name)) {
+            kept_paths.append(allocator, std.fs.path.join(allocator, &.{ dir_path, written }) catch return error.OutOfMemory) catch return error.OutOfMemory;
         };
     }
+    result.frame_at_paths = kept_paths.items;
+
     if (!options.keep_frames) {
-        for (frames.items) |name| if (!std.mem.eql(u8, name, last) and (keep_named == null or !std.mem.eql(u8, name, keep_named.?))) {
+        for (frames.items) |name| {
+            if (std.mem.eql(u8, name, last)) continue;
+            var wanted = false;
+            for (keep_names.items) |keep| {
+                if (std.mem.eql(u8, name, keep)) wanted = true;
+            }
+            if (wanted) continue;
             dir.deleteFile(io, name) catch {};
-        };
+        }
         for (wavs.items) |name| dir.deleteFile(io, name) catch {};
     }
 }

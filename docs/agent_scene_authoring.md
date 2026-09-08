@@ -658,7 +658,7 @@ A missing required field fails the same way with `"kind": "missing_field"` and t
 
 | `op` | Required fields | Notes |
 |------|-----------------|-------|
-| `node_add` | `parent`, `name`, `type` | Optional `properties` object, and `unique_name`: true for `%Name` access (the same field the `add_node` recipe takes) |
+| `node_add` | `parent`, `name`, `type` | Optional `properties` object, `unique_name`: true for `%Name` access, and `unique_id` / `index` to restore a node exactly where it was (what undo patches use) |
 | `node_remove` | `path` | Optional `recursive`: true |
 | `node_rename` | `path`, `name` | |
 | `node_reparent` | `path`, `parent` | Viewport path for new parent |

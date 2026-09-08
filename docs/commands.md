@@ -2145,12 +2145,13 @@ godot-cli project run [options]
 | `--capture-dir` | `<path>` | Folder under the project for the frame and log; the default is under .godot/, which Godot never imports | `.godot/godot-cli` |
 | `--no-import` | — | Skip the headless import pass that assigns UIDs to new files | — |
 | `--keep-frames` | — | Keep every frame and the .wav; the default keeps only the last frame | — |
-| `--headless` | — | No window and no frames, only the log; for machines without a display. --press still works, --click does not reach Controls | — |
+| `--headless` | — | No window and no frames, only the log; for machines without a display. --press works normally; the viewport is pinned to 64x64, so --click only reaches a node laid out inside that area | — |
 | `--user-arg` | `<value>` | Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable | — |
 | `--press` | `<value>` | Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it | — |
-| `--click` | `<value>` | Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Needs a window: under --headless the click never reaches the Control | — |
+| `--click` | `<value>` | Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Under --headless the viewport is 64x64, so only a node laid out inside that area can be clicked; a click outside it fails the run rather than passing silently | — |
 | `--keep-cursor` | — | Leave the synthetic cursor on the last clicked node instead of moving it off, so the frame shows that node's hover style; only the in-game cursor moves either way, never the desktop pointer | — |
-| `--frame-at` | `<n>` | Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open | — |
+| `--frame-at` | `<n>` | Also keep this frame (numbered from 0) and return it as frame_at; repeatable, so --frame-at 0 --frame-at 30 keeps a before-and-after pair as well as the last frame | — |
+| `--log-lines` | `<n>` | Lines of the log to return inline as log_tail | `40` |
 
 ### `godot-cli project show`
 

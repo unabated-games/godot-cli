@@ -131,6 +131,13 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         try clicks.append(cli.allocator, click);
     }
 
+    // Repeatable, so one run can keep frame 0 and a mid-run frame as well as
+    // the last: a before-and-after pair in a single run (trial 16).
+    var frames_at: std.ArrayList(u32) = .empty;
+    for (try inv.getOptionAll(cli.allocator, "frame-at")) |text| {
+        try frames_at.append(cli.allocator, std.fmt.parseInt(u32, text, 10) catch return error.InvalidValue);
+    }
+
     // The project's own window size is the right default; a fixed one would
     // silently run a 1280x720 project at 640x360.
     var main_scene: ?[]const u8 = null;
@@ -163,7 +170,8 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .clicks = clicks.items,
         .keep_cursor = inv.flag("keep-cursor"),
         .main_scene = main_scene,
-        .frame_at = if (inv.getOption("frame-at")) |text| (std.fmt.parseInt(u32, text, 10) catch return error.InvalidValue) else null,
+        .frames_at = frames_at.items,
+        .log_lines = if (inv.getOption("log-lines")) |text| (std.fmt.parseInt(usize, text, 10) catch return error.InvalidValue) else 40,
     });
 
     var data: std.json.ObjectMap = .{};
@@ -175,7 +183,13 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "presses", .{ .integer = @intCast(presses.items.len) });
     try data.put(cli.allocator, "clicks", .{ .integer = @intCast(clicks.items.len) });
     if (run.driver_script) |script| try data.put(cli.allocator, "driver_script", .{ .string = script });
-    if (run.frame_at_path) |path| try data.put(cli.allocator, "frame_at", .{ .string = path });
+    if (run.frame_at_paths.len != 0) {
+        var kept = std.json.Array.init(cli.allocator);
+        for (run.frame_at_paths) |path| try kept.append(.{ .string = path });
+        // frame_at stays a single path for the common one-frame case.
+        try data.put(cli.allocator, "frame_at", .{ .string = run.frame_at_paths[0] });
+        try data.put(cli.allocator, "frames_at", .{ .array = kept });
+    }
     if (run.log_tail.len != 0) try data.put(cli.allocator, "log_tail", .{ .string = run.log_tail });
 
     var messages: std.ArrayList([]const u8) = .empty;
@@ -183,7 +197,7 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     // Control never sees it, which reads as a passing verification of the one
     // thing the flag exists to verify.
     if (inv.flag("headless") and clicks.items.len != 0) {
-        try messages.append(cli.allocator, "clicks do not reach Controls under --headless: there is no window, so clicks does not mean the node responded. Run with a window to verify a button; --press does work headless");
+        try messages.append(cli.allocator, "under --headless the viewport is 64x64 whatever the project's window size says, so a click only reaches a node laid out inside that area; a click that lands outside it is reported as an error rather than passing silently. Use a window to verify a real layout; --press works either way");
     }
     // Without this, a run with --keep-cursor and nothing to hover over reads
     // as though the frame is showing a held hover style.
@@ -1155,12 +1169,13 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; the default is under .godot/, which Godot never imports", .default_value = ".godot/godot-cli" },
     .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },
     .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
-    .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display. --press still works, --click does not reach Controls" },
+    .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display. --press works normally; the viewport is pinned to 64x64, so --click only reaches a node laid out inside that area" },
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
     .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
-    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Needs a window: under --headless the click never reaches the Control", .repeatable = true },
+    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Under --headless the viewport is 64x64, so only a node laid out inside that area can be clicked; a click outside it fails the run rather than passing silently", .repeatable = true },
     .{ .long = "keep-cursor", .kind = .flag, .description = "Leave the synthetic cursor on the last clicked node instead of moving it off, so the frame shows that node's hover style; only the in-game cursor moves either way, never the desktop pointer" },
-    .{ .long = "frame-at", .kind = .integer, .description = "Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open" },
+    .{ .long = "frame-at", .kind = .integer, .description = "Also keep this frame (numbered from 0) and return it as frame_at; repeatable, so --frame-at 0 --frame-at 30 keeps a before-and-after pair as well as the last frame", .repeatable = true },
+    .{ .long = "log-lines", .kind = .integer, .description = "Lines of the log to return inline as log_tail", .default_value = "40" },
 };
 
 pub fn commands() spec.CommandSpec {

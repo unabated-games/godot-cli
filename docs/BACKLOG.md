@@ -1,6 +1,6 @@
 # Open asks
 
-Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.18.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
+Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.19.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
 
 Items are grouped by area and ordered by how much they would change what an agent produces. Closed asks are listed at the end so the picture is complete.
 
@@ -10,12 +10,9 @@ Ranked by how much each would change what an agent produces, weighted by how
 often a trial actually hit it. The sections below carry the detail; this is the
 order to work through them.
 
-1. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
-2. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
+1. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
 
 ## Correctness and validation
-
-**Record child order and unique ids in undo ops.** Trials 18, 19. An undo patch for a removal re-adds the node at the end of its parent and with a fresh unique id, so the restore is not byte for byte. Size S to M.
 
 ## Refactoring an existing project
 
@@ -26,12 +23,6 @@ order to work through them.
 **`manifest_res_path` in `catalog add` output.** Trial 16. Comes back empty with no explanation. Size S.
 
 ## `project run`
-
-**A first-and-last frame pair.** Trial 16. `--frame-at` keeps one chosen frame; a before-and-after comparison in one run would want frame 0 as well. Size S.
-
-**A `log-lines` option and a frames upper hint.** Trial 15. The log tail is fixed at 40 lines. Size S.
-
-**Why clicks do not reach Controls under `--headless`.** A headless `--click` run now says it verified nothing, which closes the false pass, but the cause is still open. With the installed Godot 4.8.dev4 the button's signal never fires headless while the same run with a window fires it; the headless root viewport is also 64x64 rather than the project's size. Godot master's `DisplayServerHeadless::process_events` does flush buffered input and `--press` arrives headless either way, so this may be specific to GUI routing or to that build. Worth pinning to a released Godot, and the smoke test should then assert a click *did* something rather than that the option parsed. Size S to investigate.
 
 **A specific input device on an event.** `project input apply` writes `"device":-1` (All Devices) on every event; a binding pinned to one joypad index is not expressible. Size S.
 
@@ -57,4 +48,5 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.16.0: `scene describe`; instanced nodes resolved to their real class; script references reported after remove, rename and reparent; `ok` following the exit code; the site brought up to date; `--project-root` on `scene connection list`.
 - 0.17.0: connecting a signal to a node inside an instance (marking it editable); `scene extract --editable`; scripted nodes' signals checked against their scripts; `mcp --toolset core`; the MCP cheat sheet resource.
 - 0.18.0: `scene extract --retarget-dropped-connections`, `--editable` and the catalog prose options; `project move --import` and `--rename-ids`; `catalog add --signal-doc`; `scene set-property` refusing a header attribute.
+- 0.19.0: repeatable `--frame-at` and `--log-lines`; a headless click that cannot reach its target reported instead of passing silently; undo patches restoring child order and unique ids; a `properties` object on the `node_set` recipe.
 - Unreleased: the site brought up to date — a "verify a change by running the game" how-to, a "refactor an existing project" how-to, the run loop and the class-table checks on the landing page, and `--project-root` accepted by `scene connection list` like its siblings.

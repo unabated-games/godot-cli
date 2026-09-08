@@ -313,6 +313,13 @@ fn nodeSectionToAddOp(
     }
     try obj.put(allocator, "parent", .{ .string = try allocator.dupe(u8, parent_path) });
     try obj.put(allocator, "name", .{ .string = try allocator.dupe(u8, name) });
+    // Without these an undo puts the node back at the end of its parent and
+    // with a fresh unique id: equivalent, but not what was removed, so the
+    // restore was never byte for byte (trials 18 and 19).
+    if (node.unique_id) |id| try obj.put(allocator, "unique_id", .{ .integer = id });
+    if (childPosition(list, node.path)) |position| {
+        try obj.put(allocator, "index", .{ .integer = @intCast(position) });
+    }
 
     if (section.properties.items.len > 0) {
         var props: std.json.ObjectMap = .{};
@@ -327,6 +334,22 @@ fn nodeSectionToAddOp(
     }
 
     return .{ .object = obj };
+}
+
+/// The node's position among its parent's children, counted from 0.
+fn childPosition(list: *const node_tree.NodeList, node_path: []const u8) ?usize {
+    const last = std.mem.lastIndexOfScalar(u8, node_path, '/') orelse return null;
+    const parent_path = node_path[0..last];
+    var seen: usize = 0;
+    for (list.nodes) |*node| {
+        if (node.path.len <= parent_path.len) continue;
+        if (!std.mem.startsWith(u8, node.path, parent_path)) continue;
+        if (node.path[parent_path.len] != '/') continue;
+        if (std.mem.indexOfScalar(u8, node.path[parent_path.len + 1 ..], '/') != null) continue;
+        if (std.mem.eql(u8, node.path, node_path)) return seen;
+        seen += 1;
+    }
+    return null;
 }
 
 fn parentViewportPathConst(node_path: []const u8, list: *const node_tree.NodeList) ?[]const u8 {

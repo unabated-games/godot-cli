@@ -123,7 +123,7 @@ fn opRow(comptime name: []const u8, comptime fields: []const []const u8) OpField
 }
 
 const op_fields = [_]OpFields{
-    opRow("node_add", &.{ "parent", "name", "type", "properties", "unique_name" }),
+    opRow("node_add", &.{ "parent", "name", "type", "properties", "unique_name", "unique_id", "index" }),
     opRow("node_remove", &.{ "path", "recursive" }),
     opRow("node_rename", &.{ "path", "name" }),
     opRow("node_reparent", &.{ "path", "parent" }),
@@ -188,7 +188,16 @@ fn applyOneOp(
         const parent = try requiredString(op_value.object, "parent");
         const name = try requiredString(op_value.object, "name");
         const node_type = try requiredString(op_value.object, "type");
-        var added = try scene_edit.addNode(allocator, doc, parent, name, node_type);
+        var added = try scene_edit.addNodeWithOptions(allocator, doc, parent, name, node_type, .{
+            .unique_id = switch (op_value.object.get("unique_id") orelse std.json.Value{ .null = {} }) {
+                .integer => |n| n,
+                else => null,
+            },
+            .index = switch (op_value.object.get("index") orelse std.json.Value{ .null = {} }) {
+                .integer => |n| if (n >= 0) @as(usize, @intCast(n)) else null,
+                else => null,
+            },
+        });
         defer added.deinit(allocator);
         if (op_value.object.get("properties")) |props| {
             try applyNodeProperties(allocator, doc, added.path, props);
@@ -1065,4 +1074,41 @@ test "every op the dispatcher knows has a field row" {
         try std.testing.expect(found);
     }
     try std.testing.expectEqual(names.len, op_fields.len);
+}
+
+test "an undo restores a removed node in place, with the id it had" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const source =
+        \\[gd_scene load_steps=2 format=3]
+        \\
+        \\[node name="Main" type="Node2D" unique_id=11]
+        \\
+        \\[node name="A" type="Node2D" parent="." unique_id=22]
+        \\
+        \\[node name="B" type="Node2D" parent="." unique_id=33]
+        \\
+        \\[node name="C" type="Node2D" parent="." unique_id=44]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    var recorder = scene_undo.UndoRecorder.init(allocator);
+    defer recorder.deinit();
+    var result = try applyPatchJson(allocator, &doc, "{ \"ops\": [ { \"op\": \"node_remove\", \"path\": \"/root/Main/B\", \"recursive\": true } ] }", .{ .seed_path = "res://main.tscn", .undo = &recorder });
+    result.deinit(allocator);
+
+    const undo_json = try recorder.toPatchJson(allocator);
+    // The middle child's position and id are both in the undo, or the
+    // restore would put it back last and with a fresh id.
+    try std.testing.expect(std.mem.indexOf(u8, undo_json, "\"unique_id\": 33") != null);
+    try std.testing.expect(std.mem.indexOf(u8, undo_json, "\"index\": 1") != null);
+
+    var undone = try applyPatchJson(allocator, &doc, undo_json, .{ .seed_path = "res://main.tscn" });
+    undone.deinit(allocator);
+
+    const written = try @import("text_format/roundtrip.zig").writeDocumentPreserving(allocator, &doc);
+    try std.testing.expectEqualStrings(source, written);
 }

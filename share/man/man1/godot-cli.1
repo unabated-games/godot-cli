@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.18.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.19.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -1985,8 +1985,9 @@ frame
 .TP
 \fB\-\-headless\fR
 No window and no frames, only the log; for machines without
-a display. \-\-press still works, \-\-click does not reach
-Controls
+a display. \-\-press works normally; the viewport is pinned
+to 64x64, so \-\-click only reaches a node laid out inside
+that area
 .TP
 \fB\-\-user\-arg\fR \fIvalue\fR
 Argument passed after \-\-, readable with OS.get_cmdline_user_args();
@@ -2002,8 +2003,9 @@ both see it
 Left\-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20;
 repeatable. A Button's pressed signal fires from this, and
 the cursor moves off the node after the release so later frames
-show its normal style. Needs a window: under \-\-headless the
-click never reaches the Control
+show its normal style. Under \-\-headless the viewport is 64x64,
+so only a node laid out inside that area can be clicked; a
+click outside it fails the run rather than passing silently
 .TP
 \fB\-\-keep\-cursor\fR
 Leave the synthetic cursor on the last clicked node instead
@@ -2012,8 +2014,12 @@ only the in\-game cursor moves either way, never the desktop
 pointer
 .TP
 \fB\-\-frame\-at\fR \fIn\fR
-Also keep this frame (numbered from 0) and return it as frame_at,
-for a mid\-run state such as a menu open
+Also keep this frame (numbered from 0) and return it as frame_at;
+repeatable, so \-\-frame\-at 0 \-\-frame\-at 30 keeps a before\-and\-after
+pair as well as the last frame
+.TP
+\fB\-\-log\-lines\fR \fIn\fR
+Lines of the log to return inline as log_tail (default: 40)
 .SS godot\-cli project show
 Summarize key project.godot configuration
 .TP

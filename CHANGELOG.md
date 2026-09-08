@@ -15,6 +15,19 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-09-08
+
+### Added
+
+- **`--frame-at` is repeatable**, so one run can keep frame 0, a mid-run frame, and the last — a before-and-after pair without running twice. The paths come back in `frames_at`. Trial 16.
+- **`--log-lines`** sets how much of the log comes back inline; it was fixed at 40. Trial 15.
+- **The `node_set` recipe takes a `properties` object**, like the patch op it expands to. Trial 29 wrote the object form first, as two earlier trials did for the op.
+- **Undo patches restore a node where it was, with the id it had.** A removal's undo re-added the node as its parent's last child and let save preparation invent a fresh `unique_id`, so the restore was equivalent but never byte for byte. `node_add` takes `unique_id` and `index` now, and a remove records both: applying the undo of a removed middle child reproduces the file exactly. Trials 18 and 19.
+
+### Fixed
+
+- **A click that cannot reach its target fails the run instead of passing quietly.** The headless display server pins the viewport to 64×64 whatever the project's window size says, and ignores any attempt to resize it, so a click computed from a node laid out beyond that corner reached nothing while the run reported success. The harness now compares the point against the viewport and reports where the node was and how big the viewport is. Clicks *do* work headless within that area — the earlier blanket warning that they never arrive was wrong, and the message, the option help and the site guide all say so accurately now.
+
 ## [0.18.0] — 2026-09-08
 
 ### Added

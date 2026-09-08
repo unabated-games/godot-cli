@@ -85,10 +85,12 @@ godot-cli project run --project-root . --frames 60 \
 
 ## What to watch out for
 
-**`--click` needs a window.** Under `--headless` there is no window for the
-click to land in, so the button never sees it; the run says so in `messages`
-rather than reporting a pass. `--press` does work headless, so movement and
-polled input can be verified on a machine with no display.
+**`--click` usually needs a window.** Under `--headless` Godot pins the
+viewport to 64×64 whatever the project's window size says, and nothing can
+resize it, so a click only reaches a node laid out inside that corner. A click
+that lands outside it fails the run with the position and the viewport size,
+rather than passing while nothing happened. `--press` works either way, so
+movement and polled input can be verified on a machine with no display.
 
 **Frames are numbered from 0, presses and clicks from 1.** `--frame-at 20`
 keeps that movie frame as well as the last one, for a mid-run state such as a

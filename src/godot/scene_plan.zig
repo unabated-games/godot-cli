@@ -236,6 +236,18 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     }
 
     if (std.mem.eql(u8, recipe, "node_set")) {
+        // The op takes a properties object, so the recipe does too: trial 29
+        // wrote the object form first, as trials 21 and 23 did for the op.
+        if (step.get("properties")) |props| {
+            const path = try requiredString(step, "path");
+            var op = try makeOpObject(ops_alloc, &[_]Field{
+                .{ "op", "node_set" },
+                .{ "path", path },
+            });
+            try op.object.put(ops_alloc, "properties", props);
+            try ops.append(op);
+            return;
+        }
         const property = try requiredString(step, "property");
         try ops.append(try makeOpObject(ops_alloc, &[_]Field{
             .{ "op", "node_set" },
@@ -744,7 +756,7 @@ pub const Recipe = struct {
 /// against `recipe_names` and the expander.
 pub const recipes = [_]Recipe{
     .{ .name = "add_node", .summary = "One node of any type under a parent, with optional properties", .required = &.{ "parent", "name", "type" }, .optional = &.{ "properties", "unique_name" } },
-    .{ .name = "node_set", .summary = "Set one property on an existing node", .required = &.{ "path", "property", "value" }, .optional = &.{} },
+    .{ .name = "node_set", .summary = "Set a property on an existing node, or several with a properties object", .required = &.{"path"}, .optional = &.{ "property", "value", "properties" } },
     .{ .name = "assign_ext", .summary = "Register an external file and point a node property at it; ext_type is the resource class Godot expects and is inferred for .gd, .tscn, images, audio, and fonts; a .tres needs it given (StyleBoxFlat, Theme, ...)", .required = &.{ "path", "property", "res_path" }, .optional = &.{ "ext_type", "id_hint", "type", "resource_path" } },
     .{ .name = "connect", .summary = "A [connection] section: signal from one node to a method on another", .required = &.{ "from", "signal", "to", "method" }, .optional = &.{ "deferred", "one_shot", "binds", "unbinds" } },
     .{ .name = "instance_catalog", .summary = "Instance a project catalog entry by id", .required = &.{ "parent", "name", "catalog_id" }, .optional = &.{ "properties", "editable" } },

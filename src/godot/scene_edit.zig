@@ -82,12 +82,34 @@ pub fn createNewResource(allocator: std.mem.Allocator, resource_type: []const u8
     return doc;
 }
 
+pub const AddNodeOptions = struct {
+    /// Keep a node's original `unique_id` when restoring it, so an undo puts
+    /// back what was removed rather than something equivalent. Save
+    /// preparation leaves a valid, unused id alone.
+    unique_id: ?i64 = null,
+    /// Position among the parent's children, counted from 0. Without it the
+    /// node becomes the last child, which is right for a new node and wrong
+    /// for a restored one.
+    index: ?usize = null,
+};
+
 pub fn addNode(
     allocator: std.mem.Allocator,
     doc: *document.Document,
     parent_path: []const u8,
     name: []const u8,
     node_type: []const u8,
+) Error!AddNodeResult {
+    return addNodeWithOptions(allocator, doc, parent_path, name, node_type, .{});
+}
+
+pub fn addNodeWithOptions(
+    allocator: std.mem.Allocator,
+    doc: *document.Document,
+    parent_path: []const u8,
+    name: []const u8,
+    node_type: []const u8,
+    options: AddNodeOptions,
 ) Error!AddNodeResult {
     var list = try node_tree.collectNodes(allocator, doc);
     defer list.deinit(allocator);
@@ -101,8 +123,12 @@ pub fn addNode(
 
     var header = try makeNodeHeader(allocator, name, node_type, parent_attr);
     errdefer header.deinit(allocator);
+    if (options.unique_id) |id| try header.setIntegerField(allocator, "unique_id", id);
 
-    const insert_at = try node_section_order.insertIndexForNewChild(allocator, doc, parent.path);
+    const insert_at = if (options.index) |wanted|
+        try insertIndexForChildPosition(allocator, doc, parent.path, wanted)
+    else
+        try node_section_order.insertIndexForNewChild(allocator, doc, parent.path);
     const section_index = blk: {
         const section = document.Section{
             .line = 0,
@@ -121,6 +147,32 @@ pub fn addNode(
         .path = new_path,
         .parent_attr = parent_attr,
     };
+}
+
+/// Document position for a node that should end up as the parent's `wanted`
+/// child: the section of the child currently in that slot, or the end of the
+/// parent's children when there is none.
+fn insertIndexForChildPosition(
+    allocator: std.mem.Allocator,
+    doc: *const document.Document,
+    parent_viewport_path: []const u8,
+    wanted: usize,
+) Error!usize {
+    var list = try node_tree.collectNodes(allocator, doc);
+    defer list.deinit(allocator);
+
+    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_viewport_path});
+    defer allocator.free(prefix);
+
+    var seen: usize = 0;
+    for (list.nodes) |*node| {
+        if (!std.mem.startsWith(u8, node.path, prefix)) continue;
+        // Direct children only: a grandchild's path has another separator.
+        if (std.mem.indexOfScalar(u8, node.path[prefix.len..], '/') != null) continue;
+        if (seen == wanted) return node.section_index;
+        seen += 1;
+    }
+    return node_section_order.insertIndexForNewChild(allocator, doc, parent_viewport_path);
 }
 
 pub fn setNodeProperty(
