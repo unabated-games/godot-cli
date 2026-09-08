@@ -113,7 +113,8 @@ Copy `wasd_movement.json` from `$GODOT_CLI_HOME/examples/intents/`. Semantics:
 
 - **Per-action replace** — each `name` in the intent overwrites that action’s block; other actions are untouched.
 - **Idempotent** — safe to re-run in agent loops.
-- **Event types** — `key` (`keycode`: `A`, `KEY_W`, `ArrowUp`, …), `joypad_button` (`dpad_left`, `a`, …), `joypad_motion` (`left_x` / `left_y` + `axis_value`).
+- **Event types** — `key`, `mouse_button`, `joypad_button`, `joypad_motion`. Every `Key`, `MouseButton`, `JoyButton` and `JoyAxis` Godot has is reachable by name (`escape`, `enter`, `f5`, `left`, `wheel_up`, `left_stick`, `right_shoulder`, `trigger_left`, …), matched without case, or by its raw number. `key` and `mouse_button` also take `"ctrl"`, `"shift"`, `"alt"` and `"meta"` for modifier bindings such as Ctrl+S. `project input apply --help` lists every accepted name, and an unknown one comes back with the accepted set in `details.hint`.
+- **`deadzone`** — optional per action (`{"name": "move_left", "deadzone": 0.2, "events": [...]}`); Godot's default is `0.5`.
 
 Typical workflow: write `scripts/player.gd` on disk → attach via `player_2d` / `assign_ext` → `project input apply` → run the game.
 

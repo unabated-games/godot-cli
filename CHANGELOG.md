@@ -15,6 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-09-08
+
+### Fixed
+
+- **A `--click` under `--headless` now says it verified nothing.** There is no window, so the click never reaches the Control: the run reported `clicks: 1` and exited clean while the button was never pressed — a passing result for the one flag whose job is verification. It comes back with a message saying so. `--press` does work headless (measured: both the polled action state and the `InputEventAction` arrive).
+- **`project run --press` / `--click` failed on any project with an autoload.** The generated harness loaded the scene from `_init()`, which Godot runs while it instantiates the custom main loop — before it registers autoload names as script globals (`main.cpp` sets the main loop, loads autoloads, then calls initialize). Any script naming an autoload failed to *compile*, so the scene never loaded and the run died before the game started, while a plain `project run` was fine. The harness loads from `_initialize()` now, which runs after that startup step and keeps press and click frames on the same numbers as before. Reported by a session hitting it on the first button it tried to click; autoloads are near-universal, so in practice these flags only worked on toy projects.
+- **The input map could not express half of Godot's controller.** `joypad_button` named 8 of the 26 `JoyButton` values — no shoulders, no stick clicks, no start/back/guide, no paddles — and `joypad_motion` named 4 of the 6 axes, leaving both triggers out. All of them have names now (`left_stick`/`l3`, `right_shoulder`/`rb`, `trigger_left`/`LT`, …), matched without case, and `button` accepts a raw `JoyButton` number the way `axis` already did.
+- **Mouse buttons could not be bound at all.** `project input apply` knew `key`, `joypad_button` and `joypad_motion`; Godot's own action map editor also takes `InputEventMouseButton`, so "fire on the left mouse button" had no expression. There is a `mouse_button` event now — `left`, `right`, `middle`, `wheel_up`/`wheel_down`/`wheel_left`/`wheel_right`, `xbutton1`/`xbutton2`, or a number — with the same modifier flags, written with the property shape Godot's own `var_to_str` produces. An unrecognised `type` now lists the four.
+- **`key` events reached only letters, digits, space and the arrows.** Escape, Enter, Tab, Backspace, Delete, Home, End, the page keys, the lock keys and F1-F12 now have names, a raw Godot keycode is accepted, and `"ctrl"`, `"shift"`, `"alt"` and `"meta"` on the event write the modifier flags, so `ui_cancel` on Escape and Ctrl+S are expressible. Verified by reading the written map back through Godot: `Escape`, `Enter`, `Ctrl+S`, `F12`, `Tab`, `Left Stick`, `Left Trigger`, `Right Shoulder`.
+- **A whole `axis_value` is written `-1.0`, not `-1`.** Godot's `VariantWriter` appends `.0` to a whole float, so every joypad binding godot-cli wrote differed from what the editor writes on the next save.
+- An unknown key, joypad button or joypad axis now fails with the field, the value, and every name it accepts, instead of a bare `UnknownJoypadButton`. `project input apply --help` carries the same reference (asked for by trial 16).
+
 ## [0.13.0] — 2026-09-07
 
 ### Added

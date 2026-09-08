@@ -270,13 +270,21 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\const AWAY := Vector2(-10000, -10000)
         \\var _frame := 0
         \\
-        \\func _init() -> void:
+        \\func _initialize() -> void:
+        \\    # Not _init(): that runs while the custom main loop is being
+        \\    # instantiated, which Godot does before it registers autoload
+        \\    # names as script globals (main.cpp sets the main loop, then
+        \\    # loads autoloads, then calls initialize). Loading the scene
+        \\    # from _init() makes any script naming an autoload fail to
+        \\    # compile, so nothing runs at all.
         \\    var packed: PackedScene = load(SCENE)
         \\    if packed == null:
         \\        push_error("godot-cli: cannot load " + SCENE)
         \\        quit(1)
         \\        return
         \\    root.add_child(packed.instantiate())
+        \\    # Counting frames from here keeps click and press frames
+        \\    # relative to the scene being in the tree.
         \\    physics_frame.connect(_tick)
         \\
         \\func _action(name: String, pressed: bool) -> void:
@@ -527,6 +535,13 @@ test "the driver script moves the cursor off the node after a click, unless it i
     const away_call = std.mem.indexOf(u8, moved, "            if not KEEP_CURSOR:\n                _mouse_away()").?;
     const release = std.mem.indexOf(u8, moved, "_click(click[0], false)").?;
     try std.testing.expect(away_call > release);
+
+    // The scene is loaded from _initialize, never from _init: _init runs
+    // before Godot registers autoloads, so a scene whose script names one
+    // fails to compile and nothing runs at all.
+    try std.testing.expect(std.mem.indexOf(u8, moved, "func _initialize() -> void:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, moved, "func _init() -> void:") == null);
+    try std.testing.expect(std.mem.indexOf(u8, moved, "load(SCENE)").? > std.mem.indexOf(u8, moved, "func _initialize").?);
 
     options.keep_cursor = true;
     _ = try writeDriverScript(arena, io, options);

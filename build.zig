@@ -17,11 +17,11 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.13.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.14.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
-    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-09-07";
+    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-09-08";
 
     const version_options = b.addOptions();
     version_options.addOption([]const u8, "version", version_string);
@@ -771,6 +771,11 @@ pub fn build(b: *std.Build) void {
         \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/project --godot "$GODOT" --scene sample.tscn --frames 4 --headless --no-import --click /root/Root@2 --keep-cursor --json || true) &&
         \\grep -q 'const KEEP_CURSOR := true' test_fixtures/project/.godot/godot-cli/godot_cli_run.gd &&
         \\test -f test_fixtures/project/.godot/godot-cli/godot.log &&
+        \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/autoload_project --godot "$GODOT" --frames 6 --headless --click /root/Main/Play@2 --json || true) &&
+        \\echo "$out" | grep -q '"error_count":0' &&
+        \\grep -q 'autoload fixture score=7' test_fixtures/autoload_project/.godot/godot-cli/godot.log &&
+        \\grep -q 'func _initialize' test_fixtures/autoload_project/.godot/godot-cli/godot_cli_run.gd &&
+        \\rm -rf test_fixtures/autoload_project/.godot &&
         \\./zig-out/bin/godot-cli project import --project-root test_fixtures/project --godot "$GODOT" --json | grep -q '"ok":true' &&
         \\rm -rf test_fixtures/project/.godot/godot-cli
     });

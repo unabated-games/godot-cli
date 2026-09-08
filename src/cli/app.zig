@@ -238,6 +238,11 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
         .{ .err = "UnknownPatchOp", .kind = "unknown_patch_op", .message = "no patch op with that name" },
         .{ .err = "ManifestNotFound", .kind = "catalog_manifest", .message = "no catalog manifest to update; run catalog add without --update" },
         .{ .err = "ManifestExists", .kind = "catalog_manifest", .message = "a catalog manifest already exists; pass --update to change it" },
+        .{ .err = "UnknownJoypadButton", .kind = "unknown_joypad_button", .message = "no joypad button with that name" },
+        .{ .err = "UnknownJoypadAxis", .kind = "unknown_joypad_axis", .message = "no joypad axis with that name" },
+        .{ .err = "UnknownMouseButton", .kind = "unknown_mouse_button", .message = "no mouse button with that name" },
+        .{ .err = "InvalidEvent", .kind = "invalid_event", .message = "no input event type with that name" },
+        .{ .err = "UnknownKey", .kind = "unknown_key", .message = "no key with that name" },
     };
     for (mapped) |entry| if (std.mem.eql(u8, name, entry.err)) {
         failure.kind = entry.kind;

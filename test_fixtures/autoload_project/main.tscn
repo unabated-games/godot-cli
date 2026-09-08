@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://cyem8upyeqr7l"]
+
+[ext_resource type="Script" path="res://main.gd" id="Script_main" uid="uid://lo5ev881wsbr"]
+
+[node name="Main" type="Control" unique_id=123760489]
+anchor_right = 1
+anchor_bottom = 1
+script = ExtResource("Script_main")
+
+[node name="Play" type="Button" parent="." unique_id=2086014595]
+offset_right = 80
+offset_bottom = 30
+text = "Play"

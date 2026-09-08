@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-07" "godot-cli 0.13.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.14.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -1936,7 +1936,8 @@ frame
 .TP
 \fB\-\-headless\fR
 No window and no frames, only the log; for machines without
-a display
+a display. \-\-press still works, \-\-click does not reach
+Controls
 .TP
 \fB\-\-user\-arg\fR \fIvalue\fR
 Argument passed after \-\-, readable with OS.get_cmdline_user_args();
@@ -1952,7 +1953,8 @@ both see it
 Left\-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20;
 repeatable. A Button's pressed signal fires from this, and
 the cursor moves off the node after the release so later frames
-show its normal style
+show its normal style. Needs a window: under \-\-headless the
+click never reaches the Control
 .TP
 \fB\-\-keep\-cursor\fR
 Leave the synthetic cursor on the last clicked node instead
@@ -2028,15 +2030,39 @@ List input actions
 Godot project root (directory containing project.godot)
 .SS godot\-cli project input apply
 Apply input map intent JSON (merge/replace per action)
+.PP
+One intent: {"actions": [{"name": "move_left", "deadzone":
+0.5, "events": [...]}]}; each action replaces the one of the
+same name. Event types: {"type": "key", "keycode": <name or
+number>, "physical": true, "ctrl": false, "shift": false, "alt":
+false, "meta": false}, {"type": "mouse_button", "button": <name
+or number>}, {"type": "joypad_button", "button": <name or number>},
+{"type": "joypad_motion", "axis": <name or number>, "axis_value":
+\-1.0}. Keys: a letter or digit, space, escape, tab, backtab,
+backspace, enter/return, kp_enter, insert, delete, pause, print,
+home, end, left, up, right, down, pageup, pagedown, shift,
+ctrl, meta/cmd, alt, capslock, numlock, scrolllock, f1\-f12;
+or a Godot keycode number. Names are matched without case,
+and KEY_<letter> is accepted. Mouse buttons: left, right, middle,
+wheel_up, wheel_down, wheel_left, wheel_right, xbutton1/x1,
+xbutton2/x2; or the MouseButton number. Names are matched without
+case. Joypad buttons: a/south, b/east, x/west, y/north, back/select,
+guide/home, start, left_stick/l3, right_stick/r3, left_shoulder/lb,
+right_shoulder/rb, dpad_up, dpad_down, dpad_left, dpad_right,
+misc1, paddle1\-4, touchpad, misc2\-6; or the JoyButton number.
+Names are matched without case. Joypad axes: left_x/LX, left_y/LY,
+right_x/RX, right_y/RY, trigger_left/LT, trigger_right/RT;
+or the JoyAxis number. Names are matched without case.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
 .TP
 \fB\-\-intent\fR \fIpath\fR
-Intent JSON file: {"actions": [{"name": "move_left", "events":
-[{"type": "key", "keycode": "A", "physical": true}, {"type":
-"joypad_motion", "axis": "left_x", "axis_value": \-1.0}]}]};
-each action replaces one of the same name
+Intent JSON file: {"actions": [{"name": "move_left", "deadzone":
+0.5, "events": [{"type": "key", "keycode": "A", "physical":
+true}, {"type": "joypad_motion", "axis": "left_x", "axis_value":
+\-1.0}]}]}; each action replaces one of the same name, and
+deadzone is optional (Godot defaults to 0.5)
 .TP
 \fB\-\-intent\-json\fR \fIvalue\fR
 The intent itself, instead of a file; the same document the

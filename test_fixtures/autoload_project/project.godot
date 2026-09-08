@@ -1,0 +1,15 @@
+config_version=5
+
+[application]
+
+config/name="AutoloadFixture"
+run/main_scene="res://main.tscn"
+
+[autoload]
+
+GameState="*res://game_state.gd"
+
+[display]
+
+window/size/viewport_width=320
+window/size/viewport_height=180

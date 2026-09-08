@@ -206,7 +206,7 @@ test "format Vector3 and ext resource" {
 /// `rtos_fix` produced an integer-looking string (`offset_left = 16.0`,
 /// `rotation = 1.0`), but not for components inside a constructor, which stay
 /// `Vector2(2, 1.5)`. Only the top-level float takes this path.
-fn formatScalarFloat(allocator: std.mem.Allocator, value: f64) ![]u8 {
+pub fn formatScalarFloat(allocator: std.mem.Allocator, value: f64) ![]u8 {
     const text = try lex.formatGodotFloat(allocator, value);
     if (std.mem.eql(u8, text, "inf") or std.mem.eql(u8, text, "inf_neg") or std.mem.eql(u8, text, "nan")) return text;
     if (std.mem.indexOfScalar(u8, text, '.') != null or std.mem.indexOfScalar(u8, text, 'e') != null) return text;

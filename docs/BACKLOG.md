@@ -1,6 +1,6 @@
 # Open asks
 
-Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.13.0 (2026-09-07). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 and 21 built styled menus and verified their normal and hover states from one run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
+Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.14.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
 
 Items are grouped by area and ordered by how much they would change what an agent produces. Closed asks are listed at the end so the picture is complete.
 
@@ -13,6 +13,10 @@ Items are grouped by area and ordered by how much they would change what an agen
 **Record child order and unique ids in undo ops.** Trials 18, 19. An undo patch for a removal re-adds the node at the end of its parent and with a fresh unique id, so the restore is not byte for byte. Size S to M.
 
 **Real root type for instanced nodes in `scene node list`.** Trials 11, 12, 17, 18. Instanced nodes report `PackedScene`. Reading the instanced scene's root type needs the project root, which `scene node list` accepts and ignores today. Size S.
+
+**`unique_name` on the `node_add` patch op.** Trial 23. The `add_node` *recipe* takes `unique_name`, the `node_add` *op* does not — it was silently dropped before, and is now rejected with the fields it accepts, which cost the trial a step. Either accept it on the op (expanding to `unique_name_in_owner` the way the recipe does) or say so in the hint. Size S.
+
+**Make two sub-resources of one type just work.** Trials 20, 21, 23 all hit the generated-id collision. 21 recovered with `id_hint` from the new hint; 23 hand-edited the `.tscn` instead — breaking rule 1 to get past a tool error, which is the failure mode the whole tool exists to prevent. The hint is not enough on its own: `sub_add` should suffix a colliding generated id (`StyleBoxFlat_ab12c_2`) rather than fail, keeping `id_hint` for when the caller wants a stable name. Size S, and the most valuable S left.
 
 **A `properties` object on `node_set`.** Trial 21, and the maintainer hit it the same day. `node_add` takes `properties`, `node_set` takes one `property` and `value`, so the obvious `{"op": "node_set", "path": ..., "properties": {...}}` is rejected and the caller writes one op per property. The rejection now lists the fields, which is how the trial recovered, but accepting a `properties` object (expanded to one set each) would remove the step. `scene set-property` has the same asymmetry against `scene node add --properties`. Size S.
 
@@ -40,8 +44,6 @@ Items are grouped by area and ordered by how much they would change what an agen
 
 **An MCP-shaped cheat sheet.** Trials 15, 16. The quickstart's commands are shell lines; the "Over MCP" section comes last and the `--project-root` table is noise for a bound server. Either a second cheat sheet in tool-and-arguments form, or a variant of the quickstart served only as the MCP resource. Size S.
 
-**Input event and keycode reference for `project input apply`, and an `assign_ext` worked example.** Trial 16. The accepted event types and keycode spellings are only discoverable from the example intent. Size S.
-
 **`manifest_res_path` in `catalog add` output.** Trial 16. Comes back empty with no explanation. Size S.
 
 ## `project run`
@@ -49,6 +51,12 @@ Items are grouped by area and ordered by how much they would change what an agen
 **A first-and-last frame pair.** Trial 16. `--frame-at` keeps one chosen frame; a before-and-after comparison in one run would want frame 0 as well. Size S.
 
 **A `log-lines` option and a frames upper hint.** Trial 15. The log tail is fixed at 40 lines. Size S.
+
+**Why clicks do not reach Controls under `--headless`.** A headless `--click` run now says it verified nothing, which closes the false pass, but the cause is still open. With the installed Godot 4.8.dev4 the button's signal never fires headless while the same run with a window fires it; the headless root viewport is also 64x64 rather than the project's size. Godot master's `DisplayServerHeadless::process_events` does flush buffered input and `--press` arrives headless either way, so this may be specific to GUI routing or to that build. Worth pinning to a released Godot, and the smoke test should then assert a click *did* something rather than that the option parsed. Size S to investigate.
+
+**A specific input device on an event.** `project input apply` writes `"device":-1` (All Devices) on every event; a binding pinned to one joypad index is not expressible. Size S.
+
+**The `[input]` section's formatting is engine-build dependent.** godot-cli writes each event object inline, which matches Godot master's `VariantWriter` and the committed fixture, but the installed 4.8.dev4 writes one property per line, so a save from that editor reformats the whole section and makes a noisy diff. Values round-trip identically either way and Godot parses both. Worth pinning to a released Godot before changing anything. Size S once the target version is decided.
 
 ## Docs and site
 
@@ -67,3 +75,4 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.11.0: `project run` and `project import` with presses, clicks, the log tail, the image result, and the project's resolution; header uids on new files; required options in the schemas; float coercion; step-indexed intent failures; `assign_ext` inference; `camera_2d` position; the header-uid stale check; uids on scene and resource references.
 - 0.12.0: `scene extract` with catalog registration and script-reference messages; the recursive-remove undo fix; properties on `scene node get`; op aliases; scalar `node_set` values; details on every failure; `control_under_node2d`; `--frame-at`; the reparent undo fix; snapshot cleanup on a rejected apply.
 - 0.13.0: the cursor moves off the node after `project run --click`, so the frame shows the `normal` style, with `--keep-cursor` to hold the hover style; unknown fields on patch ops and intent steps rejected with the accepted list; `id_hint` named when a generated id collides; `step` on every patch op failure.
+- 0.14.0: the whole of Godot's keyboard and controller reachable from `project input apply`, with mouse buttons, modifier flags, raw numbers, the reference in its help, and the `axis_value` float fix; `project run --press`/`--click` working on projects with autoloads; a headless `--click` saying it verified nothing.

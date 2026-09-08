@@ -2108,10 +2108,10 @@ godot-cli project run [options]
 | `--capture-dir` | `<path>` | Folder under the project for the frame and log; the default is under .godot/, which Godot never imports | `.godot/godot-cli` |
 | `--no-import` | — | Skip the headless import pass that assigns UIDs to new files | — |
 | `--keep-frames` | — | Keep every frame and the .wav; the default keeps only the last frame | — |
-| `--headless` | — | No window and no frames, only the log; for machines without a display | — |
+| `--headless` | — | No window and no frames, only the log; for machines without a display. --press still works, --click does not reach Controls | — |
 | `--user-arg` | `<value>` | Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable | — |
 | `--press` | `<value>` | Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it | — |
-| `--click` | `<value>` | Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style | — |
+| `--click` | `<value>` | Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Needs a window: under --headless the click never reaches the Control | — |
 | `--keep-cursor` | — | Leave the synthetic cursor on the last clicked node instead of moving it off, so the frame shows that node's hover style; only the in-game cursor moves either way, never the desktop pointer | — |
 | `--frame-at` | `<n>` | Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open | — |
 
@@ -2202,6 +2202,8 @@ godot-cli project input list [options]
 
 Apply input map intent JSON (merge/replace per action)
 
+One intent: {"actions": [{"name": "move_left", "deadzone": 0.5, "events": [...]}]}; each action replaces the one of the same name. Event types: {"type": "key", "keycode": &lt;name or number&gt;, "physical": true, "ctrl": false, "shift": false, "alt": false, "meta": false}, {"type": "mouse_button", "button": &lt;name or number&gt;}, {"type": "joypad_button", "button": &lt;name or number&gt;}, {"type": "joypad_motion", "axis": &lt;name or number&gt;, "axis_value": -1.0}. Keys: a letter or digit, space, escape, tab, backtab, backspace, enter/return, kp_enter, insert, delete, pause, print, home, end, left, up, right, down, pageup, pagedown, shift, ctrl, meta/cmd, alt, capslock, numlock, scrolllock, f1-f12; or a Godot keycode number. Names are matched without case, and KEY_&lt;letter&gt; is accepted. Mouse buttons: left, right, middle, wheel_up, wheel_down, wheel_left, wheel_right, xbutton1/x1, xbutton2/x2; or the MouseButton number. Names are matched without case. Joypad buttons: a/south, b/east, x/west, y/north, back/select, guide/home, start, left_stick/l3, right_stick/r3, left_shoulder/lb, right_shoulder/rb, dpad_up, dpad_down, dpad_left, dpad_right, misc1, paddle1-4, touchpad, misc2-6; or the JoyButton number. Names are matched without case. Joypad axes: left_x/LX, left_y/LY, right_x/RX, right_y/RY, trigger_left/LT, trigger_right/RT; or the JoyAxis number. Names are matched without case.
+
 ```
 godot-cli project input apply [options]
 ```
@@ -2211,7 +2213,7 @@ godot-cli project input apply [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
-| `--intent` | `<path>` | Intent JSON file: {"actions": [{"name": "move_left", "events": [{"type": "key", "keycode": "A", "physical": true}, {"type": "joypad_motion", "axis": "left_x", "axis_value": -1.0}]}]}; each action replaces one of the same name | — |
+| `--intent` | `<path>` | Intent JSON file: {"actions": [{"name": "move_left", "deadzone": 0.5, "events": [{"type": "key", "keycode": "A", "physical": true}, {"type": "joypad_motion", "axis": "left_x", "axis_value": -1.0}]}]}; each action replaces one of the same name, and deadzone is optional (Godot defaults to 0.5) | — |
 | `--intent-json` | `<value>` | The intent itself, instead of a file; the same document the intent option describes | — |
 | `--file` | `<path>` | Alias for --intent | — |
 | `--dry-run` | — | Apply in memory without writing project.godot | — |

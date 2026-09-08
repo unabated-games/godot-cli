@@ -178,9 +178,15 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (run.frame_at_path) |path| try data.put(cli.allocator, "frame_at", .{ .string = path });
     if (run.log_tail.len != 0) try data.put(cli.allocator, "log_tail", .{ .string = run.log_tail });
 
+    var messages: std.ArrayList([]const u8) = .empty;
+    // A headless click parses, reports clicks:1 and exits clean while the
+    // Control never sees it, which reads as a passing verification of the one
+    // thing the flag exists to verify.
+    if (inv.flag("headless") and clicks.items.len != 0) {
+        try messages.append(cli.allocator, "clicks do not reach Controls under --headless: there is no window, so clicks does not mean the node responded. Run with a window to verify a button; --press does work headless");
+    }
     // Without this, a run with --keep-cursor and nothing to hover over reads
     // as though the frame is showing a held hover style.
-    var messages: std.ArrayList([]const u8) = .empty;
     if (inv.flag("keep-cursor") and clicks.items.len == 0) {
         try messages.append(cli.allocator, "keep-cursor does nothing without --click: the cursor only moves when a click puts it somewhere");
     }
@@ -1133,10 +1139,10 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; the default is under .godot/, which Godot never imports", .default_value = ".godot/godot-cli" },
     .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },
     .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
-    .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display" },
+    .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display. --press still works, --click does not reach Controls" },
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
     .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
-    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style", .repeatable = true },
+    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Needs a window: under --headless the click never reaches the Control", .repeatable = true },
     .{ .long = "keep-cursor", .kind = .flag, .description = "Leave the synthetic cursor on the last clicked node instead of moving it off, so the frame shows that node's hover style; only the in-game cursor moves either way, never the desktop pointer" },
     .{ .long = "frame-at", .kind = .integer, .description = "Also keep this frame (numbered from 0) and return it as frame_at, for a mid-run state such as a menu open" },
 };
@@ -1147,7 +1153,7 @@ pub fn commands() spec.CommandSpec {
     };
 
     const intent_apply_options = intentOptions("Intent JSON file: settings {\"<section>\": {\"<key>\": value}}, input {\"actions\": [{\"name\", \"events\": [{\"type\": \"key\", \"keycode\": \"A\", \"physical\": true}]}]}, autoload {\"autoloads\": [{\"name\", \"path\", \"singleton\"}]}, plugins, rendering, physics; see the examples");
-    const input_intent_options = intentOptions("Intent JSON file: {\"actions\": [{\"name\": \"move_left\", \"events\": [{\"type\": \"key\", \"keycode\": \"A\", \"physical\": true}, {\"type\": \"joypad_motion\", \"axis\": \"left_x\", \"axis_value\": -1.0}]}]}; each action replaces one of the same name");
+    const input_intent_options = intentOptions("Intent JSON file: {\"actions\": [{\"name\": \"move_left\", \"deadzone\": 0.5, \"events\": [{\"type\": \"key\", \"keycode\": \"A\", \"physical\": true}, {\"type\": \"joypad_motion\", \"axis\": \"left_x\", \"axis_value\": -1.0}]}]}; each action replaces one of the same name, and deadzone is optional (Godot defaults to 0.5)");
     const settings_intent_options = intentOptions("Intent JSON file: {\"<section>\": {\"<key>\": value}}, e.g. {\"application\": {\"run/main_scene\": \"res://scenes/main.tscn\"}, \"display\": {\"window/size/viewport_width\": 640}}; keys merge into the existing file");
     const autoload_intent_options = intentOptions("Intent JSON file: {\"autoloads\": [{\"name\": \"GameState\", \"path\": \"res://scripts/game_state.gd\", \"singleton\": true}], \"replace_all\": false}");
     const plugins_intent_options = intentOptions("Intent JSON file: {\"enable\": [\"my_addon\"], \"disable\": []}; names are folders under addons/");
@@ -1243,7 +1249,13 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Input Map actions in project.godot",
                 .children = &.{
                     .{ .name = "list", .summary = "List input actions", .options = &project_options, .handler = inputListHandler },
-                    .{ .name = "apply", .summary = "Apply input map intent JSON (merge/replace per action)", .options = &input_intent_options, .handler = inputApplyHandler },
+                    .{
+                        .name = "apply",
+                        .summary = "Apply input map intent JSON (merge/replace per action)",
+                        .description = "One intent: {\"actions\": [{\"name\": \"move_left\", \"deadzone\": 0.5, \"events\": [...]}]}; each action replaces the one of the same name. Event types: {\"type\": \"key\", \"keycode\": <name or number>, \"physical\": true, \"ctrl\": false, \"shift\": false, \"alt\": false, \"meta\": false}, {\"type\": \"mouse_button\", \"button\": <name or number>}, {\"type\": \"joypad_button\", \"button\": <name or number>}, {\"type\": \"joypad_motion\", \"axis\": <name or number>, \"axis_value\": -1.0}. Keys: " ++ project_input.key_names ++ ". Mouse buttons: " ++ project_input.mouse_button_names ++ ". Joypad buttons: " ++ project_input.joypad_button_names ++ ". Joypad axes: " ++ project_input.joypad_axis_names ++ ".",
+                        .options = &input_intent_options,
+                        .handler = inputApplyHandler,
+                    },
                     .{ .name = "validate", .summary = "Validate [input] section event objects", .options = &project_options, .handler = inputValidateHandler },
                 },
             },
