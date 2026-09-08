@@ -81,6 +81,24 @@ godot-cli scene connection add scenes/main.tscn --from /root/Main/Menu/Resume --
 [connection signal="pressed" from="Menu/Resume" to="Menu" method="_on_resume_pressed"]
 ```
 
+A node *inside* an instance is a valid endpoint too. Godot needs the instance
+marked editable first, which the command does for you and says so:
+
+```bash
+godot-cli scene connection add scenes/main.tscn --from /root/Main/HUD/Close \
+  --signal pressed --to /root/Main --method _on_close --project-root .
+```
+
+```text
+/root/Main/HUD/Close is inside the instance at /root/Main/HUD, so the instance is
+now marked editable ([editable path=…]), which is what the editor does before you
+can connect one of its children
+```
+
+With `--project-root` the child is checked against the scene it lives in, so a
+typo fails here rather than silently at run time. `scene extract --editable`
+leaves a freshly extracted instance open for exactly this.
+
 The method lives in the receiving node's script, which you still write. What you no longer write is `$Resume.pressed.connect(_on_resume_pressed)` in `_ready()`, which is where an agent puts it when the scene has no way to hold it. Open the scene in Godot and the Node dock shows the connection like any other.
 
 `--deferred`, `--one-shot`, `--binds '["quit"]'`, and `--unbinds 1` map to Godot's connect flags. `scene connection list` prints every connection with viewport paths, `scene node get` includes the ones touching a node, and `scene diff` reports connections added or removed. Renaming or reparenting a node rewrites its connections' paths, and removing a node removes them.

@@ -49,12 +49,31 @@ agent instance it next time instead of rebuilding it.
 Two things come back in `messages` and both deserve reading:
 
 - **Dropped connections.** A connection from inside the subtree to a node
-  outside it cannot survive the split. They are listed, and re-creating them is
-  yours to do — usually as a signal on the new scene's root that the parent
-  connects to.
+  outside it cannot survive the split as it was. `--retarget-dropped-connections`
+  re-points it at the new scene's root instead of dropping it, and names the
+  method that root now needs:
+
+  ```text
+  a connection was re-pointed at the new scene's root, which now needs
+  `func _on_close_pressed()` in a script on res://ui/hud.tscn
+  ```
+
+  That gives a self-contained component. If you would rather the parent stay in
+  charge, `--editable` leaves the instance open so you can connect straight to a
+  node inside it afterwards.
 - **Script references.** Lines in your GDScript that reach into the moved
   subtree by path, like `$Main/HUD/Score`, are listed with their file and line.
   They still parse; they just resolve to nothing now.
+
+The catalog entry can be written in the same call, so a component pulled out of
+an existing scene arrives as complete as one written deliberately:
+
+```bash
+godot-cli scene extract scenes/main.tscn /root/Main/HUD --output ui/hud.tscn \
+  --catalog-id ui/hud --summary "Player HUD with health and score" \
+  --tags ui,hud --when-to-use "Any in-game screen" \
+  --when-not-to-use "Menus; use ui/menu" --project-root .
+```
 
 ## Move a file without breaking it
 
@@ -67,12 +86,18 @@ godot-cli project move --project-root . \
 ```
 
 It takes the `.uid` sidecar with the file and reports each scene it edited.
-Validation may then report `uid_path_mismatch` until Godot's import refreshes
-its UID cache, so run the import once afterwards:
+Godot's UID cache still maps the old path afterwards, so validation reports
+`uid_path_mismatch` until an import refreshes it — `--import` does that as part
+of the move, which is what makes "validate after every edit" hold for this step:
 
 ```bash
-godot-cli project import --project-root . --json
+godot-cli project move --project-root . \
+  --from scripts/player.gd --to scripts/hero.gd --import --rename-ids --json
 ```
+
+`--rename-ids` re-seeds the `ext_resource` id from the new file name, so a
+`Script_player` id stops naming a file called `hero.gd`. Godot's own `1_ab12c`
+ids name no file and are left alone.
 
 If a component folder moved and its catalog entry no longer points at the
 scene, `catalog relink` finds it again and repairs the manifest.

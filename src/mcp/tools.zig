@@ -494,6 +494,17 @@ test "schema violations and escaped paths are reported by name" {
     try std.testing.expect(rejected == .invalid);
 }
 
+test "the quickstart names the same core tools the server serves" {
+    // Two lists of the same thing drift; this is the one that catches it.
+    const quickstart = @embedFile("doc_quickstart");
+    for (core_tool_names) |name| {
+        if (std.mem.indexOf(u8, quickstart, name) == null) {
+            std.debug.print("agent_quickstart.md does not mention the core tool {s}\n", .{name});
+            return error.TestExpectedEqual;
+        }
+    }
+}
+
 test "the core toolset names tools that exist" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();

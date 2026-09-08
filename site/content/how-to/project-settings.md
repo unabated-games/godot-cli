@@ -75,6 +75,37 @@ move_left={
 
 Applying the same intent twice replaces each action by name instead of appending a second copy, so re-running after an edit is safe. A ready-made WASD intent ships at `$GODOT_CLI_HOME/examples/intents/wasd_movement.json`.
 
+### Every event type Godot has
+
+| Type | Names it takes |
+|------|----------------|
+| `key` | A letter or digit, `space`, `escape`, `tab`, `enter`, `backspace`, `delete`, `home`, `end`, the arrows, the page and lock keys, `shift`/`ctrl`/`meta`/`alt`, `f1`–`f12` |
+| `mouse_button` | `left`, `right`, `middle`, `wheel_up`, `wheel_down`, `wheel_left`, `wheel_right`, `xbutton1`, `xbutton2` |
+| `joypad_button` | `a`/`south`, `b`/`east`, `x`/`west`, `y`/`north`, `back`, `guide`, `start`, `left_stick`/`l3`, `right_stick`/`r3`, `left_shoulder`/`lb`, `right_shoulder`/`rb`, the d-pad, `misc1`, `paddle1`–`4`, `touchpad` |
+| `joypad_motion` | `left_x`, `left_y`, `right_x`, `right_y`, `trigger_left`/`LT`, `trigger_right`/`RT`, with `axis_value` |
+
+Names are matched without case, and each type also takes the raw Godot number
+(`"keycode": 4194309`, `"button": 15`) for anything not named here.
+
+A `key` or `mouse_button` event takes modifier flags, so a chord is one event:
+
+```json
+{ "type": "key", "keycode": "S", "physical": false, "ctrl": true }
+```
+
+An event can also name a device, which is what separates two players sharing a
+binding. `-1` is Godot's *All Devices* and the default:
+
+```json
+{ "name": "player2_jump", "events": [
+  { "type": "joypad_button", "button": "a", "device": 1 },
+  { "type": "key", "keycode": "space" }
+] }
+```
+
+`project input apply --help` lists every accepted name, and an unknown one
+comes back with the whole set in `details.hint` rather than a bare failure.
+
 ## Autoloads
 
 ```json

@@ -24,6 +24,30 @@ Validation exits 1 when it finds an error, and returns every issue with a line n
 | `stale_uid_for_path` | error | A `uid://` reference disagrees with the project's UID cache |
 | `nonstandard_scene_id` | warning | An id does not match the shape the editor writes, such as `1_a` instead of `1_abc12` |
 | `invalid_node_unique_id` | warning | A node's `unique_id` is not a value Godot would generate |
+| `property_type_mismatch` | error | A property's value is the wrong Variant type for its class, e.g. `visible = Vector2(1, 2)` |
+| `unknown_signal` | error | A connection names a signal the emitting class does not have, and its script does not declare |
+| `connection_node_missing` | error | A connection names a node that is not in the scene |
+| `control_under_node2d` | warning | A `Control` under a `Node2D` has no parent rect, so anchors give it no size and it may draw nothing |
+| `dangling_ext_resource` | error | A property references an `ExtResource` id nothing declares |
+
+### The checks that read the file the way Godot would
+
+`property_type_mismatch` and `unknown_signal` come from a table generated out of
+Godot's own class reference — 520 classes, 3933 properties, 377 signals — so
+they catch the two mistakes that otherwise cost a run to find:
+
+```text
+[err] property_type_mismatch: Control.visible is bool, and this value is vector2:
+      Godot coerces it and the file still loads, so only the running frame shows the damage
+[err] unknown_signal: Button does not emit a signal named pressd, and its script does not
+      declare one either, so this connection never fires
+```
+
+Both are deliberately quiet about anything the table cannot speak for: a class
+it does not carry, a `theme_override_*` entry, a `metadata/*` key, a script's
+exported variables, and a connection whose endpoint lives inside an instance.
+A correct scene is never reported. With `--project-root` the emitting node's
+script is read too, so a signal the script declares itself passes.
 
 A real one reads like this:
 
@@ -35,6 +59,10 @@ A real one reads like this:
   "line": 5
 }
 ```
+
+A validate that found errors exits 1 and answers `ok: false` with a
+`checks_failed` failure, keeping the issues in `data` — so `ok`, the exit code,
+and the error flag an MCP client sets all agree.
 
 `stale_uid_for_path` needs `--project-root`, since it is a question about the project, not the file on its own. Resources get the same treatment with `resource validate` and `resource validate-batch`.
 

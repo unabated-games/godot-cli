@@ -31,7 +31,16 @@ A patch is a list of ops applied in order:
 godot-cli scene apply scenes/main.tscn --patch player.json --project-root . --json
 ```
 
-`id_hint` is what makes the third op possible: it fixes the sub-resource id as `CapsuleShape2D_player` so a later op can reference it. Without a hint, ids are generated the way Godot generates them and you would have to read one command's output to write the next.
+`id_hint` is what makes the third op possible: it fixes the sub-resource id as `CapsuleShape2D_player` so a later op can reference it. Without a hint, ids are generated the way Godot generates them and you would have to read one command's output to write the next — a second sub-resource of the same type takes a numbered suffix (`StyleBoxFlat_ab12c_2`) rather than colliding with the first.
+
+`node_set` takes a `properties` object as well as a single `property`/`value` pair, so a node's layout is one op:
+
+```json
+{ "op": "node_set", "path": "/root/Main", "properties": {
+  "anchor_right": 1.0, "anchor_bottom": 1.0, "grow_horizontal": 2, "grow_vertical": 2 } }
+```
+
+`node_add` takes `unique_name` for `%Name` access, and `unique_id` and `index` to put a node back exactly where it was — which is how an undo patch restores a removed node byte for byte rather than appending it with a fresh id. A field an op does not take is rejected with the list of the ones it does, rather than dropped.
 
 The ops are `node_add`, `node_remove`, `node_rename`, `node_reparent`, `node_set`, `ext_add`, `ext_remove`, `sub_add`, `sub_remove`, `assign_ext`, `instance_add`, `instance_override`, `connection_add`, and `connection_remove`. The [command reference]({{ base_url }}/reference/) and `$GODOT_CLI_HOME/docs/agent_scene_authoring.md` carry the required fields for each.
 

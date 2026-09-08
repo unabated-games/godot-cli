@@ -3,7 +3,7 @@
 [![CI](https://github.com/unabated-games/godot-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/unabated-games/godot-cli/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/unabated-games/godot-cli?sort=semver)](https://github.com/unabated-games/godot-cli/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Godot 4.7](https://img.shields.io/badge/godot-4.7-478cbf.svg)](https://godotengine.org/)
+[![Godot 4.6+](https://img.shields.io/badge/godot-4.6%2B-478cbf.svg)](https://godotengine.org/)
 [![Zig 0.16](https://img.shields.io/badge/zig-0.16-f7a41d.svg)](https://ziglang.org/)
 
 Read, edit, and author Godot scene and resource files from the command line,
@@ -25,12 +25,26 @@ $ godot-cli scene new --output level.tscn --root-name Level --root-type Node2D
 $ godot-cli scene node add level.tscn --parent /root/Level --name Player --type CharacterBody2D
 $ godot-cli scene instance add level.tscn --parent /root/Level --scene res://ui/hud.tscn --name HUD
 $ godot-cli scene validate level.tscn --project-root . --json
-{"ok":true,"version":"0.12.0","command":["scene","validate"],"data":{"path":"level.tscn","issues":[]},...}
+{"ok":true,"version":"0.20.0","command":["scene","validate"],"data":{"path":"level.tscn","issues":[]},...}
 ```
 
 That scene is a normal Godot scene: the hierarchy lives in the file, the way a
 human would have built it in the editor. No `_ready()` spawning, no hand-edited
 scene text.
+
+Validation reads the file the way the engine would — a property whose value is
+the wrong type for its class, or a connection to a signal the class does not
+emit, is an error rather than something that only shows up when you press Play.
+And a change can be checked by running it:
+
+```bash
+$ godot-cli scene describe level.tscn --project-root . --json     # the whole scene in one call
+$ godot-cli project run --project-root . --frames 30 \
+    --click /root/Level/HUD/Play@20 --frame-at 0 --json           # run it, click a button, keep a before-and-after pair
+```
+
+The run returns the frame it drew and every error line from the log, so "done"
+means a screen someone looked at rather than a command that exited 0.
 
 ## Install
 
@@ -126,8 +140,10 @@ together.
 
 ## Building
 
-Requires [Zig](https://ziglang.org/) 0.16.0 or later. Godot 4.7 or later is needed
-only for the round-trip suite.
+Requires [Zig](https://ziglang.org/) 0.16.0 or later. A Godot install is needed
+only to run the game or the round-trip suite; the files godot-cli writes target
+**Godot 4.6 and later**, since every node line carries the `unique_id` the
+engine added in 4.6.
 
 ```bash
 zig build                # binary at zig-out/bin/godot-cli

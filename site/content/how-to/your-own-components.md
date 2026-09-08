@@ -67,6 +67,19 @@ The manifest is plain JSON on purpose. Nothing has to be installed in the Godot 
 
 `when_to_use` and `when_not_to_use` do the work here. An agent reading "Any screen showing player or enemy health" picks this component for a boss health bar without asking. An agent reading "Non-health meters; use ui/meter instead" stops itself from using it for a stamina bar.
 
+Both lines, and `notes`, come back from `catalog list` as well as `catalog show`, so choosing between two similar components is one call rather than one call per candidate.
+
+Signals can be documented as the manifest is written, instead of editing the JSON afterwards:
+
+```bash
+godot-cli catalog add ui/health_bar/health_bar.tscn --project-root . --id ui/health_bar \
+  --summary "Health bar with a label" \
+  --signal-doc "depleted=Fired the frame health reaches zero" \
+  --signal-doc "value_changed=Fired with the new value whenever health moves"
+```
+
+`catalog add` scaffolds a row for every signal the root script declares; `--signal-doc <signal>=<text>` fills it in. `scene extract` takes `--summary`, `--tags`, `--when-to-use` and `--when-not-to-use` too, so a component pulled out of an existing scene arrives with the same prose as one written deliberately.
+
 Open the manifest and fill in what the flags did not cover:
 
 ```json
