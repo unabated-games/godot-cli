@@ -15,6 +15,22 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-09-08
+
+### Added
+
+- **`catalog list` carries the prose that tells two components apart** — `when_to_use`, `when_not_to_use` and `notes`, when a manifest has them. Choosing between `ui/health_bar` and `ui/meter` cost a `catalog show` per candidate before. Trial 16.
+- **An input event can name a device**: `{"type": "joypad_button", "button": "a", "device": 0}` pins a binding to one joypad, for local multiplayer. The default is Godot's `-1`, All Devices, which is what the editor writes.
+- **A stated minimum Godot version: 4.6.** Every `[node]` line godot-cli writes carries the `unique_id` the engine added in 4.6 (`faddd60c40`, first released in 4.6-stable), so earlier 4.x is not supported. Said in the README, the getting-started page, the compatibility guide and the agent basics doc. Trial 10.
+
+### Fixed
+
+- **`manifest_res_path` came back empty under `--project-root .`** — the form the quickstart tells every agent to use. `filesystemToResPath` could not relate two relative paths, and returned nothing. The same function seeds resource id generation, so **a scene authored with a relative project root was seeding its ids from the wrong string**: the same scene now gets the same ids whether the root is spelled `.` or absolutely. Reported as a cosmetic gap by trial 16; it was neither cosmetic nor confined to the catalog.
+
+### Closed without a change
+
+- **The `[input]` section's formatting.** A script's `ProjectSettings.save()` rewrites the section with each event property on its own line, which looked like godot-cli writing the wrong shape. It is Godot's *Dictionary* writer; the engine's object writer is inline, which is what godot-cli produces and what the editor saves, and the two parse identically. Matching the dictionary shape would have moved the output away from the editor's. Explained in the compatibility guide.
+
 ## [0.19.0] — 2026-09-08
 
 ### Added

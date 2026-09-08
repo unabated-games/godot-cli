@@ -66,4 +66,20 @@ Anything it cannot parse is preserved verbatim and reported with `parse_error` i
 
 ## Version support
 
+**Godot 4.6 is the minimum.** Every `[node]` line godot-cli writes carries a
+`unique_id`, which the engine added in 4.6 ([`faddd60c40`](https://github.com/godotengine/godot/commit/faddd60c40), first released in 4.6-stable) to support
+refactoring base and instantiated scenes. Earlier 4.x releases never wrote that
+field and are not supported.
+
+### Why a script's `ProjectSettings.save()` looks different
+
+Calling `ProjectSettings.save()` from a GDScript can rewrite the `[input]`
+section with each event property on its own line and a space after the colon.
+That is Godot's **Dictionary** writer, not its object writer: the engine writes
+an `Object(...)` inline, with no spaces, which is the form godot-cli produces
+and the form the editor saves. The two parse identically — same events, same
+values — so a section that looks reformatted is not a fidelity problem, and
+matching the dictionary shape would move godot-cli *away* from what the editor
+writes.
+
 The round-trip suite runs against Godot 4.7 and 4.7.2, which must pass, and against the newest 4.8 prerelease, which is reported but does not block a push. It passes on all three today. Text scene format 3 is what Godot 4 writes. Binary `.scn` and `.res` files are not supported.

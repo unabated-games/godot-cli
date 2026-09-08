@@ -238,8 +238,9 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
         const meta = readBool(event.get("meta")) orelse false;
         return try std.fmt.allocPrint(
             allocator,
-            "Object(InputEventKey,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":-1,\"window_id\":0,\"alt_pressed\":{s},\"shift_pressed\":{s},\"ctrl_pressed\":{s},\"meta_pressed\":{s},\"pressed\":false,\"keycode\":{d},\"physical_keycode\":{d},\"key_label\":0,\"unicode\":{d},\"location\":0,\"echo\":false,\"script\":null)",
+            "Object(InputEventKey,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"window_id\":0,\"alt_pressed\":{s},\"shift_pressed\":{s},\"ctrl_pressed\":{s},\"meta_pressed\":{s},\"pressed\":false,\"keycode\":{d},\"physical_keycode\":{d},\"key_label\":0,\"unicode\":{d},\"location\":0,\"echo\":false,\"script\":null)",
             .{
+                readDevice(event),
                 if (alt) "true" else "false",
                 if (shift) "true" else "false",
                 if (ctrl) "true" else "false",
@@ -270,8 +271,9 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
         // action ("All Devices").
         return try std.fmt.allocPrint(
             allocator,
-            "Object(InputEventMouseButton,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":-1,\"window_id\":0,\"alt_pressed\":{s},\"shift_pressed\":{s},\"ctrl_pressed\":{s},\"meta_pressed\":{s},\"button_mask\":0,\"position\":Vector2(0, 0),\"global_position\":Vector2(0, 0),\"factor\":1.0,\"button_index\":{d},\"canceled\":false,\"pressed\":false,\"double_click\":false,\"script\":null)",
+            "Object(InputEventMouseButton,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"window_id\":0,\"alt_pressed\":{s},\"shift_pressed\":{s},\"ctrl_pressed\":{s},\"meta_pressed\":{s},\"button_mask\":0,\"position\":Vector2(0, 0),\"global_position\":Vector2(0, 0),\"factor\":1.0,\"button_index\":{d},\"canceled\":false,\"pressed\":false,\"double_click\":false,\"script\":null)",
             .{
+                readDevice(event),
                 if (alt) "true" else "false",
                 if (shift) "true" else "false",
                 if (ctrl) "true" else "false",
@@ -296,8 +298,8 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
         const pressed = readBool(event.get("pressed")) orelse false;
         return try std.fmt.allocPrint(
             allocator,
-            "Object(InputEventJoypadButton,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":-1,\"button_index\":{d},\"pressure\":0.0,\"pressed\":{s},\"script\":null)",
-            .{ button_index, if (pressed) "true" else "false" },
+            "Object(InputEventJoypadButton,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"button_index\":{d},\"pressure\":0.0,\"pressed\":{s},\"script\":null)",
+            .{ readDevice(event), button_index, if (pressed) "true" else "false" },
         );
     }
 
@@ -324,8 +326,8 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
         defer allocator.free(axis_text);
         return try std.fmt.allocPrint(
             allocator,
-            "Object(InputEventJoypadMotion,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":-1,\"axis\":{d},\"axis_value\":{s},\"script\":null)",
-            .{ axis, axis_text },
+            "Object(InputEventJoypadMotion,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"axis\":{d},\"axis_value\":{s},\"script\":null)",
+            .{ readDevice(event), axis, axis_text },
         );
     }
 
@@ -506,6 +508,16 @@ fn resolveJoypadAxis(name: []const u8) Error!i32 {
     }
     error_details.record(.{ .field = "axis", .value = name, .hint = "unknown joypad axis; " ++ joypad_axis_names });
     return error.UnknownJoypadAxis;
+}
+
+/// `"device": 0` pins a binding to one joypad; the default -1 is Godot's
+/// "All Devices", which is what the editor writes unless you choose otherwise.
+fn readDevice(event: std.json.ObjectMap) i64 {
+    const value = event.get("device") orelse return -1;
+    return switch (value) {
+        .integer => |n| n,
+        else => -1,
+    };
 }
 
 fn readBool(value: ?std.json.Value) ?bool {

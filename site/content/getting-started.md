@@ -5,7 +5,7 @@ description: Install godot-cli, author a scene from the command line, and learn 
 
 # Getting started
 
-godot-cli works on Godot 4 text scenes (`.tscn`), resources (`.tres`), and `project.godot`. It does not need the editor running, and it does not need a Godot install unless you want to run the round-trip suite.
+godot-cli works on Godot 4 text scenes (`.tscn`), resources (`.tres`), and `project.godot`. It does not need the editor running, and it does not need a Godot install unless you want to run the game or the round-trip suite. **Godot 4.6 or later**: every node it writes carries the `unique_id` the engine added in 4.6.
 
 ## Install
 

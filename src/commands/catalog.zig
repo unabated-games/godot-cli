@@ -557,6 +557,14 @@ fn listHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         try row.put(cli.allocator, "scene", entry_obj.get("scene").?);
         try row.put(cli.allocator, "summary", entry_obj.get("summary").?);
         try row.put(cli.allocator, "tags", entry_obj.get("tags").?);
+        // Choosing between two similar widgets used to cost a catalog show
+        // per candidate, because the prose that separates them was only
+        // there. Anything written is worth carrying in the list (trial 16).
+        for ([_][]const u8{ "when_to_use", "when_not_to_use", "notes" }) |field| {
+            const value = entry_obj.get(field) orelse continue;
+            if (value == .string and value.string.len == 0) continue;
+            try row.put(cli.allocator, field, value);
+        }
         if (entry_obj.get("manifest_res_path")) |res_path| {
             try row.put(cli.allocator, "manifest_res_path", res_path);
         }

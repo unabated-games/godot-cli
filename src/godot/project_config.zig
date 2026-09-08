@@ -42,10 +42,26 @@ pub fn readProjectName(allocator: std.mem.Allocator, io: std.Io, project_root: [
 }
 
 /// Map a filesystem path under `project_root` to a Godot `res://` path.
+/// A relative path pinned under a fictional absolute root, so two relative
+/// paths from the same working directory can be related to each other.
+fn rootRelative(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    if (std.fs.path.isAbsolute(path)) return allocator.dupe(u8, path);
+    return std.fs.path.join(allocator, &.{ "/godot-cli-cwd", path });
+}
+
 pub fn filesystemToResPath(allocator: std.mem.Allocator, project_root: []const u8, file_path: []const u8) !?[]u8 {
-    const norm_root = try std.fs.path.resolve(allocator, &.{project_root});
+    // `resolve` normalises but does not make a relative path absolute, and
+    // `relative` between two relative paths answers null. Agents are told to
+    // pass --project-root . , so that was the common case: pin both to the
+    // same fictional root first, which is enough to relate them.
+    const rooted_root = try rootRelative(allocator, project_root);
+    defer allocator.free(rooted_root);
+    const rooted_file = try rootRelative(allocator, file_path);
+    defer allocator.free(rooted_file);
+
+    const norm_root = try std.fs.path.resolve(allocator, &.{rooted_root});
     defer allocator.free(norm_root);
-    const norm_file = try std.fs.path.resolve(allocator, &.{file_path});
+    const norm_file = try std.fs.path.resolve(allocator, &.{rooted_file});
     defer allocator.free(norm_file);
 
     const rel = std.fs.path.relative(allocator, ".", null, norm_root, norm_file) catch return null;
@@ -100,4 +116,16 @@ test "filesystem to res path" {
     const res = try filesystemToResPath(allocator, "test_fixtures/project", "test_fixtures/project/test.tscn");
     defer allocator.free(res.?);
     try std.testing.expectEqualStrings("res://test.tscn", res.?);
+}
+
+test "a manifest under a relative project root still gets a res:// path" {
+    const allocator = std.testing.allocator;
+    // The quickstart tells agents to pass --project-root . , so this is the
+    // common case, and it used to come back empty.
+    const res = (try filesystemToResPath(allocator, ".", "./ui/meter.manifest.json")) orelse {
+        std.debug.print("relative root gave null\n", .{});
+        return error.TestExpectedEqual;
+    };
+    defer allocator.free(res);
+    try std.testing.expectEqualStrings("res://ui/meter.manifest.json", res);
 }

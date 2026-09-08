@@ -1,5 +1,9 @@
 # Godot basics for agents
 
+godot-cli targets **Godot 4.6 and later**: every `[node]` line it writes
+carries the `unique_id` the engine added in 4.6, and CI checks byte-fidelity
+against 4.7, 4.7.2 and the newest 4.8 prerelease.
+
 What Godot assumes about projects, scenes, and Control layout, and how to run the game and read the result. Read once; the quickstart points here.
 
 ## Godot project and scene basics
