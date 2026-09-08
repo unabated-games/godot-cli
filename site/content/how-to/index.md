@@ -33,7 +33,13 @@ Each guide is a task with the commands to finish it. If you are new here, read [
 
 [Review and validate changes]({{ base_url }}/how-to/review-changes/): what each validation error means, node and property diffs, snapshots, and what a human should still look at before committing a generated scene.
 
-[Run the game and capture a screenshot and the log]({{ base_url }}/how-to/run-and-capture/): one Godot command that writes a PNG of the running scene and a log of every print and error, with no extra tooling.
+[Verify a change by running the game]({{ base_url }}/how-to/verify-a-change/): the loop that says whether a change worked — run, read the frame and the log, and click a button or hold an input action to prove the wiring, without test code in the game.
+
+[Run the game and capture a screenshot and the log]({{ base_url }}/how-to/run-and-capture/): the same thing by hand, for when you want to adapt the Godot commands underneath.
+
+## Working on a project that already exists
+
+[Refactor an existing project]({{ base_url }}/how-to/refactor-a-project/): pull a subtree into its own scene, move files without leaving stale `res://` paths, rename and reparent, and find the script lines that still reach into what you moved.
 
 ## Compatibility and scripting
 

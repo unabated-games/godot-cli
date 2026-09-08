@@ -846,7 +846,7 @@ godot-cli scene connection [options]
 List signal connections with from/to as viewport paths
 
 ```
-godot-cli scene connection list <file>
+godot-cli scene connection list [options] <file>
 ```
 
 **Arguments**
@@ -854,6 +854,12 @@ godot-cli scene connection list <file>
 | Argument | Description |
 |----------|-------------|
 | `<file>` | Scene file (.tscn) |
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (optional; ignored for file-only reads) | — |
 
 ### `godot-cli scene connection add`
 

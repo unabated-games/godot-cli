@@ -10,16 +10,15 @@ Ranked by how much each would change what an agent produces, weighted by how
 often a trial actually hit it. The sections below carry the detail; this is the
 order to work through them.
 
-1. **The site describes the tool as it was at 0.10.0** (M). The only item here that decides whether anyone adopts the tool at all — `project run`, clicks, `scene extract`, the input map and the existing-project workflow are all invisible to a new reader. Four releases stale now.
-2. **The `scene validate` envelope over MCP** (S). Newly urgent: 0.15.0 adds two more error kinds to validate, so more sessions meet an envelope that says `ok: true` next to `error_count: 2` and exit 1, and an MCP client marks the whole call an error.
-3. **Real root type for instanced nodes in `scene node list`** (S). The most-cited item in this file — trials 11, 12, 17 and 18 — and the answer is already in a file the command is handed.
-4. **A `script_refs` check after removes, renames, and reparents** (M). The same class of silent breakage as the property and signal checks that just shipped: the scene is right, a script's `$Path` is not, and only a run finds it.
-5. **A `scene describe` discovery command** (M). Seven calls to learn one existing scene; the refactoring workflow starts with this every time.
-6. **Check a scripted node's signals against its script** (S). Closes the hole the new `unknown_signal` check deliberately leaves open, and lets `scene connection add` refuse a typo at write time.
-7. **A core toolset, and an MCP-shaped cheat sheet** (S each). Six trials between them. Cheap, and they cut what every MCP session pays before it does anything.
-8. **The refactoring polish**: `scene extract --retarget-dropped-connections`, `project move --import`, fresh ext_resource ids, `--tags`/`--when-to-use`/`--signal-docs` (S each). Each removes a hand step from a refactor that otherwise works.
-9. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
-10. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
+1. **The `scene validate` envelope over MCP** (S). Newly urgent: 0.15.0 adds two more error kinds to validate, so more sessions meet an envelope that says `ok: true` next to `error_count: 2` and exit 1, and an MCP client marks the whole call an error.
+2. **Real root type for instanced nodes in `scene node list`** (S). The most-cited item in this file — trials 11, 12, 17 and 18 — and the answer is already in a file the command is handed.
+3. **A `script_refs` check after removes, renames, and reparents** (M). The same class of silent breakage as the property and signal checks that just shipped: the scene is right, a script's `$Path` is not, and only a run finds it.
+4. **A `scene describe` discovery command** (M). Seven calls to learn one existing scene; the refactoring workflow starts with this every time.
+5. **Check a scripted node's signals against its script** (S). Closes the hole the new `unknown_signal` check deliberately leaves open, and lets `scene connection add` refuse a typo at write time.
+6. **A core toolset, and an MCP-shaped cheat sheet** (S each). Six trials between them. Cheap, and they cut what every MCP session pays before it does anything.
+7. **The refactoring polish**: `scene extract --retarget-dropped-connections`, `project move --import`, fresh ext_resource ids, `--tags`/`--when-to-use`/`--signal-docs` (S each). Each removes a hand step from a refactor that otherwise works.
+8. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
+9. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
 
 ## Correctness and validation
 
@@ -69,8 +68,6 @@ order to work through them.
 
 ## Docs and site
 
-**The site describes the tool as it was at 0.10.0.** Maintainer. `project run`, presses and clicks, the image result, `scene extract`, and the existing-project workflow exist only in the changelog and the agent docs. The run-and-capture page still teaches four shell commands, the agent-setup page does not say an MCP agent can run the game, and the landing page's "Built for agents" section predates all of it. A "Verify with project run" how-to, a "Refactor an existing project" how-to, and a landing update. Size M.
-
 **A stated minimum Godot version.** Trial 10. Every `[node]` line carries `unique_id=`, which older Godot 4 releases do not understand, and nothing says which versions are supported beyond the CI matrix. Size S.
 
 ## Closed since 0.7.0
@@ -86,3 +83,4 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.13.0: the cursor moves off the node after `project run --click`, so the frame shows the `normal` style, with `--keep-cursor` to hold the hover style; unknown fields on patch ops and intent steps rejected with the accepted list; `id_hint` named when a generated id collides; `step` on every patch op failure.
 - 0.14.0: the whole of Godot's keyboard and controller reachable from `project input apply`, with mouse buttons, modifier flags, raw numbers, the reference in its help, and the `axis_value` float fix; `project run --press`/`--click` working on projects with autoloads; a headless `--click` saying it verified nothing.
 - 0.15.0: property type checking and unknown-signal detection in `scene validate`, from a generated Godot class table; a colliding generated sub_resource id takes a suffix instead of failing; `properties` on `node_set` and `scene set-property`; `unique_name` on the `node_add` op.
+- Unreleased: the site brought up to date — a "verify a change by running the game" how-to, a "refactor an existing project" how-to, the run loop and the class-table checks on the landing page, and `--project-root` accepted by `scene connection list` like its siblings.

@@ -2379,6 +2379,9 @@ pub fn sceneCommands() spec.CommandSpec {
                         .name = "list",
                         .summary = "List signal connections with from/to as viewport paths",
                         .handler = sceneConnectionListHandler,
+                        // Every sibling read takes it, and the quickstart tells
+                        // agents to pass it; rejecting it here was a papercut.
+                        .options = &node_list_options,
                         .positionals = &pos.scene_file,
                     },
                     .{

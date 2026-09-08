@@ -15,6 +15,15 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **Two site guides the tool had outgrown.** "Verify a change by running the game" covers the loop `project run` exists for — run, read the frame and the log, click a button to prove its wiring, hold an input action for movement — with the headless and frame-numbering caveats; the older run-and-capture page stays as the by-hand version. "Refactor an existing project" covers `scene extract`, `project move`, rename and reparent, undo patches, and the script references a structural change leaves behind. Every command on both pages was run against a real project before publishing.
+- The landing page now shows the run loop and the class-table checks, and says an MCP agent can run the game and look at the frame; the agent-setup guide says the same where it explains the server.
+
+### Fixed
+
+- `scene connection list` accepts `--project-root` like every sibling read command. The quickstart told agents to pass it and the command rejected it with `unknown_option`.
+
 ## [0.15.0] — 2026-09-08
 
 ### Added

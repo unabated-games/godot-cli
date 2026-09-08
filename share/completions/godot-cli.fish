@@ -335,6 +335,7 @@ complete -c godot-cli -n '__godot_cli_at "scene node reparent"' -l id-session -r
 complete -c godot-cli -n '__godot_cli_at "scene node reparent"' -l no-id-session -d 'Do not load or update ext_resource id session cache'
 complete -c godot-cli -n '__godot_cli_at "scene node reparent"' -l godot-save-format -d 'Strip Godot-omitted header fields and default sub_resource properties'
 complete -c godot-cli -n '__godot_cli_at "scene node reparent"' -l normalize-properties -d 'Rewrite property values through Variant parse/format'
+complete -c godot-cli -n '__godot_cli_at "scene connection list"' -l project-root -r -d 'Godot project root (optional; ignored for file-only reads)'
 complete -c godot-cli -n '__godot_cli_at "scene connection add"' -l from -r -d 'Emitting node, viewport path (e.g. /root/Main/Menu/Resume)'
 complete -c godot-cli -n '__godot_cli_at "scene connection add"' -l signal -r -d 'Signal name (e.g. pressed)'
 complete -c godot-cli -n '__godot_cli_at "scene connection add"' -l to -r -d 'Receiving node, viewport path'

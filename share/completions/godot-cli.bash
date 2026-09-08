@@ -136,6 +136,9 @@ _godot_cli_options() {
         'scene node reparent')
             echo "--parent --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
+        'scene connection list')
+            echo "--project-root"
+            ;;
         'scene connection add')
             echo "--from --signal --to --method --deferred --one-shot --binds --unbinds --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;

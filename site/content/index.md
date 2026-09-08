@@ -74,7 +74,55 @@ godot-cli scene apply level.tscn --intent player.json --project-root . \
 
 With `--dry-run` you get the node tree you would end up with and nothing is written. Without it, `--write-undo-patch` produces the inverse edit as it goes, and rolling back means applying that patch instead of digging through git history. If any step fails, the file on disk is untouched.
 
-Twelve patch ops cover the primitives (add, remove, rename, reparent, set, instance, override, resource add and remove). Intents sit on top: `player_2d` expands into the five ops above, `catalog_button` into an instance plus a label override. For a run of several commands, `batch` does apply, then validate, then diff in one process, with `atomic` mode putting back the files you listed if anything fails.
+Fourteen patch ops cover the primitives (add, remove, rename, reparent, set, instance, override, connect, disconnect, resource add and remove). Intents sit on top: `player_2d` expands into the five ops above, `catalog_button` into an instance plus a label override. For a run of several commands, `batch` does apply, then validate, then diff in one process, with `atomic` mode putting back the files you listed if anything fails.
+
+## Then watch it run
+
+A scene that validates is not the same as a scene that works. One command
+imports the project, runs it, keeps the last frame, and reads the log:
+
+```bash
+godot-cli project run --project-root . --json
+```
+
+It exits 1 when Godot did not exit cleanly or the log holds an `ERROR` or
+`SCRIPT ERROR` line, so an agent has a signal to act on rather than a wall of
+output to guess at. The result carries the frame's path, the log's last lines,
+and every error with its GDScript backtrace. Over MCP the frame comes back as
+an image, so an agent that can see pictures looks at the screen it just built.
+
+Buttons and movement can be exercised without test code in the game:
+
+```bash
+godot-cli project run --project-root . --frames 30 \
+  --click /root/Main/HUD/PlayButton@20 --json
+```
+
+That clicks the node on physics frame 20, so its `pressed` signal fires and the
+handler's output lands in the log. Afterwards the cursor moves off, so the frame
+shows the button's normal style; `--keep-cursor` holds it there for the hover
+style instead. `--press move_right@10..40` does the same for an input action.
+Two runs and you have verified both button states, the signal, and the layout.
+
+[Verify a change by running the game]({{ base_url }}/how-to/verify-a-change/)
+
+## It checks the file against Godot's own class reference
+
+`scene validate` reads the scene the way the engine would. Dangling
+`res://` paths, duplicate ids and stale UIDs are the obvious half. The half
+that costs a debugging session is a value of the wrong type:
+
+```text
+[err] property_type_mismatch: Control.visible is bool, and this value is
+      vector2: Godot coerces it and the file still loads, so only the running
+      frame shows the damage
+```
+
+Property types and signal names come from a table generated out of Godot's own
+`doc/classes` XML — 520 classes, 3933 properties, 377 signals — so `pressd` for
+`pressed` is caught before the run, not during it. The checks stay quiet about
+anything the table does not cover: theme overrides, `metadata/*`, a script's
+exported variables, and connections from a scripted node.
 
 ## It knows what you have already built
 
@@ -102,6 +150,12 @@ Godot's own controls are in the catalog too, marked as documentation only, so an
 
 `--json` on any command returns one envelope: `ok`, `data`, `messages`, `failure`, and a stable exit code. `godot-cli mcp` serves the same commands over the Model Context Protocol, one tool per command with schemas built from the command tree, the agent docs as resources, and the project catalog as a live resource, so Claude Code, Cursor, and OpenCode can call them without a shell. Anything you can type as argv you can also send as a JSON request, and `godot-cli reference --format json` prints the whole command surface as data for anyone generating their own bindings.
 
+An agent gets the whole loop, not just the writes: author with one call, check
+with `scene validate`, then run the game and read the frame and the log. It can
+also work on a project that already exists — `scene extract` pulls a subtree
+into its own scene the way *Save Branch as Scene* does, and `project move`
+relocates a file while rewriting every `res://` reference to it.
+
 For people there is `--help` on everything, a man page, and completions for bash, zsh, and fish, all generated from the same command tree the parser uses. The skill for Cursor, Claude Code, and OpenCode installs with one flag and carries the rules an agent needs, including the one about `_ready()`.
 
 A single binary with no runtime dependencies, built in Zig, for Linux, macOS, and Windows on x86_64 and aarch64. MIT licensed.
@@ -116,5 +170,7 @@ It does not run gameplay, physics, or scripts. It does not read binary `.scn` or
 <li><a href="{{ base_url }}/getting-started/">Getting started</a><p>Install, author a first scene, and learn when <code>--project-root</code> matters.</p></li>
 <li><a href="{{ base_url }}/how-to/your-own-components/">Teach an agent your sub-scenes</a><p>From a scene on disk to an agent instancing it by id, every command shown with its output.</p></li>
 <li><a href="{{ base_url }}/how-to/agent-setup/">Set up an agent</a><p>Install the skill, write the project rules, and spot when an agent drifts back to building nodes in code.</p></li>
+<li><a href="{{ base_url }}/how-to/verify-a-change/">Verify a change by running the game</a><p>Run, read the frame and the log, and click a button to prove its wiring.</p></li>
+<li><a href="{{ base_url }}/how-to/refactor-a-project/">Refactor an existing project</a><p>Extract a subtree, move files without stale paths, and check what your scripts still reach.</p></li>
 <li><a href="{{ base_url }}/reference/">Command reference</a><p>Every command and option, generated from the binary's own command tree.</p></li>
 </ul>
