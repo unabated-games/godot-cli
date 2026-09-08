@@ -56,6 +56,14 @@ pub const docs = [_]Doc{
         .text = @embedFile("doc_commands"),
     },
     .{
+        .uri = "godot-cli://docs/mcp-cheatsheet",
+        .name = "mcp-cheatsheet",
+        .title = "godot-cli over MCP",
+        .description = "This surface in tool-and-arguments form: the thirteen tools that cover most sessions, a session end to end, how to read a result, and the resources worth reading. The quickstart's cheat sheet is shell lines; this one is calls.",
+        .mime = "text/markdown",
+        .text = @embedFile("doc_mcp_cheatsheet"),
+    },
+    .{
         .uri = "godot-cli://docs/mcp-tools",
         .name = "mcp-tools",
         .title = "Tool catalog with worked requests",

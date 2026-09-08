@@ -976,6 +976,7 @@ godot-cli scene extract [options] <file> <node>
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
+| `--editable` | — | Mark the instance left behind as editable, so a connection to a node inside it can be written without re-adding the instance | — |
 | `--output` | `<path>` | Path of the new scene, relative to the project root (becomes res://&lt;output&gt;) (required) | — |
 | `--catalog-id` | `<value>` | Also register the new scene in the project catalog under this id (needs the project root) | — |
 | `--summary` | `<value>` | Catalog summary for the new entry | — |
@@ -2727,6 +2728,7 @@ godot-cli mcp [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project to serve; injected into every call and enforced on path arguments | — |
 | `--all-options` | — | Also expose the save-preparation and id-session options in the tool schemas | — |
+| `--toolset` | `<value>` | Which tools to serve: all (default), or core for the thirteen that cover most sessions, for a client that loads every schema up front | — |
 
 ## Exit codes
 

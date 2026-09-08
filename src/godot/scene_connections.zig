@@ -158,8 +158,12 @@ pub fn add(
     var list = try node_tree.collectNodes(allocator, doc);
     defer list.deinit(allocator);
     const root_path = try sceneRootPath(&list);
-    if (node_tree.findByPath(&list, from_path) == null) return error.NodeNotFound;
-    if (node_tree.findByPath(&list, to_path) == null) return error.NodeNotFound;
+    // A node inside an instance is a legal endpoint — it is what the editor
+    // writes once a caller turns on editable children — so accept it and let
+    // the caller mark the instance editable. Rejecting it sent two trials to
+    // hand-editing the scene file.
+    if (node_tree.findByPath(&list, from_path) == null and instanceAncestor(&list, from_path) == null) return error.NodeNotFound;
+    if (node_tree.findByPath(&list, to_path) == null and instanceAncestor(&list, to_path) == null) return error.NodeNotFound;
 
     const from_attr = try viewportPathToAttr(allocator, root_path, from_path);
     defer allocator.free(from_attr);
@@ -349,16 +353,20 @@ pub fn missingEndpoints(allocator: std.mem.Allocator, doc: *const document.Docum
     return try out.toOwnedSlice(allocator);
 }
 
-/// Whether any ancestor of the path is an instanced node, which means the
-/// endpoint lives inside the scene that node instances.
-fn descendsIntoInstance(list: *const node_tree.NodeList, path: []const u8) bool {
+/// The instanced node the path descends into, when it does: the endpoint then
+/// lives inside the scene that node instances, which this document cannot see.
+pub fn instanceAncestor(list: *const node_tree.NodeList, path: []const u8) ?*const node_tree.NodeInfo {
     for (list.nodes) |*node| {
         if (node.instance == null) continue;
         if (path.len <= node.path.len) continue;
         if (!std.mem.startsWith(u8, path, node.path)) continue;
-        if (path[node.path.len] == '/') return true;
+        if (path[node.path.len] == '/') return node;
     }
-    return false;
+    return null;
+}
+
+fn descendsIntoInstance(list: *const node_tree.NodeList, path: []const u8) bool {
+    return instanceAncestor(list, path) != null;
 }
 
 pub fn toJson(allocator: std.mem.Allocator, info: *const ConnectionInfo) !std.json.Value {

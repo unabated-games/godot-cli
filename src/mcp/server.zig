@@ -26,12 +26,30 @@ const resources = @import("resources.zig");
 const prompts = @import("prompts.zig");
 const scene_plan = @import("../godot/scene_plan.zig");
 
+/// The core subset, in the order `tools.core_tool_names` lists them.
+fn coreTools(allocator: std.mem.Allocator, root: *const spec.CommandSpec) ![]tools.Tool {
+    const all = try tools.collect(allocator, root);
+    var out: std.ArrayList(tools.Tool) = .empty;
+    for (tools.core_tool_names) |wanted| {
+        for (all) |tool| {
+            if (std.mem.eql(u8, tool.name, wanted)) {
+                try out.append(allocator, tool);
+                break;
+            }
+        }
+    }
+    return out.toOwnedSlice(allocator);
+}
+
 pub const Options = struct {
     /// Change into this directory, inject `--project-root .` into every call
     /// that accepts it, and refuse path arguments that resolve outside it.
     project_root: ?[]const u8 = null,
     /// Expose the save-preparation and id-session plumbing options too.
     include_advanced: bool = false,
+    /// Serve only the tools that cover most sessions, for clients that load
+    /// every schema up front.
+    core_only: bool = false,
 };
 
 pub const modern_versions = [_][]const u8{ "2026-07-28", "2025-11-25" };
@@ -42,8 +60,8 @@ const instructions =
     \\godot-cli edits Godot 4 scene (.tscn), resource (.tres), and project.godot files the way the editor writes them.
     \\Read the resource godot-cli://docs/quickstart before the first edit; use the godot-scene-session prompt to start a session.
     \\Every tool returns the CLI's JSON envelope (ok, data, messages, failure); a failure's details name the field or value to fix.
-    \\Discover with scene_node_list and catalog_list before editing, validate with scene_validate after every edit.
-    \\Start with the godot-scene-session prompt, or read godot-cli://prompts/session if this client does not show prompts; godot-cli://docs/recipes lists every intent recipe's fields. The core tools: project_new, project_input_apply, scene_new, scene_apply, scene_instance_add, scene_connection_add, resource_new, catalog_add, scene_validate, project_run.
+    \\Discover with scene_describe and catalog_list before editing, validate with scene_validate after every edit.
+    \\Start with the godot-scene-session prompt, or read godot-cli://prompts/session if this client does not show prompts; godot-cli://docs/recipes lists every intent recipe's fields, and godot-cli://docs/mcp-cheatsheet is this surface in tool-and-arguments form. The core tools are listed there; a client that loads every schema up front can start the server with --toolset core to be served those alone.
     \\The docs describe a --project-root option; over MCP there is none. When the server was started with --project-root it is bound to that project, adds the option to every call, and refuses paths outside it; project_show reports the absolute root. Otherwise paths resolve against the server's working directory.
 ;
 
@@ -87,7 +105,7 @@ pub fn serve(
         .io = io,
         .root = root,
         .environ = environ,
-        .tool_list = try tools.collect(gpa, root),
+        .tool_list = if (options.core_only) try coreTools(gpa, root) else try tools.collect(gpa, root),
         .confinement = confinement,
     };
 

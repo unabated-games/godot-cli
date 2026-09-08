@@ -368,6 +368,7 @@ complete -c godot-cli -n '__godot_cli_at "scene connection remove"' -l id-sessio
 complete -c godot-cli -n '__godot_cli_at "scene connection remove"' -l no-id-session -d 'Do not load or update ext_resource id session cache'
 complete -c godot-cli -n '__godot_cli_at "scene connection remove"' -l godot-save-format -d 'Strip Godot-omitted header fields and default sub_resource properties'
 complete -c godot-cli -n '__godot_cli_at "scene connection remove"' -l normalize-properties -d 'Rewrite property values through Variant parse/format'
+complete -c godot-cli -n '__godot_cli_at "scene extract"' -l editable -d 'Mark the instance left behind as editable, so a connection to a node inside it can be written without re-adding the instance'
 complete -c godot-cli -n '__godot_cli_at "scene extract"' -l output -r -d 'Path of the new scene, relative to the project root (becomes res://<output>)'
 complete -c godot-cli -n '__godot_cli_at "scene extract"' -l catalog-id -r -d 'Also register the new scene in the project catalog under this id (needs the project root)'
 complete -c godot-cli -n '__godot_cli_at "scene extract"' -l summary -r -d 'Catalog summary for the new entry'
@@ -714,6 +715,7 @@ complete -c godot-cli -n '__godot_cli_at "reference"' -l output -r -d 'Write to 
 complete -c godot-cli -n '__godot_cli_at "reference"' -l format -r -d 'markdown or json'
 complete -c godot-cli -n '__godot_cli_at "mcp"' -l project-root -r -d 'Godot project to serve; injected into every call and enforced on path arguments'
 complete -c godot-cli -n '__godot_cli_at "mcp"' -l all-options -d 'Also expose the save-preparation and id-session options in the tool schemas'
+complete -c godot-cli -n '__godot_cli_at "mcp"' -l toolset -r -d 'Which tools to serve: all (default), or core for the thirteen that cover most sessions, for a client that loads every schema up front'
 
 # Commands that take file or directory arguments
 complete -c godot-cli -F -n '__godot_cli_at "ping"'

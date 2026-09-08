@@ -1,6 +1,6 @@
 # Open asks
 
-Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.16.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
+Everything the agent trials and the maintainers have asked for that is not yet built, as of v0.17.0 (2026-09-08). Trials 9 to 16 built a small 2D slice from an empty folder; trials 17 to 19 modified an existing project; trials 20 to 23 built styled menus and input maps and verified them from a run. Each item names the trials that asked for it, why it matters, and a size: S is an hour or two, M is a day, L is several days.
 
 Items are grouped by area and ordered by how much they would change what an agent produces. Closed asks are listed at the end so the picture is complete.
 
@@ -10,24 +10,15 @@ Ranked by how much each would change what an agent produces, weighted by how
 often a trial actually hit it. The sections below carry the detail; this is the
 order to work through them.
 
-1. **Check a scripted node's signals against its script** (S). Closes the hole the new `unknown_signal` check deliberately leaves open, and lets `scene connection add` refuse a typo at write time.
-2. **A core toolset, and an MCP-shaped cheat sheet** (S each). Six trials between them. Cheap, and they cut what every MCP session pays before it does anything.
-3. **The editable-instance gap** (M + S). `scene extract` tells a caller to reconnect a dropped connection, and `scene connection add` cannot do it for a node inside the instance; two trials in a row hand-edited a `.tscn` at exactly this point.
-4. **The refactoring polish**: `scene extract --retarget-dropped-connections`, `project move --import`, fresh ext_resource ids, `--tags`/`--when-to-use`/`--signal-docs` (S each). Each removes a hand step from a refactor that otherwise works.
-5. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
-6. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
+1. **The refactoring polish**: `scene extract --retarget-dropped-connections`, `project move --import`, fresh ext_resource ids, `--tags`/`--when-to-use`/`--signal-docs` (S each). Each removes a hand step from a refactor that otherwise works.
+2. **The `project run` niceties**: a first-and-last frame pair, `--log-lines`, and the headless-click investigation (S each).
+3. **The long tail**: undo child order and unique ids, manifest notes in `catalog list`, `manifest_res_path`, a stated minimum Godot version, per-event input device, the engine-dependent `[input]` formatting.
 
 ## Correctness and validation
-
-**Check a scripted node's signals against its script.** The `unknown_signal` check skips any node carrying a script, because a script may declare its own signals and the document-level validator cannot read the file. `gdscript_scan` already parses `signal` declarations, so with the project root the check could cover scripted nodes too, and `scene connection add` could refuse a typo at write time rather than at the validate step after it. Size S.
 
 **Record child order and unique ids in undo ops.** Trials 18, 19. An undo patch for a removal re-adds the node at the end of its parent and with a fresh unique id, so the restore is not byte for byte. Size S to M.
 
 ## Refactoring an existing project
-
-**Connect a signal on a node inside an instance.** Trial 26. `scene extract` drops the connections that crossed the boundary and tells the caller to reconnect; reconnecting to a node *inside* the new instance needs `[editable]` and `scene connection add` cannot write it — it answers `NodeNotFound`, and the trial hand-edited the `.tscn` to finish the refactor. Needs the endpoint resolved through the instanced scene and the `[editable]` marker written alongside. Size M, and it closes the loop `scene extract` opens.
-
-**`scene extract --editable`.** Trial 26. The instance an extraction leaves behind is not editable, so a caller who needs to reach inside it removes and re-adds the instance. Size S.
 
 **`scene extract --retarget-dropped-connections root`.** Trial 19. A connection that crosses the extraction boundary is dropped and listed; both existing-project trials then re-created it inside the new scene against the new root and moved the handler into a root script by hand. The option would re-create it and name the method to add. Size S.
 
@@ -39,11 +30,7 @@ order to work through them.
 
 ## The MCP surface
 
-**A core toolset.** Trials 10, 12, 14, 15. The server lists 90 tools; the quickstart names the ten that cover most sessions, and clients that defer schemas cope. A client that loads every schema up front pays for all 90. A `--toolset core` flag on `mcp`, or a tag in each description, would let a client load the ten in one step. Size S.
-
 **Manifest usage notes in `catalog list`.** Trial 16. `when_not_to_use` and `notes` are only in `catalog show`, so choosing between similar widgets costs a call per candidate. Size S.
-
-**An MCP-shaped cheat sheet.** Trials 15, 16. The quickstart's commands are shell lines; the "Over MCP" section comes last and the `--project-root` table is noise for a bound server. Either a second cheat sheet in tool-and-arguments form, or a variant of the quickstart served only as the MCP resource. Size S.
 
 **`manifest_res_path` in `catalog add` output.** Trial 16. Comes back empty with no explanation. Size S.
 
@@ -77,4 +64,5 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.14.0: the whole of Godot's keyboard and controller reachable from `project input apply`, with mouse buttons, modifier flags, raw numbers, the reference in its help, and the `axis_value` float fix; `project run --press`/`--click` working on projects with autoloads; a headless `--click` saying it verified nothing.
 - 0.15.0: property type checking and unknown-signal detection in `scene validate`, from a generated Godot class table; a colliding generated sub_resource id takes a suffix instead of failing; `properties` on `node_set` and `scene set-property`; `unique_name` on the `node_add` op.
 - 0.16.0: `scene describe`; instanced nodes resolved to their real class; script references reported after remove, rename and reparent; `ok` following the exit code; the site brought up to date; `--project-root` on `scene connection list`.
+- 0.17.0: connecting a signal to a node inside an instance (marking it editable); `scene extract --editable`; scripted nodes' signals checked against their scripts; `mcp --toolset core`; the MCP cheat sheet resource.
 - Unreleased: the site brought up to date — a "verify a change by running the game" how-to, a "refactor an existing project" how-to, the run loop and the class-table checks on the landing page, and `--project-root` accepted by `scene connection list` like its siblings.

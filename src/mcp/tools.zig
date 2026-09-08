@@ -32,6 +32,32 @@ pub fn isExcluded(first_segment: []const u8) bool {
     return false;
 }
 
+/// The tools that cover most sessions, in the order the quickstart names
+/// them. A client that loads every schema up front pays for all ninety-one
+/// otherwise, which four trials called out; `mcp --toolset core` serves these.
+pub const core_tool_names = [_][]const u8{
+    "project_new",
+    "project_show",
+    "project_input_apply",
+    "scene_new",
+    "scene_describe",
+    "scene_apply",
+    "scene_instance_add",
+    "scene_connection_add",
+    "resource_new",
+    "catalog_list",
+    "catalog_add",
+    "scene_validate",
+    "project_run",
+};
+
+pub fn isCoreTool(name: []const u8) bool {
+    for (core_tool_names) |core| {
+        if (std.mem.eql(u8, core, name)) return true;
+    }
+    return false;
+}
+
 /// Walk the tree in declaration order, which is deterministic, so clients that
 /// cache the tool list see the same order every time.
 pub fn collect(allocator: std.mem.Allocator, root: *const spec.CommandSpec) ![]Tool {
@@ -466,4 +492,25 @@ test "schema violations and escaped paths are reported by name" {
     try pinned_root.put(arena, "project-root", .{ .string = "/elsewhere" });
     const rejected = try buildArgv(arena, tool, pinned_root, .{ .root = "/tmp/project" });
     try std.testing.expect(rejected == .invalid);
+}
+
+test "the core toolset names tools that exist" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const all = try collect(arena, &commands.root);
+
+    for (core_tool_names) |wanted| {
+        var found = false;
+        for (all) |tool| {
+            if (std.mem.eql(u8, tool.name, wanted)) found = true;
+        }
+        if (!found) {
+            std.debug.print("core toolset names a tool that does not exist: {s}\n", .{wanted});
+            return error.TestExpectedEqual;
+        }
+    }
+    // Small enough to be worth having: a client loading every schema pays for
+    // the full list instead.
+    try std.testing.expect(core_tool_names.len * 4 < all.len);
 }

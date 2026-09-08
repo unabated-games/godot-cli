@@ -219,6 +219,19 @@ fn hasEditableSection(doc: *const document.Document, editable_path: []const u8) 
     return false;
 }
 
+/// Mark an already-instanced node editable, so a connection to one of its
+/// children survives a round trip through the editor. Idempotent.
+pub fn ensureEditable(allocator: std.mem.Allocator, doc: *document.Document, instance_viewport_path: []const u8) Error!bool {
+    var list = try node_tree.collectNodes(allocator, doc);
+    defer list.deinit(allocator);
+    if (list.nodes.len == 0) return false;
+    const editable_path = try scene_edit.nodePathPrefixFromViewport(allocator, list.nodes[0].name, instance_viewport_path);
+    defer allocator.free(editable_path);
+    if (hasEditableSection(doc, editable_path)) return false;
+    try addEditableInstanceSection(allocator, doc, editable_path);
+    return true;
+}
+
 fn addEditableInstanceSection(allocator: std.mem.Allocator, doc: *document.Document, node_path: []const u8) Error!void {
     var header = tag.Tag{ .name = try allocator.dupe(u8, "editable"), .fields = .{} };
     errdefer header.deinit(allocator);

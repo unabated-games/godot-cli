@@ -965,6 +965,59 @@ fn sceneConnectionListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spe
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
+/// When an endpoint names a node inside an instance, mark the instance
+/// editable and say so. Returns whether the document changed.
+fn ensureEditableForEndpoint(
+    cli: *const app_mod.App,
+    inv: *const spec.Invocation,
+    doc: *text_format.document.Document,
+    endpoint: []const u8,
+    messages: *std.ArrayList([]const u8),
+) !bool {
+    var list = try node_tree.collectNodes(cli.allocator, doc);
+    defer list.deinit(cli.allocator);
+    if (node_tree.findByPath(&list, endpoint) != null) return false;
+    const instance = scene_connections.instanceAncestor(&list, endpoint) orelse return false;
+    const inner = endpoint[instance.path.len + 1 ..];
+
+    // Best effort: with a project root the child can be checked against the
+    // scene it lives in, which turns a typo into an error here instead of a
+    // silent no-op at run time.
+    if (projectRootFrom(inv)) |root| {
+        if (instance.instance_path) |res_path| {
+            if (instanceHasChild(cli, root, res_path, inner)) |found| {
+                if (!found) {
+                    error_details.record(.{ .field = "from", .value = endpoint, .hint = "no node with that path inside the instanced scene; scene describe the instanced scene to see its tree" });
+                    return error.NodeNotFound;
+                }
+            }
+        }
+    }
+
+    const marked = try scene_instance.ensureEditable(cli.allocator, doc, instance.path);
+    if (marked) {
+        try messages.append(cli.allocator, try std.fmt.allocPrint(
+            cli.allocator,
+            "{s} is inside the instance at {s}, so the instance is now marked editable ([editable path=…]), which is what the editor does before you can connect one of its children",
+            .{ endpoint, instance.path },
+        ));
+    }
+    return marked;
+}
+
+/// Whether the scene at `res_path` contains a node at the given path below its
+/// root. Null when the scene cannot be read.
+fn instanceHasChild(cli: *const app_mod.App, project_root: []const u8, res_path: []const u8, inner_path: []const u8) ?bool {
+    if (!std.mem.startsWith(u8, res_path, "res://")) return null;
+    const full = std.fs.path.join(cli.allocator, &.{ project_root, res_path["res://".len..] }) catch return null;
+    const doc = text_format.document.parseFile(cli.allocator, cli.io, full) catch return null;
+    var list = node_tree.collectNodes(cli.allocator, &doc) catch return null;
+    defer list.deinit(cli.allocator);
+    if (list.nodes.len == 0) return null;
+    const wanted = std.fmt.allocPrint(cli.allocator, "{s}/{s}", .{ list.nodes[0].path, inner_path }) catch return null;
+    return node_tree.findByPath(&list, wanted) != null;
+}
+
 fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
@@ -979,6 +1032,14 @@ fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
         null;
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    var messages: std.ArrayList([]const u8) = .empty;
+    // An endpoint inside an instance needs the instance marked editable, the
+    // way the editor makes you turn on editable children before you can pick
+    // the node. Do it rather than refuse, and check the child really exists
+    // in the scene being instanced when the project root says where it is.
+    for ([_][]const u8{ from, to }) |endpoint| {
+        _ = try ensureEditableForEndpoint(cli, inv, &doc, endpoint, &messages);
+    }
     const section_index = try scene_connections.add(cli.allocator, &doc, from, signal, to, method, .{
         .deferred = inv.flag("deferred"),
         .one_shot = inv.flag("one-shot"),
@@ -993,6 +1054,7 @@ fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "editable_marked", .{ .bool = messages.items.len != 0 });
     try data.put(cli.allocator, "from", .{ .string = try cli.allocator.dupe(u8, from) });
     try data.put(cli.allocator, "signal", .{ .string = try cli.allocator.dupe(u8, signal) });
     try data.put(cli.allocator, "to", .{ .string = try cli.allocator.dupe(u8, to) });
@@ -1001,7 +1063,7 @@ fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     const summary = try std.fmt.allocPrint(cli.allocator, "connected {s} {s} to {s} {s}", .{ from, signal, to, method });
     try data.put(cli.allocator, "summary", .{ .string = summary });
-    return .{ .data = .{ .object = data }, .messages = &.{} };
+    return .{ .data = .{ .object = data }, .messages = messages.items };
 }
 
 fn sceneConnectionRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -1755,12 +1817,16 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
 
     const seed_path = try saveSeedPath(cli, inv, input_path);
     defer cli.allocator.free(seed_path);
-    var added = try scene_instance.addPackedSceneInstance(cli.allocator, &doc, seed_path, extracted.parent_path, extracted.name, scene_res_path, uid_text, false);
+    // --editable leaves the instance open, so a connection to one of the
+    // subtree's own nodes can be written straight after the extraction
+    // instead of removing and re-adding the instance (trial 26 did exactly
+    // that by hand).
+    var added = try scene_instance.addPackedSceneInstance(cli.allocator, &doc, seed_path, extracted.parent_path, extracted.name, scene_res_path, uid_text, inv.flag("editable"));
     defer added.deinit(cli.allocator);
 
     var messages: std.ArrayList([]const u8) = .empty;
     for (extracted.dropped_connections) |dropped| {
-        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "connection {s} crossed the boundary and was dropped; add a signal to the new scene's root and connect the instance itself, which is the shape Godot expects. Connecting to a node *inside* the instance needs [editable] and is not something scene connection add can write yet", .{dropped}));
+        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "connection {s} crossed the boundary and was dropped; re-create it with scene connection add, which marks the instance editable when the endpoint is a node inside it, or add a signal to the new scene's root and connect the instance itself, which is the shape Godot expects", .{dropped}));
     }
     try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{scene_res_path}));
 
@@ -2370,6 +2436,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "dry-run", .kind = .flag, .description = "Report restore without writing" },
     };
     const extract_options = [_]spec.OptionSpec{
+        .{ .long = "editable", .kind = .flag, .description = "Mark the instance left behind as editable, so a connection to a node inside it can be written without re-adding the instance" },
         .{ .long = "output", .kind = .path, .description = "Path of the new scene, relative to the project root (becomes res://<output>)", .required = true },
         .{ .long = "catalog-id", .kind = .string, .description = "Also register the new scene in the project catalog under this id (needs the project root)" },
         .{ .long = "summary", .kind = .string, .description = "Catalog summary for the new entry" },

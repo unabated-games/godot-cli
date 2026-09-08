@@ -17,6 +17,7 @@ fn mcpHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     server.serve(std.heap.page_allocator, cli.io, cli.root, cli.environ, .{
         .project_root = inv.getOption("project-root"),
         .include_advanced = inv.flag("all-options"),
+        .core_only = if (inv.getOption("toolset")) |name| std.mem.eql(u8, name, "core") else false,
     }) catch |err| {
         var buffer: [256]u8 = undefined;
         var stderr = std.Io.File.Writer.initStreaming(std.Io.File.stderr(), cli.io, &buffer);
@@ -44,6 +45,7 @@ pub fn command() spec.CommandSpec {
         .options = &.{
             .{ .long = "project-root", .kind = .path, .description = "Godot project to serve; injected into every call and enforced on path arguments" },
             .{ .long = "all-options", .kind = .flag, .description = "Also expose the save-preparation and id-session options in the tool schemas" },
+            .{ .long = "toolset", .kind = .string, .description = "Which tools to serve: all (default), or core for the thirteen that cover most sessions, for a client that loads every schema up front" },
         },
         .handler = mcpHandler,
     };

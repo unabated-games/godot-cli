@@ -7,6 +7,7 @@ const uid_cache = @import("uid_cache.zig");
 const project_config = @import("project_config.zig");
 const document = @import("text_format/document.zig");
 const class_info = @import("class_info.zig");
+const gdscript_scan = @import("gdscript_scan.zig");
 const node_section_order = @import("node_section_order.zig");
 const scene_connections = @import("scene_connections.zig");
 const resource_uid_lookup = @import("resource_uid_lookup.zig");
@@ -487,7 +488,7 @@ pub fn validateDocument(
 
     try warnControlsUnderNode2D(allocator, doc, &report);
     try checkPropertyTypes(allocator, doc, &report);
-    try checkConnectionSignals(allocator, doc, &report);
+    try checkConnectionSignals(allocator, doc, ctx, &report);
     return report;
 }
 
@@ -524,7 +525,7 @@ fn isNode2DClass(name: []const u8) bool {
 /// A node carrying a script is left alone, because a script may declare its
 /// own signals and this check cannot see the file from here; `scene
 /// connection add` does read the script when it has the project root.
-fn checkConnectionSignals(allocator: std.mem.Allocator, doc: *const document.Document, report: *Report) !void {
+fn checkConnectionSignals(allocator: std.mem.Allocator, doc: *const document.Document, ctx: ValidateContext, report: *Report) !void {
     const node_tree = @import("node_tree.zig");
     var list = node_tree.collectNodes(allocator, doc) catch return;
     defer list.deinit(allocator);
@@ -541,18 +542,27 @@ fn checkConnectionSignals(allocator: std.mem.Allocator, doc: *const document.Doc
         defer if (!std.mem.eql(u8, from, ".")) allocator.free(path);
 
         const node = node_tree.findByPath(&list, path) orelse continue;
-        // An instanced node's class lives in the other scene, and a scripted
-        // node may declare the signal itself.
+        // An instanced node's class lives in the other scene.
         if (node.instance != null) continue;
-        if (nodeHasScript(section_for(doc, node.section_index))) continue;
 
         const known = class_info.hasSignal(node.node_type, signal) orelse continue;
         if (known) continue;
 
+        // The class does not emit it, so the node's script is the remaining
+        // way it could be real. Read the script when the caller gave a
+        // project root; without one, a scripted node stays exempt.
+        if (scriptOf(doc, node.section_index)) |script_ref| {
+            switch (scriptDeclaresSignal(allocator, doc, ctx, script_ref, signal)) {
+                .declares => continue,
+                .unreadable => continue,
+                .absent => {},
+            }
+        }
+
         const msg = try std.fmt.allocPrint(
             allocator,
-            "{s} does not emit a signal named {s}, so this connection never fires; check the spelling against the class, or declare it in the node's script",
-            .{ node.node_type, signal },
+            "{s} does not emit a signal named {s}, and its script does not declare one either, so this connection never fires; check the spelling, or add `signal {s}` to the script",
+            .{ node.node_type, signal, signal },
         );
         defer allocator.free(msg);
         try report.add(allocator, .err, "unknown_signal", msg, section.line);
@@ -564,13 +574,60 @@ fn section_for(doc: *const document.Document, index: usize) ?*const document.Sec
     return &doc.sections.items[index];
 }
 
-fn nodeHasScript(section: ?*const document.Section) bool {
-    const s = section orelse return false;
-    for (s.properties.items) |line| {
+/// The raw value of the node's `script` property, e.g. `ExtResource("Script_main")`.
+fn scriptOf(doc: *const document.Document, section_index: usize) ?[]const u8 {
+    if (section_index >= doc.sections.items.len) return null;
+    for (doc.sections.items[section_index].properties.items) |line| {
         const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
-        if (std.mem.eql(u8, std.mem.trim(u8, line.raw[0..equals], " \t"), "script")) return true;
+        if (!std.mem.eql(u8, std.mem.trim(u8, line.raw[0..equals], " \t"), "script")) continue;
+        return std.mem.trim(u8, line.raw[equals + 1 ..], " \t");
     }
-    return false;
+    return null;
+}
+
+const SignalInScript = enum { declares, absent, unreadable };
+
+/// Whether the GDScript the node carries declares the signal itself. A script
+/// can add signals its class never had, which is why a scripted node used to
+/// be skipped wholesale; reading the file turns that exemption into an answer.
+fn scriptDeclaresSignal(
+    allocator: std.mem.Allocator,
+    doc: *const document.Document,
+    ctx: ValidateContext,
+    script_ref: []const u8,
+    signal: []const u8,
+) SignalInScript {
+    const root = ctx.project_root orelse return .unreadable;
+    const io = ctx.io orelse return .unreadable;
+
+    // script = ExtResource("Script_main") -> the section with that id.
+    const open_quote = std.mem.indexOfScalar(u8, script_ref, '"') orelse return .unreadable;
+    const rest = script_ref[open_quote + 1 ..];
+    const close_quote = std.mem.indexOfScalar(u8, rest, '"') orelse return .unreadable;
+    const id = rest[0..close_quote];
+
+    var res_path: ?[]const u8 = null;
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const section_id = section.header.getString("id") orelse continue;
+        if (!std.mem.eql(u8, section_id, id)) continue;
+        res_path = section.header.getString("path");
+        break;
+    }
+    const path = res_path orelse return .unreadable;
+    if (!std.mem.startsWith(u8, path, "res://")) return .unreadable;
+
+    const full = std.fs.path.join(allocator, &.{ root, path["res://".len..] }) catch return .unreadable;
+    defer allocator.free(full);
+    const source = std.Io.Dir.cwd().readFileAlloc(io, full, allocator, .limited(4 * 1024 * 1024)) catch return .unreadable;
+    defer allocator.free(source);
+
+    var interface = gdscript_scan.parseScript(allocator, source) catch return .unreadable;
+    defer interface.deinit(allocator);
+    for (interface.signals) |declared| {
+        if (std.mem.eql(u8, declared.name, signal)) return .declares;
+    }
+    return .absent;
 }
 
 /// A property whose value is the wrong Variant type for its class passes

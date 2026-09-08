@@ -15,6 +15,16 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-09-08
+
+### Added
+
+- **`scene connection add` can connect a node inside an instance**, marking the instance editable the way the editor makes you before you can pick the child, and saying so in `messages`. It used to answer `NodeNotFound`; two trials in a row hand-edited a `.tscn` at exactly that point, which is the failure mode this tool exists to prevent. With `--project-root` the child is checked against the scene it lives in, so a typo fails here rather than silently at run time.
+- **`scene extract --editable`** leaves the new instance open, so the connection dropped by the extraction can be re-created immediately instead of removing and re-adding the instance.
+- **A scripted node's signals are checked against its script.** The `unknown_signal` check used to skip any node carrying a script, since a script can declare signals of its own; with a project root the script is read and only a signal that is neither builtin nor declared is reported. Without one, scripted nodes stay exempt.
+- **`mcp --toolset core`** serves the thirteen tools that cover most sessions instead of all ninety-one, for a client that loads every schema up front. Asked for by trials 10, 12, 14 and 15.
+- **`godot-cli://docs/mcp-cheatsheet`**, the surface in tool-and-arguments form: the core thirteen, a session end to end, how to read a result, and the resources worth reading. The quickstart's cheat sheet is shell lines; this one is calls. Trials 15 and 16.
+
 ## [0.16.0] — 2026-09-08
 
 ### Added

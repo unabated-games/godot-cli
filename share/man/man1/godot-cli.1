@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.16.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-08" "godot-cli 0.17.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -770,6 +770,10 @@ Scene or resource file (.tscn or .tres)
 .TP
 \fInode\fR
 Node by viewport path, e.g. /root/Main/Player
+.TP
+\fB\-\-editable\fR
+Mark the instance left behind as editable, so a connection
+to a node inside it can be written without re\-adding the instance
 .TP
 \fB\-\-output\fR \fIpath\fR
 Path of the new scene, relative to the project root (becomes
@@ -2388,6 +2392,11 @@ on path arguments
 \fB\-\-all\-options\fR
 Also expose the save\-preparation and id\-session options in
 the tool schemas
+.TP
+\fB\-\-toolset\fR \fIvalue\fR
+Which tools to serve: all (default), or core for the thirteen
+that cover most sessions, for a client that loads every schema
+up front
 .SH EXIT STATUS
 .TP
 .B 0

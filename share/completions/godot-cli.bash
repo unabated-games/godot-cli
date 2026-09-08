@@ -149,7 +149,7 @@ _godot_cli_options() {
             echo "--from --signal --to --method --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene extract')
-            echo "--output --catalog-id --summary --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--editable --output --catalog-id --summary --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene instance add')
             echo "--parent --name --scene --catalog-id --editable --unique-name --properties --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -359,7 +359,7 @@ _godot_cli_options() {
             echo "--output --format"
             ;;
         'mcp')
-            echo "--project-root --all-options"
+            echo "--project-root --all-options --toolset"
             ;;
         *)
             echo ""
