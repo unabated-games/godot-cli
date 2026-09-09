@@ -758,6 +758,17 @@ pub fn build(b: *std.Build) void {
     // project run against the fixture, headless so it works on a runner with
     // no display; the fixture's SceneTree script logs an error on load, which
     // is exactly what the error extraction is for.
+    //
+    // The autoload fixture's 24-frame run is the regression for 0.21.0, and
+    // both halves of it have to stay. `physics_frames=24` is an equality:
+    // Godot paces physics off the wall clock unless `--fixed-fps` says
+    // otherwise, while `--quit-after` counts main-loop iterations, so the
+    // same run reached frame 11 or 12 before the fix -- and a click at 20
+    // was never dispatched while the run still exited 0. The click itself
+    // has to be late in the run for that, and aimed at the Play button
+    // centred in the 320x180 viewport: a node inside the 64x64 the headless
+    // display server leaves behind would pass either way, which is why the
+    // fixture missed this to begin with.
     const run_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
         \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/project --godot "$GODOT" --scene sample.tscn --frames 3 --headless --json || true) &&
@@ -776,6 +787,10 @@ pub fn build(b: *std.Build) void {
         \\echo "$out" | grep -q '"error_count":0' &&
         \\grep -q 'autoload fixture score=7' test_fixtures/autoload_project/.godot/godot-cli/godot.log &&
         \\grep -q 'func _initialize' test_fixtures/autoload_project/.godot/godot-cli/godot_cli_run.gd &&
+        \\out=$(./zig-out/bin/godot-cli project run --project-root test_fixtures/autoload_project --godot "$GODOT" --frames 24 --headless --no-import --click /root/Main/Play@20 --json || true) &&
+        \\echo "$out" | grep -q '"error_count":0' &&
+        \\grep -q 'autoload fixture physics_frames=24' test_fixtures/autoload_project/.godot/godot-cli/godot.log &&
+        \\grep -q 'autoload fixture play pressed' test_fixtures/autoload_project/.godot/godot-cli/godot.log &&
         \\rm -rf test_fixtures/autoload_project/.godot &&
         \\./zig-out/bin/godot-cli project import --project-root test_fixtures/project --godot "$GODOT" --json | grep -q '"ok":true' &&
         \\rm -rf test_fixtures/project/.godot/godot-cli
