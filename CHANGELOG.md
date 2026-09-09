@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Changed
+
+- The validation guide and the skill's reference say plainly what a clean `scene validate` does **not** prove. `unknown_property` skips more than it checks — any node with a script, any instanced node, and every namespaced name — and a partial check that says nothing reads exactly like a complete one that found nothing. Raised by the session the check came from.
+
 ## [0.22.0] — 2026-09-09
 
 ### Fixed

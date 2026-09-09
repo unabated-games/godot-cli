@@ -58,6 +58,15 @@ touches and the class reference never mentions.
 Both are deliberately quiet about anything the table cannot speak for: a class
 it does not carry, a `theme_override_*` entry, a `metadata/*` key, a script's
 exported variables, and a connection whose endpoint lives inside an instance.
+
+**So read a clean `scene validate` for what it is.** It says nothing here was
+found wrong; it does not say every property is real, every signal exists, or
+every value is right. `unknown_property` in particular skips more than it
+checks — a misspelled `theme_override_constants/marign_left` passes, and so
+does any property on a node that has a script. A partial check that says
+nothing reads exactly like a complete one that found nothing, which is why the
+step after validating is [running the game]({{ base_url }}/how-to/verify-a-change/)
+rather than calling it done.
 A correct scene is never reported. With `--project-root` the emitting node's
 script is read too, so a signal the script declares itself passes.
 

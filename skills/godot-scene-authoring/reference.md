@@ -106,7 +106,7 @@ Example: `$GODOT_CLI_HOME/examples/batch/apply_validate.json`
 | Batch `--request` fails | Use `batch --file` or `batch --json-body` |
 | `property_type_mismatch` | The value is the wrong Variant type for that class property, e.g. `visible = Vector2(1, 2)` |
 | `unknown_signal` | The class does not emit that signal and the node's script does not declare it; check the spelling |
-| `unknown_property` (warning) | The class has no such property, so Godot keeps the line and ignores it. Skipped when the node has a script or is an instance |
+| `unknown_property` (warning) | The class has no such property, so Godot keeps the line and ignores it. Partial: skipped for a node with a script, an instanced node, and any namespaced name (`theme_override_*`, `metadata/*`) — a clean validate is not proof every property is real |
 | `header_attribute` | `path`, `name`, `parent` and `type` live in a section header: use `scene retarget-ext`, `project move`, `scene node rename` or `reparent` |
 | `invalid_patch` naming a field | The op does not take that field; the hint lists the ones it does |
 | Click verified nothing | A click that cannot reach its target fails the run, naming the node's position and the viewport. `--click` works under `--headless`; only the frame is missing there |
