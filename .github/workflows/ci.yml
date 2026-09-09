@@ -85,9 +85,12 @@ jobs:
           # The runner image carries third-party apt sources this job has no
           # use for, and apt-get update exits non-zero when any one of them
           # fails. Google's Chrome index served a hash mismatch on 2026-09-09
-          # and failed the job twice before it reached a single check of ours.
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
-                     /etc/apt/sources.list.d/microsoft-prod.list
+          # and failed the job three times before it reached a single check of
+          # ours. Matched on content, not filename: the image has moved these
+          # between .list and deb822 .sources files before.
+          sudo grep -rlE 'dl\.google\.com|packages\.microsoft\.com' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null \
+            | sudo xargs -r rm -f
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends zsh fish mandoc shellcheck
 
