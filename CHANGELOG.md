@@ -15,6 +15,14 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-09-09
+
+### Fixed
+
+- **`--frames N` did not mean N frames, so input scheduled late in a run never happened.** Godot paces physics off the wall clock while `--quit-after` counts main-loop iterations, and only `--write-movie` forces the two together — which a windowed run gets and a headless one did not. A 40-frame headless run reached physics frame 18 on the machine this was found on, and fewer on a busier one, so `--click …@20` was silently dropped: `ok: true`, `errors: 0`, `clicks: 1`, and a handler that never ran. `--press move@10..30` was held for 9 frames on one run and 10 on the next instead of 21. The run now passes `--fixed-fps` set to the project's `physics/common/physics_ticks_per_second`, so one iteration is one physics step and one frame means the same thing in both modes, on any machine. Reported from another agent's session against 0.20.1.
+- **`--click` works under `--headless` now, rather than being documented as not working.** The headless display server reports no window size, which leaves the root viewport at 64×64 with every `Control` laid out in that corner — so a click computed from a real layout landed outside it. The run puts the project's viewport size back before the first click, and layout and input picking then match a windowed run: a `Button` centred at (960, 540) in a 1920×1080 project is pressed at (960, 540) and its `pressed` signal fires. This makes a button's wiring checkable on a machine with no display. What headless still cannot give you is the frame, which is what the run now says instead.
+- The claim that clicks need a window is gone from the `--headless` and `--click` help, the verification guide, the skill's troubleshooting table and the MCP cheat sheet. It was mine, and it was wrong twice over: the 64×64 viewport is fixable, and the guard that was supposed to catch a click landing outside it could not fire, because the frame it was scheduled on was never reached.
+
 ## [0.20.1] — 2026-09-09
 
 ### Added

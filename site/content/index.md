@@ -98,7 +98,7 @@ godot-cli project run --project-root . --frames 30 \
   --click /root/Main/HUD/PlayButton@20 --json
 ```
 
-That clicks the node on physics frame 20, so its `pressed` signal fires and the
+That clicks the node on frame 20, so its `pressed` signal fires and the
 handler's output lands in the log. Afterwards the cursor moves off, so the frame
 shows the button's normal style; `--keep-cursor` holds it there for the hover
 style instead. `--press move_right@10..40` does the same for an input action.

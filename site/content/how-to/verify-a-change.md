@@ -54,7 +54,7 @@ godot-cli project run --project-root . --frames 30 \
   --click /root/Main/HUD/PlayButton@20 --json
 ```
 
-That presses the left mouse button at the centre of the node on physics frame
+That presses the left mouse button at the centre of the node on frame
 20 and releases on the next, so a `Button`'s `pressed` signal fires and whatever
 it is connected to runs. Your handler's `print` lands in `log_tail`, which is
 the evidence that the connection works.
@@ -72,6 +72,10 @@ Two runs, two frames, and you have verified both states of a button plus the
 signal, without adding a line of test code to the game. Only the game's own
 cursor moves; nothing touches the desktop pointer.
 
+This works under `--headless` as well, which is what makes a button's wiring
+checkable in CI. The signal fires and the handler's `print` lands in the log;
+only the frame is missing.
+
 Movement works the same way with input actions:
 
 ```bash
@@ -85,16 +89,26 @@ godot-cli project run --project-root . --frames 60 \
 
 ## What to watch out for
 
-**`--click` usually needs a window.** Under `--headless` Godot pins the
-viewport to 64×64 whatever the project's window size says, and nothing can
-resize it, so a click only reaches a node laid out inside that corner. A click
-that lands outside it fails the run with the position and the viewport size,
-rather than passing while nothing happened. `--press` works either way, so
-movement and polled input can be verified on a machine with no display.
+**`--headless` clicks work; what you lose is the frame.** The headless
+display server reports no window size, which would leave the root viewport at
+64×64 with every `Control` laid out in that corner, so the run puts the
+project's own size back before the first click. Layout and input picking then
+match a windowed run, and a `Button` at (960, 540) is pressed at (960, 540).
+What headless cannot give you is a picture, so the layout the click landed on
+is the part still unverified — run with a window when the layout is the
+question.
+
+**A click that cannot reach its target fails the run.** If the node is laid
+out beyond the viewport, or an ancestor has moved it off-screen, the run ends
+with the node's position and the viewport size rather than reporting a press
+that never happened.
 
 **Frames are numbered from 0, presses and clicks from 1.** `--frame-at 20`
 keeps that movie frame as well as the last one, for a mid-run state such as a
-menu part-way through opening.
+menu part-way through opening. One frame is one physics step in both modes —
+the run pins Godot's frame rate to the project's
+`physics/common/physics_ticks_per_second`, so `--frames 40` is 40 frames on
+any machine and `--click …@20` happens at the same point every time.
 
 **Autoloads are fine.** The run injects input through a generated script under
 the capture folder, and that script loads your scene after Godot has registered

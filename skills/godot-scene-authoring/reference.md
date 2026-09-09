@@ -108,7 +108,7 @@ Example: `$GODOT_CLI_HOME/examples/batch/apply_validate.json`
 | `unknown_signal` | The class does not emit that signal and the node's script does not declare it; check the spelling |
 | `header_attribute` | `path`, `name`, `parent` and `type` live in a section header: use `scene retarget-ext`, `project move`, `scene node rename` or `reparent` |
 | `invalid_patch` naming a field | The op does not take that field; the hint lists the ones it does |
-| Click verified nothing | `--click` needs a window; under `--headless` the viewport is 64x64 and a click outside it fails the run |
+| Click verified nothing | A click that cannot reach its target fails the run, naming the node's position and the viewport. `--click` works under `--headless`; only the frame is missing there |
 
 ## JSON output
 

@@ -16,6 +16,14 @@ pub const Options = struct {
     scene: ?[]const u8 = null,
     frames: u32 = 60,
     resolution: []const u8 = "640x360",
+    /// The project's `physics/common/physics_ticks_per_second`. Passed to
+    /// Godot as `--fixed-fps`, which makes one main-loop iteration advance
+    /// exactly one physics step, so `frames` counts the same thing whether
+    /// it is read as a frame written, a physics frame, or a click's `@n`.
+    /// Without it Godot paces physics off the wall clock while `--quit-after`
+    /// counts iterations, and the two drift apart by whatever the machine
+    /// happened to be doing.
+    physics_fps: u32 = 60,
     /// Relative to the project root. The default sits under `.godot/`, which
     /// Godot never imports and projects already ignore.
     capture_dir: []const u8 = default_capture_dir,
@@ -26,7 +34,7 @@ pub const Options = struct {
     headless: bool = false,
     /// Passed after `--`; reachable from OS.get_cmdline_user_args().
     user_args: []const []const u8 = &.{},
-    /// Input actions to hold for a range of physics frames. When any are
+    /// Input actions to hold for a range of frames. When any are
     /// given the run goes through a generated SceneTree script that loads the
     /// scene and drives Input.action_press/release, so movement and buttons
     /// can be exercised without a hand-written test path.
@@ -34,7 +42,7 @@ pub const Options = struct {
     /// The main scene from project.godot, needed by the press script when
     /// `scene` is null. Resolved by the caller.
     main_scene: ?[]const u8 = null,
-    /// Mouse clicks on a node, by viewport path, on a physics frame.
+    /// Mouse clicks on a node, by viewport path, on a frame.
     clicks: []const Click = &.{},
     /// Leave the synthetic cursor on the node after a click, so the frame
     /// shows its hover style. By default the cursor is moved off-screen after
@@ -65,9 +73,9 @@ pub fn parseClick(text: []const u8) ?Click {
 
 pub const Press = struct {
     action: []const u8,
-    /// First physics frame (1-based) the action is held on.
+    /// First frame (1-based) the action is held on.
     start: u32,
-    /// Last physics frame the action is held on, inclusive.
+    /// Last frame the action is held on, inclusive.
     end: u32,
 };
 
@@ -204,24 +212,14 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     const log_relative = std.fmt.allocPrint(allocator, "{s}/godot.log", .{options.capture_dir}) catch return error.OutOfMemory;
     const frames_text = std.fmt.allocPrint(allocator, "{d}", .{options.frames}) catch return error.OutOfMemory;
 
-    var argv: std.ArrayList([]const u8) = .empty;
-    argv.appendSlice(allocator, &.{ godot, "--path", "." }) catch return error.OutOfMemory;
-    if (options.headless) argv.append(allocator, "--headless") catch return error.OutOfMemory;
+    var script_relative: ?[]const u8 = null;
     if (options.presses.len != 0 or options.clicks.len != 0) {
-        const script_relative = try writeDriverScript(allocator, io, options);
-        result.driver_script = std.fs.path.join(allocator, &.{ options.project_root, script_relative }) catch return error.OutOfMemory;
-        argv.appendSlice(allocator, &.{ "--script", script_relative }) catch return error.OutOfMemory;
-    } else if (options.scene) |scene| argv.append(allocator, scene) catch return error.OutOfMemory;
-    if (!options.headless) {
-        argv.appendSlice(allocator, &.{ "--resolution", options.resolution, "--write-movie", shot_pattern }) catch return error.OutOfMemory;
+        script_relative = try writeDriverScript(allocator, io, options);
+        result.driver_script = std.fs.path.join(allocator, &.{ options.project_root, script_relative.? }) catch return error.OutOfMemory;
     }
-    argv.appendSlice(allocator, &.{ "--quit-after", frames_text, "--log-file", log_relative, "--no-header" }) catch return error.OutOfMemory;
-    if (options.user_args.len != 0) {
-        argv.append(allocator, "--") catch return error.OutOfMemory;
-        argv.appendSlice(allocator, options.user_args) catch return error.OutOfMemory;
-    }
+    const argv = try buildArgv(allocator, options, godot, script_relative, shot_pattern, log_relative, frames_text);
 
-    const game_run = try runGodot(allocator, environ, options.project_root, argv.items);
+    const game_run = try runGodot(allocator, environ, options.project_root, argv);
     result.exit = exitCode(game_run.term);
     result.signal = switch (game_run.term) {
         .signal => |sig| std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(sig)}) catch return error.OutOfMemory,
@@ -240,6 +238,43 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     result.log_tail = try tail(allocator, log_text, options.log_lines);
     result.duration_ms = started.durationTo(.now(io, .real)).raw.toMilliseconds();
     return result;
+}
+
+/// The Godot command line for the run itself, kept apart from running it so
+/// the flags can be asserted without a Godot install.
+fn buildArgv(
+    allocator: std.mem.Allocator,
+    options: Options,
+    godot: []const u8,
+    script_relative: ?[]const u8,
+    shot_pattern: []const u8,
+    log_relative: []const u8,
+    frames_text: []const u8,
+) Error![]const []const u8 {
+    var argv: std.ArrayList([]const u8) = .empty;
+    argv.appendSlice(allocator, &.{ godot, "--path", "." }) catch return error.OutOfMemory;
+    if (options.headless) argv.append(allocator, "--headless") catch return error.OutOfMemory;
+    if (script_relative) |relative| {
+        argv.appendSlice(allocator, &.{ "--script", relative }) catch return error.OutOfMemory;
+    } else if (options.scene) |scene| argv.append(allocator, scene) catch return error.OutOfMemory;
+    if (!options.headless) {
+        argv.appendSlice(allocator, &.{ "--resolution", options.resolution, "--write-movie", shot_pattern }) catch return error.OutOfMemory;
+    }
+    // Godot advances physics off the wall clock, while --quit-after counts
+    // main-loop iterations. Left alone, a 40-frame headless run reaches
+    // physics frame 18 on this machine and fewer on a busier one, so a click
+    // scheduled at 20 never happens and the run still exits 0. --write-movie
+    // forces this same flag (main.cpp), which is why a windowed run was
+    // already steady; passing the project's physics rate makes one iteration
+    // one physics step, and one frame mean the same thing in both.
+    const fixed_fps_text = std.fmt.allocPrint(allocator, "{d}", .{options.physics_fps}) catch return error.OutOfMemory;
+    argv.appendSlice(allocator, &.{ "--fixed-fps", fixed_fps_text }) catch return error.OutOfMemory;
+    argv.appendSlice(allocator, &.{ "--quit-after", frames_text, "--log-file", log_relative, "--no-header" }) catch return error.OutOfMemory;
+    if (options.user_args.len != 0) {
+        argv.append(allocator, "--") catch return error.OutOfMemory;
+        argv.appendSlice(allocator, options.user_args) catch return error.OutOfMemory;
+    }
+    return argv.items;
 }
 
 /// A SceneTree script that loads the scene and holds the requested actions
@@ -261,6 +296,14 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", click.node_path, click.frame }) catch return error.OutOfMemory;
     }
     w.print("]\nconst KEEP_CURSOR := {s}\n", .{if (options.keep_cursor) "true" else "false"}) catch return error.OutOfMemory;
+    // The headless display server reports no window size, which leaves the
+    // root viewport at 64x64 and every Control laid out inside that corner.
+    // The driver puts the project's own size back, so a headless run lays out
+    // and picks input the way a windowed one does.
+    const cross = std.mem.indexOfScalar(u8, options.resolution, 'x') orelse options.resolution.len;
+    const width = std.fmt.parseInt(u32, options.resolution[0..cross], 10) catch 640;
+    const height = if (cross == options.resolution.len) 360 else std.fmt.parseInt(u32, options.resolution[cross + 1 ..], 10) catch 360;
+    w.print("const VIEWPORT := Vector2i({d}, {d})\n", .{ width, height }) catch return error.OutOfMemory;
     // Presses go through parse_input_event as well as the polled action
     // state, so Controls (a focused Button on ui_accept) and scripts polling
     // Input.get_vector both see them. Clicks are a mouse press at the node's
@@ -320,11 +363,8 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        return
         \\    # A click outside the viewport reaches nothing, and used to do so
         \\    # in silence: the run passed while the button was never pressed.
-        \\    # Headless is where this bites, since that display server pins
-        \\    # the window to 64x64 and ignores any attempt to resize it.
         \\    if pressed and not Rect2(Vector2.ZERO, Vector2(root.size)).has_point(at):
-        \\        var why := " (this run is headless, where the viewport is " + str(root.size) + " whatever the project's window size says; run with a window to click a node laid out beyond it)" if DisplayServer.get_name() == "headless" else ""
-        \\        push_error("godot-cli: " + path + " is at " + str(at) + ", outside the " + str(root.size) + " viewport, so the click cannot reach it" + why)
+        \\        push_error("godot-cli: " + path + " is at " + str(at) + ", outside the " + str(root.size) + " viewport, so the click cannot reach it; the node is laid out beyond the window, or an ancestor has moved it off-screen")
         \\        return
         \\    var event := InputEventMouseButton.new()
         \\    event.button_index = MOUSE_BUTTON_LEFT
@@ -346,6 +386,13 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\
         \\func _tick() -> void:
         \\    _frame += 1
+        \\    # Headless reports no window size, so the root viewport sits at
+        \\    # 64x64 and a Control laid out for the project's real size ends
+        \\    # up outside it. Setting it from _initialize does not survive:
+        \\    # the window applies its own size before _ready. Setting it on
+        \\    # the first tick sticks, and the layout follows on the next.
+        \\    if _frame <= 2 and root.size != VIEWPORT and DisplayServer.get_name() == "headless":
+        \\        root.size = VIEWPORT
         \\    for press in PRESSES:
         \\        if _frame == press[1]:
         \\            _action(press[0], true)
@@ -569,4 +616,76 @@ test "the driver script moves the cursor off the node after a click, unless it i
     _ = try writeDriverScript(arena, io, options);
     const kept = try std.Io.Dir.cwd().readFileAlloc(io, script_path, arena, .unlimited);
     try std.testing.expect(std.mem.indexOf(u8, kept, "const KEEP_CURSOR := true") != null);
+}
+
+test "the command line pins the frame rate, so a frame number means the same thing in both modes" {
+    const allocator = std.testing.allocator;
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    // A click at frame 20 of a 40-frame run only happens if 40 iterations
+    // are 40 frames. Godot ties physics to the wall clock unless told not
+    // to, and only --write-movie (windowed) forces that for us.
+    const headless = try buildArgv(arena, .{
+        .project_root = ".",
+        .headless = true,
+        .physics_fps = 60,
+    }, "godot", "cap/driver.gd", "cap/shot.png", "cap/godot.log", "40");
+    const fixed = indexOfArg(headless, "--fixed-fps").?;
+    try std.testing.expectEqualStrings("60", headless[fixed + 1]);
+    try std.testing.expect(indexOfArg(headless, "--write-movie") == null);
+
+    // A project that ticks at 30 counts frames at 30, rather than being run
+    // at a fixed 60 that drifts two iterations to its every physics step.
+    const slow = try buildArgv(arena, .{
+        .project_root = ".",
+        .physics_fps = 30,
+        .resolution = "1920x1080",
+    }, "godot", null, "cap/shot.png", "cap/godot.log", "40");
+    try std.testing.expectEqualStrings("30", slow[indexOfArg(slow, "--fixed-fps").? + 1]);
+    try std.testing.expect(indexOfArg(slow, "--write-movie") != null);
+}
+
+fn indexOfArg(argv: []const []const u8, flag: []const u8) ?usize {
+    for (argv, 0..) |arg, i| if (std.mem.eql(u8, arg, flag)) return i;
+    return null;
+}
+
+test "the driver script puts the project's viewport size back under headless" {
+    const allocator = std.testing.allocator;
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.testing.io;
+    try tmp.dir.createDirPath(io, "cap");
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_len = try tmp.dir.realPath(io, &path_buf);
+    const root = path_buf[0..dir_len];
+
+    const relative = try writeDriverScript(arena, io, .{
+        .project_root = root,
+        .scene = "main.tscn",
+        .capture_dir = "cap",
+        .resolution = "1920x1080",
+        .clicks = &.{.{ .node_path = "/root/Main/Play", .frame = 20 }},
+    });
+    const script = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ root, relative }), arena, .unlimited);
+
+    // The headless display server reports no window size, which leaves the
+    // root viewport at 64x64: every Control lands in that corner and a click
+    // aimed at the layout the project describes reaches nothing.
+    try std.testing.expect(std.mem.indexOf(u8, script, "const VIEWPORT := Vector2i(1920, 1080)") != null);
+    const restore = std.mem.indexOf(u8, script, "root.size = VIEWPORT").?;
+    // Only headless: a windowed run already has the size and setting it
+    // would fight the window.
+    try std.testing.expect(std.mem.indexOf(u8, script[0..restore], "DisplayServer.get_name() == \"headless\"") != null);
+    // Before the first click, or the click is computed against 64x64.
+    try std.testing.expect(restore < std.mem.indexOf(u8, script, "_click(click[0], true)").?);
+    // From _tick, not _initialize: the window applies its own size before
+    // _ready, so a size set during _initialize does not survive.
+    try std.testing.expect(restore > std.mem.indexOf(u8, script, "func _tick() -> void:").?);
 }

@@ -142,6 +142,9 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     // silently run a 1280x720 project at 640x360.
     var main_scene: ?[]const u8 = null;
     var project_resolution: ?[]const u8 = null;
+    // A frame means one physics step, so a project that ticks at 30 counts
+    // frames at 30 rather than drifting against a fixed 60.
+    var physics_fps: u32 = 60;
     if (loadProject(cli, inv)) |loaded_const| {
         var loaded = loaded_const;
         defer loaded.doc.deinit(cli.allocator);
@@ -153,6 +156,12 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
                 project_resolution = try std.fmt.allocPrint(cli.allocator, "{s}x{s}", .{ w, h });
             };
         }
+        if (loaded.doc.sectionMut("physics")) |physics| {
+            if (physics.getEntry("common/physics_ticks_per_second")) |value| {
+                physics_fps = std.fmt.parseInt(u32, std.mem.trim(u8, value, " \t"), 10) catch 60;
+                if (physics_fps == 0) physics_fps = 60;
+            }
+        }
     } else |_| {}
 
     const run = try godot_run.run(cli.allocator, cli.io, cli.environ, .{
@@ -161,6 +170,7 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .scene = inv.getOption("scene"),
         .frames = frames,
         .resolution = inv.getOption("resolution") orelse project_resolution orelse "640x360",
+        .physics_fps = physics_fps,
         .capture_dir = inv.getOption("capture-dir") orelse godot_run.default_capture_dir,
         .import = !inv.flag("no-import"),
         .keep_frames = inv.flag("keep-frames"),
@@ -193,11 +203,10 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (run.log_tail.len != 0) try data.put(cli.allocator, "log_tail", .{ .string = run.log_tail });
 
     var messages: std.ArrayList([]const u8) = .empty;
-    // A headless click parses, reports clicks:1 and exits clean while the
-    // Control never sees it, which reads as a passing verification of the one
-    // thing the flag exists to verify.
+    // A headless run writes no frames, so the layout the click was aimed at
+    // is the one thing about it nobody can look at afterwards.
     if (inv.flag("headless") and clicks.items.len != 0) {
-        try messages.append(cli.allocator, "under --headless the viewport is 64x64 whatever the project's window size says, so a click only reaches a node laid out inside that area; a click that lands outside it is reported as an error rather than passing silently. Use a window to verify a real layout; --press works either way");
+        try messages.append(cli.allocator, "clicks under --headless reach the node and fire its signals, since the run puts the project's viewport size back; what a headless run cannot give you is the frame, so the layout the click landed on is unverified. Run with a window when the layout is what is in question");
     }
     // Without this, a run with --keep-cursor and nothing to hover over reads
     // as though the frame is showing a held hover style.
@@ -1169,10 +1178,10 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; the default is under .godot/, which Godot never imports", .default_value = ".godot/godot-cli" },
     .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },
     .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
-    .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display. --press works normally; the viewport is pinned to 64x64, so --click only reaches a node laid out inside that area" },
+    .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display. --press and --click both work: the run puts the project's viewport size back, which the headless display server does not report. What you lose is the frame" },
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
-    .{ .long = "press", .kind = .string, .description = "Hold an input action over physics frames, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
-    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a physics frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Under --headless the viewport is 64x64, so only a node laid out inside that area can be clicked; a click outside it fails the run rather than passing silently", .repeatable = true },
+    .{ .long = "press", .kind = .string, .description = "Hold an input action over a frame range, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
+    .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Works under --headless too. A click on a node laid out beyond the viewport reaches nothing and fails the run rather than passing silently", .repeatable = true },
     .{ .long = "keep-cursor", .kind = .flag, .description = "Leave the synthetic cursor on the last clicked node instead of moving it off, so the frame shows that node's hover style; only the in-game cursor moves either way, never the desktop pointer" },
     .{ .long = "frame-at", .kind = .integer, .description = "Also keep this frame (numbered from 0) and return it as frame_at; repeatable, so --frame-at 0 --frame-at 30 keeps a before-and-after pair as well as the last frame", .repeatable = true },
     .{ .long = "log-lines", .kind = .integer, .description = "Lines of the log to return inline as log_tail", .default_value = "40" },

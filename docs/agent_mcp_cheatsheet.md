@@ -84,7 +84,8 @@ A failure caused by the call itself names what to fix:
 ```
 
 `messages` is where a tool tells you something it did that you did not ask for
-— marking an instance editable, say, or that a headless click verified nothing.
+— marking an instance editable, say, or that a headless run has no frame to
+show you what the click landed on.
 
 ## Values
 
