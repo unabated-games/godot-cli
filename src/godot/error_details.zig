@@ -11,6 +11,9 @@ const std = @import("std");
 pub const Detail = struct {
     /// The patch op or intent recipe being applied, when known.
     op: ?[]const u8 = null,
+    /// The command being parsed, when the failure came from the command line
+    /// rather than from a patch or intent document.
+    command: ?[]const u8 = null,
     field: ?[]const u8 = null,
     value: ?[]const u8 = null,
     hint: ?[]const u8 = null,
@@ -57,6 +60,7 @@ pub fn takeJson(allocator: std.mem.Allocator) !?std.json.ObjectMap {
 
     var map: std.json.ObjectMap = .{};
     if (detail.op) |op| try map.put(allocator, "op", .{ .string = try allocator.dupe(u8, op) });
+    if (detail.command) |command| try map.put(allocator, "command", .{ .string = try allocator.dupe(u8, command) });
     if (detail.field) |field| try map.put(allocator, "field", .{ .string = try allocator.dupe(u8, field) });
     if (detail.value) |value| try map.put(allocator, "value", .{ .string = try allocator.dupe(u8, value) });
     if (detail.hint) |hint| try map.put(allocator, "hint", .{ .string = try allocator.dupe(u8, hint) });

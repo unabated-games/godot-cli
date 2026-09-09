@@ -32,19 +32,7 @@ pub fn printCommandHelp(
 
     var usage: std.ArrayList(u8) = .empty;
     defer usage.deinit(allocator);
-
-    try usage.appendSlice(allocator, version.name);
-    for (path) |segment| {
-        try usage.append(allocator, ' ');
-        try usage.appendSlice(allocator, segment);
-    }
-    if (command.options.len != 0 or command.children.len != 0) {
-        try usage.appendSlice(allocator, " [options]");
-    }
-    for (command.positionals) |arg| {
-        try usage.append(allocator, ' ');
-        try appendPositionalUsage(&usage, allocator, arg);
-    }
+    try appendUsageLine(&usage, allocator, command, path);
 
     try writer.print("{s}\n\n", .{usage.items});
     try writer.print("{s}\n\n", .{command.summary});
@@ -81,6 +69,28 @@ pub fn printCommandHelp(
 
 /// `<file>`, `[node]`, or `<files>...`: the same spelling the man page and
 /// the Markdown reference use.
+/// The synopsis line, `godot-cli scene node reparent [options] <file>`. Shared
+/// so a usage failure can name the same shape `--help` prints.
+pub fn appendUsageLine(
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    command: *const spec.CommandSpec,
+    path: []const []const u8,
+) !void {
+    try out.appendSlice(allocator, version.name);
+    for (path) |segment| {
+        try out.append(allocator, ' ');
+        try out.appendSlice(allocator, segment);
+    }
+    if (command.options.len != 0 or command.children.len != 0) {
+        try out.appendSlice(allocator, " [options]");
+    }
+    for (command.positionals) |arg| {
+        try out.append(allocator, ' ');
+        try appendPositionalUsage(out, allocator, arg);
+    }
+}
+
 pub fn appendPositionalUsage(out: *std.ArrayList(u8), allocator: std.mem.Allocator, arg: spec.PositionalSpec) !void {
     try out.append(allocator, if (arg.required) '<' else '[');
     try out.appendSlice(allocator, arg.name);

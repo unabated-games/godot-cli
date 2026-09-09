@@ -11,6 +11,7 @@ const std = @import("std");
 const spec = @import("../cli/spec.zig");
 const app_mod = @import("../cli/app.zig");
 const emit = @import("../output/emit.zig");
+const error_details = @import("../godot/error_details.zig");
 const builtin = @import("builtin");
 
 /// Commands that describe the CLI rather than edit a Godot file. Kept in step
@@ -368,7 +369,16 @@ pub fn call(allocator: std.mem.Allocator, app: *const app_mod.App, tool: *const 
 
 fn failureFor(allocator: std.mem.Allocator, err: anyerror) emit.Failure {
     return switch (err) {
-        error.Usage, error.UnknownCommand, error.UnknownOption, error.MissingValue, error.InvalidValue, error.JsonInput => |e| emit.failureFromError(e),
+        error.Usage, error.UnknownCommand, error.UnknownOption, error.MissingValue, error.InvalidValue, error.JsonInput => |e| {
+            var failure = emit.failureFromError(e);
+            // The parser names the argument and the tool it belongs to; over
+            // MCP that is the whole of what the client gets back, so losing it
+            // here leaves "unknown option" and nothing else.
+            if (error_details.takeJson(allocator) catch null) |details| {
+                failure.details = .{ .object = details };
+            }
+            return failure;
+        },
         else => app_mod.failureFromHandlerError(allocator, err),
     };
 }

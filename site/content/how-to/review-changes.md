@@ -26,22 +26,34 @@ Validation exits 1 when it finds an error, and returns every issue with a line n
 | `invalid_node_unique_id` | warning | A node's `unique_id` is not a value Godot would generate |
 | `property_type_mismatch` | error | A property's value is the wrong Variant type for its class, e.g. `visible = Vector2(1, 2)` |
 | `unknown_signal` | error | A connection names a signal the emitting class does not have, and its script does not declare |
+| `unknown_property` | warning | A property the class does not have, on a node with no script and no instance: Godot keeps the line and ignores it |
 | `connection_node_missing` | error | A connection names a node that is not in the scene |
 | `control_under_node2d` | warning | A `Control` under a `Node2D` has no parent rect, so anchors give it no size and it may draw nothing |
 | `dangling_ext_resource` | error | A property references an `ExtResource` id nothing declares |
 
 ### The checks that read the file the way Godot would
 
-`property_type_mismatch` and `unknown_signal` come from a table generated out of
-Godot's own class reference — 520 classes, 3933 properties, 377 signals — so
-they catch the two mistakes that otherwise cost a run to find:
+`property_type_mismatch`, `unknown_signal` and `unknown_property` come from a
+table generated out of Godot's own class reference — 520 classes, 3933
+properties, 377 signals — so they catch the mistakes that otherwise cost a run
+to find:
 
 ```text
 [err] property_type_mismatch: Control.visible is bool, and this value is vector2:
       Godot coerces it and the file still loads, so only the running frame shows the damage
 [err] unknown_signal: Button does not emit a signal named pressd, and its script does not
       declare one either, so this connection never fires
+[warn] unknown_property: HBoxContainer has no property margin_left, so Godot keeps the line
+      and ignores it: the setting does nothing and nothing reports it
 ```
+
+`unknown_property` is a warning rather than an error because the table cannot
+see everything a property might come from. A node with a script attached, or an
+instanced node, is skipped entirely — their `@export` vars are not in any class
+reference. So are namespaced names like `theme_override_constants/margin_left`
+and `metadata/level`, and the handful Godot registers as internal, `layout_mode`
+and `anchors_preset` among them, which the editor writes into every scene it
+touches and the class reference never mentions.
 
 Both are deliberately quiet about anything the table cannot speak for: a class
 it does not carry, a `theme_override_*` entry, a `metadata/*` key, a script's

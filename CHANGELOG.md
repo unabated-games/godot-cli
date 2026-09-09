@@ -15,6 +15,17 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-09-09
+
+### Fixed
+
+- **`unknown_option` named neither the option nor the command.** `{"kind": "unknown_option", "message": "unknown option", "details": null}` with an empty `command` was the whole answer, which is close to invisible in a piped `--json` workflow. It now names the flag, the command it was given to, every option that command accepts, and the nearest accepted spelling when there is one — and the envelope's `command` is filled in, which it could not be before because the failure happened before the invocation existed. The same details reach MCP clients, where the envelope is all a client gets. Reported by another agent's session, which lost a scene: a rejected `scene node reparent --to` went unnoticed, and a `scene node remove --recursive` ran next on the subtree the reparent had not moved.
+- **A missing required option answered with the bare word `Usage`.** No usage text, no name of the option. Required options are enforced in the parser now rather than in each handler, so every command answers with the missing option, the synopsis `--help` would print, and the full set the command requires.
+
+### Added
+
+- **`scene validate` reports a property the class does not have** — `unknown_property`, the thing Godot keeps in the file and silently ignores, so the setting does nothing and nothing says so. A warning rather than an error, because the class table cannot see everything a property may come from: a node with a script attached or an instanced node is skipped entirely, along with namespaced names (`theme_override_constants/…`, `metadata/…`) and the properties Godot registers as internal. `layout_mode` and `anchors_preset` are in that last group, are written into every scene the editor touches, and are absent from the class reference — an earlier draft of this check called every editor-saved scene broken, which is why the exclusions are there and tested.
+
 ## [0.21.0] — 2026-09-09
 
 ### Fixed

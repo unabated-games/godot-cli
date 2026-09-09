@@ -638,6 +638,42 @@ fn scriptDeclaresSignal(
 /// it does not declare (theme overrides, a script's exports, `metadata/*`),
 /// and a value that does not parse are all left alone, because a false report
 /// on a correct scene costs more than a missed one.
+/// Properties Godot registers as `PROPERTY_USAGE_INTERNAL`: saved to `.tscn`
+/// like any other, but left out of the class reference the table is generated
+/// from, so they read as unknown while being exactly what the editor writes.
+/// `layout_mode` and `anchors_preset` are on every Control the editor has
+/// touched. Refresh with:
+///   grep -rn 'ADD_PROPERTY(PropertyInfo' scene/ servers/ core/ \
+///     | grep PROPERTY_USAGE_INTERNAL
+const internal_properties = [_][]const u8{
+    "__data__",   "_blend_shape_names",       "_bundled",                 "_data",
+    "_ids",       "_images",                  "_limits",                  "_source",
+    "_surfaces",  "_uses_packed_directional", "_versions",                "anchors_preset",
+    "animations", "bones",                    "data",                     "filters",
+    "image",      "indices",                  "layout_mode",              "light_textures",
+    "messages",   "obstruction_outlines",     "outlines",                 "polygons",
+    "probe_data", "projected_obstructions",   "resources",                "traversable_outlines",
+    "triangles",  "user_data",                "uses_spherical_harmonics", "vertices",
+};
+
+fn isInternalProperty(name: []const u8) bool {
+    for (internal_properties) |internal| {
+        if (std.mem.eql(u8, name, internal)) return true;
+    }
+    return false;
+}
+
+/// Whether a script is attached, whose `@export` vars the class table cannot
+/// know about.
+fn sectionHasScript(section: anytype) bool {
+    for (section.properties.items) |line| {
+        const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+        const name = std.mem.trim(u8, line.raw[0..equals], " \t");
+        if (std.mem.eql(u8, name, "script")) return true;
+    }
+    return false;
+}
+
 fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Document, report: *Report) !void {
     const variant_parse = @import("variant/parse.zig");
     for (doc.sections.items) |*section| {
@@ -650,13 +686,34 @@ fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Documen
         const node_type = section.header.getString("type") orelse continue;
         if (class_info.findClass(node_type) == null) continue;
 
+        // A name the class does not declare is only wrong when nothing else
+        // could have declared it. A script adds its @export vars, an instanced
+        // scene brings its own root's script, and Godot's own namespaced names
+        // (theme_override_constants/..., metadata/...) are not class
+        // properties at all -- the table cannot see any of those, so a
+        // property is left alone whenever one of them is in play.
+        const unknown_ok = section.header.getString("instance") != null or
+            sectionHasScript(section);
+
         for (section.properties.items) |line| {
             const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
             const name = std.mem.trim(u8, line.raw[0..equals], " \t");
             const value_text = std.mem.trim(u8, line.raw[equals + 1 ..], " \t");
             if (name.len == 0 or value_text.len == 0) continue;
 
-            const property = class_info.findProperty(node_type, name) orelse continue;
+            const property = class_info.findProperty(node_type, name) orelse {
+                if (unknown_ok) continue;
+                if (std.mem.indexOfScalar(u8, name, '/') != null) continue;
+                if (isInternalProperty(name)) continue;
+                const msg = try std.fmt.allocPrint(
+                    allocator,
+                    "{s} has no property {s}, so Godot keeps the line and ignores it: the setting does nothing and nothing reports it. If a script on this node declares it, attach the script and this goes away",
+                    .{ node_type, name },
+                );
+                defer allocator.free(msg);
+                try report.add(allocator, .warning, "unknown_property", msg, section.line);
+                continue;
+            };
             if (property.kinds.len == 0) continue;
 
             var value = variant_parse.parsePropertyValue(allocator, value_text) catch continue;
@@ -836,4 +893,45 @@ test "a scripted node's connection is left alone, since a script declares signal
     for (report.issues.items) |issue| {
         try std.testing.expect(!std.mem.eql(u8, issue.kind, "unknown_signal"));
     }
+}
+
+test "a property the class does not have is reported, unless something else could declare it" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="Script" path="res://thing.gd" id="Script_thing"]
+        \\[ext_resource type="PackedScene" path="res://hud.tscn" id="Scene_hud"]
+        \\
+        \\[node name="Row" type="HBoxContainer"]
+        \\totally_made_up = 8
+        \\layout_mode = 2
+        \\anchors_preset = 0
+        \\theme_override_constants/margin_left = 8
+        \\metadata/note = "free-form"
+        \\
+        \\[node name="Scripted" type="Node2D" parent="."]
+        \\script = ExtResource("Script_thing")
+        \\custom_thing = 9
+        \\
+        \\[node name="HUD" parent="." instance=ExtResource("Scene_hud")]
+        \\whatever_the_instance_declares = 1
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var report = try validateDocument(allocator, &doc, .{});
+    defer report.deinit(allocator);
+
+    var unknown: usize = 0;
+    for (report.issues.items) |issue| {
+        if (std.mem.eql(u8, issue.kind, "unknown_property")) unknown += 1;
+    }
+    // Only totally_made_up. layout_mode and anchors_preset are
+    // PROPERTY_USAGE_INTERNAL -- saved by the editor, absent from the class
+    // reference the table is built from, and flagging them would have called
+    // every editor-saved scene broken. A theme override and metadata are not
+    // class properties, a script brings its own @export vars, and an
+    // instanced node carries the instanced scene's.
+    try std.testing.expectEqual(@as(usize, 1), unknown);
 }

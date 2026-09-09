@@ -21,8 +21,17 @@ pub const App = struct {
         var stderr_buffer: [4096]u8 = undefined;
 
         var invocation = self.loadInvocation(args) catch |err| {
-            const failure = emit.failureFromError(err);
-            emit.emitFailure(self.allocator, self.io, &stdout_buffer, &stderr_buffer, true, &.{}, failure) catch {};
+            var failure = emit.failureFromError(err);
+            // The parser records which option or command was at fault; without
+            // this the answer names neither, which is hard to notice at all in
+            // a piped --json workflow.
+            if (error_details.takeJson(self.allocator) catch null) |details| {
+                failure.details = .{ .object = details };
+            }
+            var path_buf: [8][]const u8 = undefined;
+            const cli_args = if (args.len > 1) args[1..] else @as([]const []const u8, &.{});
+            const path = parser.commandPathForError(self.root, cli_args, &path_buf);
+            emit.emitFailure(self.allocator, self.io, &stdout_buffer, &stderr_buffer, true, path, failure) catch {};
             return spec.ExitCode.fromError(err);
         };
         defer invocation.deinit(self.allocator);
