@@ -76,6 +76,32 @@ This works under `--headless` as well, which is what makes a button's wiring
 checkable in CI. The signal fires and the handler's `print` lands in the log;
 only the frame is missing.
 
+## Drive a form, so a sign-in is watched rather than reviewed
+
+A screen behind a form cannot be reached by clicking alone. `--type` fills a
+field:
+
+```bash
+godot-cli project run --project-root . --frames 40 \
+  --type '/root/Main/%Email@10=someone@example.com' \
+  --type '/root/Main/%Password@14=hunter2' \
+  --click /root/Main/Box/Submit@20 --json
+```
+
+The field is focused and emptied, then the text goes in as real key events, so
+`text_changed` fires and a validating form runs the way it does for a person.
+Assigning `LineEdit.text` emits nothing, which is why this does not do that.
+
+The frame number sits between the last `@` of the node path and the first `=`
+of the text, so an address in the value and an `=` in a password both survive.
+A value can be empty — `%Email@3=` clears the field.
+
+**Leave a frame or two before the click.** The keys are delivered on the frame
+after they are sent, so a Submit clicked on the same frame sees the old value.
+
+`--focus <node-path>@<frame>` moves keyboard focus without typing, for a frame
+that shows a focus ring or proves a tab order.
+
 Movement works the same way with input actions:
 
 ```bash

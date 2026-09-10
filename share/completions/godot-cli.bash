@@ -272,7 +272,7 @@ _godot_cli_options() {
             echo "--project-root --godot"
             ;;
         'project run')
-            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click --keep-cursor --frame-at --log-lines"
+            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click --type --focus --keep-cursor --frame-at --log-lines"
             ;;
         'project show')
             echo "--project-root"

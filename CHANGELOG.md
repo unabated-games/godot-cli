@@ -15,6 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-09-10
+
+### Fixed
+
+- **A scene transition inside `project run` left the old screen on top of the new one.** `SceneTree.change_scene_to_file` removes `current_scene` and nothing else, and the generated driver added the scene with `root.add_child` without ever setting `current_scene` — so the old screen stayed in the tree and both drew at once, for the whole rest of the run. Every `--click`- or `--type`-driven transition looked broken. Found while checking a trial's claim that the overlap was a one-frame capture artifact; it was still there twenty frames later.
+
+### Added
+
+- **`project run --type '<node-path>@<frame>=<text>'` fills a form**, so the screen behind a sign-in can be watched rather than code-reviewed. `--press` sends input actions and `--click` clicks a node; neither could type, which left every form-gated transition undrivable. The field is focused and emptied, then the text goes in as **real key events**, so `text_changed` fires and a validating form runs the way it does for a person — assigning `LineEdit.text` emits nothing, which is why this does not do that. Works headless. Requested by another agent's session with a sign-in, a create-account and three password-reset screens it could reach and screenshot but not drive.
+- **`project run --focus '<node-path>@<frame>'`** moves keyboard focus without typing, for a frame that shows a focus ring or proves a tab order.
+- The frame number is read from between the last `@` of the node path and the first `=` of the text, so `someone@example.com` and a password containing `=` both survive. An empty value clears the field. Typing into anything but a `LineEdit` or `TextEdit` fails the run naming the class it found, and a field that will not take focus fails rather than sending the keys to whatever was focused before.
+
 ## [0.23.3] — 2026-09-10
 
 ### Fixed

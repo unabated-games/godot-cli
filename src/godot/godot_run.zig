@@ -44,6 +44,10 @@ pub const Options = struct {
     main_scene: ?[]const u8 = null,
     /// Mouse clicks on a node, by viewport path, on a frame.
     clicks: []const Click = &.{},
+    /// Text typed into a LineEdit or TextEdit, by viewport path, on a frame.
+    types: []const TypeText = &.{},
+    /// Keyboard focus moved to a node, by viewport path, on a frame.
+    focuses: []const Focus = &.{},
     /// Leave the synthetic cursor on the node after a click, so the frame
     /// shows its hover style. By default the cursor is moved off-screen after
     /// the release and the node draws normally again.
@@ -69,6 +73,38 @@ pub fn parseClick(text: []const u8) ?Click {
     const frame = std.fmt.parseInt(u32, text[at + 1 ..], 10) catch return null;
     if (frame == 0) return null;
     return .{ .node_path = text[0..at], .frame = frame };
+}
+
+pub const TypeText = struct {
+    node_path: []const u8,
+    frame: u32,
+    text: []const u8,
+};
+
+/// `/root/Main/%Email@10=someone@example.com`: focus that node on frame 10 and
+/// type the text into it.
+///
+/// The frame is read from between the last `@` and the first `=`, so both an
+/// address in the text and an `=` in a password survive.
+pub fn parseTypeText(text: []const u8) ?TypeText {
+    const equals = std.mem.indexOfScalar(u8, text, '=') orelse return null;
+    const target = text[0..equals];
+    const at = std.mem.lastIndexOfScalar(u8, target, '@') orelse return null;
+    if (at == 0) return null;
+    const frame = std.fmt.parseInt(u32, target[at + 1 ..], 10) catch return null;
+    if (frame == 0) return null;
+    return .{ .node_path = target[0..at], .frame = frame, .text = text[equals + 1 ..] };
+}
+
+pub const Focus = struct {
+    node_path: []const u8,
+    frame: u32,
+};
+
+/// `/root/Main/%Email@10`: give that node keyboard focus on frame 10.
+pub fn parseFocus(text: []const u8) ?Focus {
+    const click = parseClick(text) orelse return null;
+    return .{ .node_path = click.node_path, .frame = click.frame };
 }
 
 pub const Press = struct {
@@ -213,7 +249,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     const frames_text = std.fmt.allocPrint(allocator, "{d}", .{options.frames}) catch return error.OutOfMemory;
 
     var script_relative: ?[]const u8 = null;
-    if (options.presses.len != 0 or options.clicks.len != 0) {
+    if (options.presses.len != 0 or options.clicks.len != 0 or options.types.len != 0 or options.focuses.len != 0) {
         script_relative = try writeDriverScript(allocator, io, options);
         result.driver_script = std.fs.path.join(allocator, &.{ options.project_root, script_relative.? }) catch return error.OutOfMemory;
     }
@@ -295,6 +331,16 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
     for (options.clicks, 0..) |click, i| {
         w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", click.node_path, click.frame }) catch return error.OutOfMemory;
     }
+    w.writeAll("]\nconst TYPES := [") catch return error.OutOfMemory;
+    for (options.types, 0..) |entry, i| {
+        w.print("{s}[\"{s}\", {d}, ", .{ if (i == 0) "" else ", ", entry.node_path, entry.frame }) catch return error.OutOfMemory;
+        writeGdStringLiteral(w, entry.text) catch return error.OutOfMemory;
+        w.writeAll("]") catch return error.OutOfMemory;
+    }
+    w.writeAll("]\nconst FOCUSES := [") catch return error.OutOfMemory;
+    for (options.focuses, 0..) |entry, i| {
+        w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", entry.node_path, entry.frame }) catch return error.OutOfMemory;
+    }
     w.print("]\nconst KEEP_CURSOR := {s}\n", .{if (options.keep_cursor) "true" else "false"}) catch return error.OutOfMemory;
     // The headless display server reports no window size, which leaves the
     // root viewport at 64x64 and every Control laid out inside that corner.
@@ -329,7 +375,13 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        push_error("godot-cli: cannot load " + SCENE)
         \\        quit(1)
         \\        return
-        \\    root.add_child(packed.instantiate())
+        \\    var instance := packed.instantiate()
+        \\    root.add_child(instance)
+        \\    # change_scene_to_file removes `current_scene` and nothing else
+        \\    # (scene_tree.cpp), so leaving it null means a transition adds the
+        \\    # new screen and keeps the old one: both draw at once, and a
+        \\    # sign-in that lands on the next screen looks broken.
+        \\    current_scene = instance
         \\    # Counting frames from here keeps click and press frames
         \\    # relative to the scene being in the tree.
         \\    physics_frame.connect(_tick)
@@ -378,6 +430,46 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        Input.parse_input_event(motion)
         \\    Input.parse_input_event(event)
         \\
+        \\func _focus(path: String) -> Control:
+        \\    var node := root.get_node_or_null(NodePath(path))
+        \\    if node == null:
+        \\        push_error("godot-cli: no node at " + path)
+        \\        return null
+        \\    if not (node is Control):
+        \\        push_error("godot-cli: " + path + " is not a Control, so it cannot take keyboard focus")
+        \\        return null
+        \\    var control := node as Control
+        \\    control.grab_focus()
+        \\    if not control.has_focus():
+        \\        push_error("godot-cli: " + path + " did not take focus; its focus_mode may be None")
+        \\        return null
+        \\    return control
+        \\
+        \\func _type(path: String, text: String) -> void:
+        \\    var control := _focus(path)
+        \\    if control == null:
+        \\        return
+        \\    # Real key events rather than assigning `text`, because a form
+        \\    # validates on text_changed and assigning the property emits
+        \\    # nothing. The field is emptied first so the result is the text
+        \\    # asked for rather than the text appended to whatever was there.
+        \\    if control is LineEdit:
+        \\        (control as LineEdit).text = ""
+        \\    elif control is TextEdit:
+        \\        (control as TextEdit).text = ""
+        \\    else:
+        \\        push_error("godot-cli: " + path + " is a " + control.get_class() + ", not a LineEdit or TextEdit, so there is nowhere for the text to go")
+        \\        return
+        \\    for i in text.length():
+        \\        var down := InputEventKey.new()
+        \\        down.unicode = text.unicode_at(i)
+        \\        down.pressed = true
+        \\        Input.parse_input_event(down)
+        \\        var up := InputEventKey.new()
+        \\        up.unicode = text.unicode_at(i)
+        \\        up.pressed = false
+        \\        Input.parse_input_event(up)
+        \\
         \\func _mouse_away() -> void:
         \\    var motion := InputEventMouseMotion.new()
         \\    motion.position = AWAY
@@ -398,6 +490,12 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\            _action(press[0], true)
         \\        if _frame == press[2] + 1:
         \\            _action(press[0], false)
+        \\    for entry in FOCUSES:
+        \\        if _frame == entry[1]:
+        \\            _focus(entry[0])
+        \\    for entry in TYPES:
+        \\        if _frame == entry[1]:
+        \\            _type(entry[0], entry[2])
         \\    for click in CLICKS:
         \\        if _frame == click[1]:
         \\            _click(click[0], true)
@@ -417,6 +515,21 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
     writer.interface.writeAll(out.written()) catch return error.Io;
     writer.interface.flush() catch return error.Io;
     return relative;
+}
+
+/// A GDScript string literal. The text is a password or an address as often
+/// as not, so a quote or a backslash in it must not end the literal early.
+fn writeGdStringLiteral(w: *std.Io.Writer, text: []const u8) !void {
+    try w.writeAll("\"");
+    for (text) |c| switch (c) {
+        '"' => try w.writeAll("\\\""),
+        '\\' => try w.writeAll("\\\\"),
+        '\n' => try w.writeAll("\\n"),
+        '\r' => try w.writeAll("\\r"),
+        '\t' => try w.writeAll("\\t"),
+        else => try w.writeByte(c),
+    };
+    try w.writeAll("\"");
 }
 
 fn clearCapture(allocator: std.mem.Allocator, io: std.Io, options: Options) Error!void {
@@ -605,6 +718,14 @@ test "the driver script moves the cursor off the node after a click, unless it i
     const release = std.mem.indexOf(u8, moved, "_click(click[0], false)").?;
     try std.testing.expect(away_call > release);
 
+    // change_scene_to_file removes `current_scene` and nothing else, so a
+    // driver that never sets it leaves the old screen in the tree: a sign-in
+    // that lands on the next screen draws both at once. A trial read that as
+    // a capture artifact and called the transition verified.
+    const add_child = std.mem.indexOf(u8, moved, "root.add_child(instance)").?;
+    const set_current = std.mem.indexOf(u8, moved, "current_scene = instance").?;
+    try std.testing.expect(add_child < set_current);
+
     // The scene is loaded from _initialize, never from _init: _init runs
     // before Godot registers autoloads, so a scene whose script names one
     // fails to compile and nothing runs at all.
@@ -688,4 +809,77 @@ test "the driver script puts the project's viewport size back under headless" {
     // From _tick, not _initialize: the window applies its own size before
     // _ready, so a size set during _initialize does not survive.
     try std.testing.expect(restore > std.mem.indexOf(u8, script, "func _tick() -> void:").?);
+}
+
+test "typing syntax survives an address and a password" {
+    // The frame sits between the last @ of the target and the first = of the
+    // text, so neither an email nor an = in a password breaks the parse.
+    const email = parseTypeText("/root/Main/%Email@10=someone@example.com").?;
+    try std.testing.expectEqualStrings("/root/Main/%Email", email.node_path);
+    try std.testing.expectEqual(@as(u32, 10), email.frame);
+    try std.testing.expectEqualStrings("someone@example.com", email.text);
+
+    const password = parseTypeText("/root/Main/%Password@14=p=ss@w0rd").?;
+    try std.testing.expectEqualStrings("/root/Main/%Password", password.node_path);
+    try std.testing.expectEqualStrings("p=ss@w0rd", password.text);
+
+    // Emptying a field is a thing worth being able to ask for.
+    try std.testing.expectEqualStrings("", parseTypeText("/root/Main/%Email@3=").?.text);
+
+    try std.testing.expect(parseTypeText("/root/Main/%Email@10") == null);
+    try std.testing.expect(parseTypeText("/root/Main/%Email=text") == null);
+    try std.testing.expect(parseTypeText("/root/Main/%Email@0=text") == null);
+    try std.testing.expect(parseTypeText("@10=text") == null);
+
+    const focus = parseFocus("/root/Main/%Email@7").?;
+    try std.testing.expectEqualStrings("/root/Main/%Email", focus.node_path);
+    try std.testing.expectEqual(@as(u32, 7), focus.frame);
+}
+
+test "the driver types with real keys, into an emptied field, after focusing it" {
+    const allocator = std.testing.allocator;
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.testing.io;
+    try tmp.dir.createDirPath(io, "cap");
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_len = try tmp.dir.realPath(io, &path_buf);
+    const root = path_buf[0..dir_len];
+
+    const relative = try writeDriverScript(arena, io, .{
+        .project_root = root,
+        .scene = "signin.tscn",
+        .capture_dir = "cap",
+        .types = &.{.{ .node_path = "/root/Main/%Email", .frame = 10, .text = "a\"b\\c" }},
+    });
+    const script = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ root, relative }), arena, .unlimited);
+
+    // A quote or a backslash in a password must not end the GDScript literal.
+    try std.testing.expect(std.mem.indexOf(u8, script, "[\"/root/Main/%Email\", 10, \"a\\\"b\\\\c\"]") != null);
+
+    // Assigning `text` emits nothing, and a validating form runs on
+    // text_changed, so the text goes in as key events.
+    try std.testing.expect(std.mem.indexOf(u8, script, "InputEventKey.new()") != null);
+
+    // Asserted inside _type's own body, so an anchor that merely happens to
+    // sit earlier in the file cannot satisfy it.
+    const body_start = std.mem.indexOf(u8, script, "func _type(path: String, text: String) -> void:").?;
+    const body = script[body_start..std.mem.indexOfPos(u8, script, body_start + 1, "\nfunc ").?];
+
+    const focus_call = std.mem.indexOf(u8, body, "_focus(path)").?;
+    const guard = std.mem.indexOf(u8, body, "if control == null:").?;
+    const clear = std.mem.indexOf(u8, body, "(control as LineEdit).text = \"\"").?;
+    const keys = std.mem.indexOf(u8, body, "down.unicode = text.unicode_at(i)").?;
+
+    // Focus first and bail if it did not take, or the keys land on whatever
+    // was focused before -- silently typing into the wrong field.
+    try std.testing.expect(focus_call < guard);
+    try std.testing.expect(guard < clear);
+    // Empty before typing, so the result is the text asked for rather than
+    // the text appended to a default.
+    try std.testing.expect(clear < keys);
 }

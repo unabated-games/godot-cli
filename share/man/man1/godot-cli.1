@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-10" "godot-cli 0.23.3" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-10" "godot-cli 0.24.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -2024,6 +2024,19 @@ the cursor moves off the node after the release so later frames
 show its normal style. Works under \-\-headless too. A click
 on a node laid out beyond the viewport reaches nothing and
 fails the run rather than passing silently
+.TP
+\fB\-\-type\fR \fIvalue\fR
+Type text into a LineEdit or TextEdit on a frame: <node\-path>@<frame>=<text>,
+e.g. /root/Main/%Email@20=someone@example.com; repeatable.
+The field is focused and emptied, then the text goes in as
+real key events, so text_changed fires the way a validating
+form expects. The value lands the frame after, so click Submit
+at least two frames later
+.TP
+\fB\-\-focus\fR \fIvalue\fR
+Give a Control keyboard focus on a frame: <node\-path>@<frame>;
+repeatable. \-\-type focuses the field it types into, so this
+is for watching a focus ring or a tab order
 .TP
 \fB\-\-keep\-cursor\fR
 Leave the synthetic cursor on the last clicked node instead

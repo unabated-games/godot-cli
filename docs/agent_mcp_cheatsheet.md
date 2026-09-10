@@ -24,7 +24,7 @@ loads every schema up front.
 | `catalog_list` | — | What this project already has to reuse |
 | `catalog_add` | `file`, `id`, `summary` | Register a component so agents find it |
 | `scene_validate` | `file` | Ids, references, property types, signal names |
-| `project_run` | `frames`, `click`, `press` | Run it and look at the frame |
+| `project_run` | `frames`, `click`, `press`, `type` | Run it and look at the frame |
 
 Everything else — renames, reparents, extracts, moves, diffs, the batch runner
 — is a tool too; `tools/list` has all ninety-one.
@@ -59,7 +59,9 @@ Everything else — renames, reparents, extracts, moves, diffs, the batch runner
 ```
 
 ```json
-{"name": "project_run", "arguments": {"frames": 30, "click": ["/root/Main/HUD/Play@20"]}}
+{"name": "project_run", "arguments": {"frames": 40,
+  "type": ["/root/Main/%Email@10=someone@example.com"],
+  "click": ["/root/Main/Box/Submit@20"]}}
 ```
 
 The run returns the last frame as an image alongside the log, so the loop ends

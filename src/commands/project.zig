@@ -140,6 +140,23 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     // The project's own window size is the right default; a fixed one would
     // silently run a 1280x720 project at 640x360.
+    var types: std.ArrayList(godot_run.TypeText) = .empty;
+    for (try inv.getOptionAll(cli.allocator, "type")) |text| {
+        const entry = godot_run.parseTypeText(text) orelse {
+            error_details.record(.{ .field = "type", .value = text, .hint = "write <node-path>@<frame>=<text>, e.g. /root/Main/%Email@10=someone@example.com" });
+            return error.InvalidValue;
+        };
+        try types.append(cli.allocator, entry);
+    }
+    var focuses: std.ArrayList(godot_run.Focus) = .empty;
+    for (try inv.getOptionAll(cli.allocator, "focus")) |text| {
+        const entry = godot_run.parseFocus(text) orelse {
+            error_details.record(.{ .field = "focus", .value = text, .hint = "write <node-path>@<frame>, e.g. /root/Main/%Email@10" });
+            return error.InvalidValue;
+        };
+        try focuses.append(cli.allocator, entry);
+    }
+
     var main_scene: ?[]const u8 = null;
     var project_resolution: ?[]const u8 = null;
     // A frame means one physics step, so a project that ticks at 30 counts
@@ -178,6 +195,8 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .user_args = user_args,
         .presses = presses.items,
         .clicks = clicks.items,
+        .types = types.items,
+        .focuses = focuses.items,
         .keep_cursor = inv.flag("keep-cursor"),
         .main_scene = main_scene,
         .frames_at = frames_at.items,
@@ -1182,6 +1201,8 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
     .{ .long = "press", .kind = .string, .description = "Hold an input action over a frame range, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it", .repeatable = true },
     .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Works under --headless too. A click on a node laid out beyond the viewport reaches nothing and fails the run rather than passing silently", .repeatable = true },
+    .{ .long = "type", .kind = .string, .description = "Type text into a LineEdit or TextEdit on a frame: <node-path>@<frame>=<text>, e.g. /root/Main/%Email@20=someone@example.com; repeatable. The field is focused and emptied, then the text goes in as real key events, so text_changed fires the way a validating form expects. The value lands the frame after, so click Submit at least two frames later", .repeatable = true },
+    .{ .long = "focus", .kind = .string, .description = "Give a Control keyboard focus on a frame: <node-path>@<frame>; repeatable. --type focuses the field it types into, so this is for watching a focus ring or a tab order", .repeatable = true },
     .{ .long = "keep-cursor", .kind = .flag, .description = "Leave the synthetic cursor on the last clicked node instead of moving it off, so the frame shows that node's hover style; only the in-game cursor moves either way, never the desktop pointer" },
     .{ .long = "frame-at", .kind = .integer, .description = "Also keep this frame (numbered from 0) and return it as frame_at; repeatable, so --frame-at 0 --frame-at 30 keeps a before-and-after pair as well as the last frame", .repeatable = true },
     .{ .long = "log-lines", .kind = .integer, .description = "Lines of the log to return inline as log_tail", .default_value = "40" },

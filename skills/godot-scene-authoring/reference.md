@@ -125,6 +125,21 @@ Example: `$GODOT_CLI_HOME/examples/batch/apply_validate.json`
 | `invalid_patch` naming a field | The op does not take that field; the hint lists the ones it does |
 | Click verified nothing | A click that cannot reach its target fails the run, naming the node's position and the viewport. `--click` works under `--headless`; only the frame is missing there |
 
+## Driving a run
+
+```bash
+godot-cli project run --project-root . --frames 40 \
+  --type '/root/Main/%Email@10=someone@example.com' \
+  --type '/root/Main/%Password@14=hunter2' \
+  --click /root/Main/Box/Submit@20 --json
+```
+
+`--type <path>@<frame>=<text>` focuses and empties a LineEdit or TextEdit, then
+types with real key events so `text_changed` fires. `--focus <path>@<frame>`
+moves focus without typing. `--click <path>@<frame>` clicks; `--press
+<action>@<from>..<to>` holds an input action. Keys land the frame after they
+are sent, so leave a gap before clicking Submit.
+
 ## JSON output
 
 Every command supports `--json`. Response envelope:
