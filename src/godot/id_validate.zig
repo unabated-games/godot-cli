@@ -37,6 +37,13 @@ pub const Issue = struct {
 
 pub const Report = struct {
     issues: std.ArrayList(Issue),
+    /// Node and resource sections whose class the table knows, and so were
+    /// type-checked.
+    classes_checked: usize = 0,
+    /// Class names the table does not carry, in file order without repeats.
+    /// Their sections were skipped -- a clean result says nothing about them,
+    /// and until this was reported there was no way to tell from the outside.
+    unknown_classes: std.ArrayList([]const u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) Report {
         _ = allocator;
@@ -49,6 +56,19 @@ pub const Report = struct {
             allocator.free(issue.message);
         }
         self.issues.deinit(allocator);
+        for (self.unknown_classes.items) |name| allocator.free(name);
+        self.unknown_classes.deinit(allocator);
+    }
+
+    fn noteClass(self: *Report, allocator: std.mem.Allocator, name: []const u8, known: bool) !void {
+        if (known) {
+            self.classes_checked += 1;
+            return;
+        }
+        for (self.unknown_classes.items) |seen| {
+            if (std.mem.eql(u8, seen, name)) return;
+        }
+        try self.unknown_classes.append(allocator, try allocator.dupe(u8, name));
     }
 
     pub fn add(
@@ -684,7 +704,9 @@ fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Documen
             std.mem.eql(u8, section.header.name, "resource");
         if (!is_node and !is_resource) continue;
         const node_type = section.header.getString("type") orelse continue;
-        if (class_info.findClass(node_type) == null) continue;
+        const known = class_info.findClass(node_type) != null;
+        try report.noteClass(allocator, node_type, known);
+        if (!known) continue;
 
         // A name the class does not declare is only wrong when nothing else
         // could have declared it. A script adds its @export vars, an instanced
@@ -934,4 +956,33 @@ test "a property the class does not have is reported, unless something else coul
     // class properties, a script brings its own @export vars, and an
     // instanced node carries the instanced scene's.
     try std.testing.expectEqual(@as(usize, 1), unknown);
+}
+
+test "a clean report says how wide it was" {
+    const allocator = std.testing.allocator;
+    // A class the table does not carry is skipped rather than misjudged, so
+    // "0 issues" reads exactly like approval of it. Another session had to
+    // enumerate its node types by hand to know whether "all scenes validate"
+    // meant anything.
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Main" type="Control"]
+        \\
+        \\[node name="Box" type="VBoxContainer" parent="."]
+        \\
+        \\[node name="One" type="TotallyNotAGodotClass" parent="Box"]
+        \\
+        \\[node name="Two" type="TotallyNotAGodotClass" parent="Box"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var report = try validateDocument(allocator, &doc, .{});
+    defer report.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), report.classes_checked);
+    // Named once however many sections use it.
+    try std.testing.expectEqual(@as(usize, 1), report.unknown_classes.items.len);
+    try std.testing.expectEqualStrings("TotallyNotAGodotClass", report.unknown_classes.items[0]);
 }

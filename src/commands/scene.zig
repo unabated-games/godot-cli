@@ -7,6 +7,7 @@ const scene_extract = @import("../godot/scene_extract.zig");
 const catalog_add = @import("../godot/catalog_add.zig");
 const catalog_cmd = @import("catalog.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
+const class_info = @import("../godot/class_info.zig");
 const text_format = @import("../godot/text_format/root.zig");
 const id_validate = @import("../godot/id_validate.zig");
 const id_session = @import("../godot/id_session.zig");
@@ -242,6 +243,15 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind_for_comman
     try data.put(cli.allocator, "kind", .{ .string = kind });
     try data.put(cli.allocator, "issues", .{ .array = issues });
     try data.put(cli.allocator, "error_count", .{ .integer = @intCast(countErrors(&report)) });
+    // A clean result is only as wide as what was checked. A class the table
+    // does not carry is skipped, not misjudged, so silence about it reads
+    // exactly like approval of it.
+    try data.put(cli.allocator, "classes_checked", .{ .integer = @intCast(report.classes_checked) });
+    var unknown_json = std.json.Array.init(cli.allocator);
+    for (report.unknown_classes.items) |name| {
+        try unknown_json.append(.{ .string = try cli.allocator.dupe(u8, name) });
+    }
+    try data.put(cli.allocator, "unknown_classes", .{ .array = unknown_json });
 
     const summary = try std.fmt.allocPrint(
         cli.allocator,
@@ -252,6 +262,15 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind_for_comman
 
     var messages: std.ArrayList([]const u8) = .empty;
     if (setup.cache_note) |note| try messages.append(cli.allocator, note);
+    if (report.unknown_classes.items.len != 0) {
+        const names = try std.mem.join(cli.allocator, ", ", report.unknown_classes.items);
+        const note = try std.fmt.allocPrint(
+            cli.allocator,
+            "property types and signal names were not checked on {s}: not in the class table, which is generated from Godot {s}. A class from a script's class_name, or an addon, is expected here; a core class is not, and means the table is behind your engine",
+            .{ names, class_info.godot_version },
+        );
+        try messages.append(cli.allocator, note);
+    }
     const message_slice = try messages.toOwnedSlice(cli.allocator);
 
     if (id_validate.hasErrors(&report)) {

@@ -17,7 +17,12 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ### Added
 
+- **`scene validate` reports how wide its result is**: `classes_checked`, and `unknown_classes` for every type the class table does not carry, with a message naming them. A class the table lacks is skipped rather than misjudged, so a clean result read exactly like approval of it — another session had to enumerate its node types by hand to find out whether "all scenes validate" meant anything for the scenes it had. A script's `class_name` or an addon class is expected in that list; a core class means the table is behind the engine.
 - **CI reports drift between the committed class table and the engine it tests against**, from `tools/check_class_table.sh`. `src/godot/class_table.zig` carries a `godot_version` and nothing read it, so the table backing every `scene validate` property and signal check could fall behind the engine in silence. It has: against Godot 4.8-dev4 the engine's own class reference carries classes the table does not. Reported, never blocking — regenerating changes what `scene validate` enforces, so it stays a deliberate change. Prompted by another session finding the same shape in their own repo: a content-hash pin nothing verified.
+
+### Fixed
+
+- **An intermittent test-suite failure, roughly one run in twenty, that had gone unexplained for two days.** One CLI smoke test took its temp path from `mktemp /tmp/godot_cli_scene_XXXXXX.tscn`. BSD `mktemp` does not substitute when a suffix follows the `X`s: it returns that literal path, and a second concurrent call fails with `File exists`. The two test binaries run in parallel, so the step raced with itself and passed on every retry. It uses a temp directory now.
 
 ## [0.24.0] — 2026-09-10
 
