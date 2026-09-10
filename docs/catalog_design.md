@@ -203,7 +203,10 @@ Optional project index (e.g. `.godot/godot_cli_catalog_index.json`) may cache sc
 3. GDScript heuristic parse on root script (or `export_root_script` if set)
 4. Merge: script-derived exports/signals as base; manifest `signal_docs` / `function_docs` add or override **documentation** fields
 
-Output includes `exports_source: "gdscript_heuristic"` and validation messages.
+Output includes `exports_source` (`gdscript_heuristic` when a script was read,
+`none` when there is none to read) and validation messages.
+`script_parse_complete` is false only when a script is named and cannot be
+read; the heuristic parser has no partial-success mode.
 
 ### Planned commands
 

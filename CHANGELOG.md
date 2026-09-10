@@ -15,6 +15,13 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.23.1] — 2026-09-10
+
+### Fixed
+
+- **A component with no script read as a component whose script could not be parsed.** `catalog show` reported `exports_source: "gdscript_heuristic"` and `script_parse_complete: false` for a scene carrying no script at all — the same answer a script the parser choked on would give — so a correct empty export list was indistinguishable from a failure to read one. There are three states now: `gdscript_heuristic`/`true` (a script was read), `none`/`true` (there is no script, so nothing to export), and `none`/`false` (a script is named and could not be read, which is the only one worth acting on). Found by another agent's session reasoning around it correctly on a bare `LinkButton` entry.
+- `script_parse_complete` meant "a script interface was obtained", not what its name and the documentation said. The heuristic parser's own `parse_complete` was hardcoded true and never read, so no value of the field ever indicated a partial parse; the dead flag is gone and the documented meaning now matches the behaviour.
+
 ## [0.23.0] — 2026-09-10
 
 ### Added

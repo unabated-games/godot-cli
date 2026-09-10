@@ -32,7 +32,6 @@ pub const SignalInfo = struct {
 pub const ScriptInterface = struct {
     exports: []ExportInfo = &.{},
     signals: []SignalInfo = &.{},
-    parse_complete: bool = true,
 
     pub fn deinit(self: *ScriptInterface, allocator: std.mem.Allocator) void {
         for (self.exports) |*item| item.deinit(allocator);
@@ -130,7 +129,6 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
     return .{
         .exports = try exports.toOwnedSlice(allocator),
         .signals = try signals.toOwnedSlice(allocator),
-        .parse_complete = true,
     };
 }
 

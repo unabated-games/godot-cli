@@ -145,7 +145,15 @@ godot-cli catalog show ui/health_bar --project-root . --json
 
 `doc_source` says where the meaning came from: `manifest` when someone wrote it, `gdscript_heuristic` when nobody has and the row is still just a name and a type.
 
-If `script_parse_complete` is false, the GDScript parser hit something it could not read and the export list may be short. Point `--export-root-script` at a different script, or write the exports into the manifest yourself.
+Two fields say how much to trust an empty export list:
+
+| `exports_source` | `script_parse_complete` | What it means |
+|------------------|-------------------------|---------------|
+| `gdscript_heuristic` | `true` | A script was read; the exports are what it declares |
+| `none` | `true` | There is no script on this component, so there is nothing to export |
+| `none` | `false` | A script is named and could not be read — a wrong `export_root_script`, or a file that has moved |
+
+Only the last is a problem. A component with no script reporting an empty export list is correct, and used to be indistinguishable from a failure to read one.
 
 ## 4. Export the digest the harness reads
 

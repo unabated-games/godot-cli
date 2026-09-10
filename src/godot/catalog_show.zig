@@ -209,6 +209,13 @@ pub fn showManifestEntry(
         allocator.free(signals);
     }
 
+    // Three states that used to be two. A component with no script at all
+    // reported `gdscript_heuristic` and `script_parse_complete: false`, which
+    // is what a script the parser choked on would say -- so an accurate empty
+    // export list was indistinguishable from a failure to read one. The
+    // parser has no partial-success mode, so the only real failure is a
+    // script that is named and cannot be read.
+    const script_named = script_to_parse.len > 0;
     const script_parsed = script_iface != null;
     if (script_iface) |*iface| {
         exports = try mergeExports(allocator, iface.exports, owned_entry.export_docs);
@@ -224,11 +231,23 @@ pub fn showManifestEntry(
         .source = try allocator.dupe(u8, "project"),
         .manifest = owned_entry,
         .scene = scene_ctx,
-        .exports_source = try allocator.dupe(u8, "gdscript_heuristic"),
+        .exports_source = try allocator.dupe(u8, exportsSource(script_parsed)),
         .exports = exports,
         .signals = signals,
-        .script_parse_complete = script_parsed,
+        .script_parse_complete = parseComplete(script_named, script_parsed),
     };
+}
+
+/// Where the export list came from: a script that was read, or nothing.
+fn exportsSource(script_parsed: bool) []const u8 {
+    return if (script_parsed) "gdscript_heuristic" else "none";
+}
+
+/// False only when a script is named and could not be read. A component with
+/// no script has nothing to lose, and the heuristic parser has no
+/// partial-success mode, so those are both complete.
+fn parseComplete(script_named: bool, script_parsed: bool) bool {
+    return script_parsed or !script_named;
 }
 
 fn showBuiltin(allocator: std.mem.Allocator, builtin: catalog_builtins.BuiltinEntry) ShowError!ShowResult {
@@ -540,4 +559,21 @@ test "show builtin entry" {
     try std.testing.expectEqualStrings("builtin", shown.source);
     try std.testing.expect(shown.builtin != null);
     try std.testing.expect(shown.signals.len >= 1);
+}
+
+test "a component with no script is not reported as a failed parse" {
+    // ui/text_link in another project's catalogue: a bare LinkButton carrying
+    // a theme variation. It reported exports_source "gdscript_heuristic" and
+    // script_parse_complete false -- exactly what a script the parser could
+    // not read would say -- so a correct empty export list was
+    // indistinguishable from a missing one.
+    try std.testing.expectEqualStrings("none", exportsSource(false));
+    try std.testing.expectEqualStrings("gdscript_heuristic", exportsSource(true));
+
+    // No script named: nothing to read, so nothing was lost.
+    try std.testing.expect(parseComplete(false, false));
+    // Named and read.
+    try std.testing.expect(parseComplete(true, true));
+    // Named and unreadable: the one case worth reporting.
+    try std.testing.expect(!parseComplete(true, false));
 }
