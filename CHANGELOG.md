@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **CI reports drift between the committed class table and the engine it tests against**, from `tools/check_class_table.sh`. `src/godot/class_table.zig` carries a `godot_version` and nothing read it, so the table backing every `scene validate` property and signal check could fall behind the engine in silence. It has: against Godot 4.8-dev4 the engine's own class reference carries classes the table does not. Reported, never blocking — regenerating changes what `scene validate` enforces, so it stays a deliberate change. Prompted by another session finding the same shape in their own repo: a content-hash pin nothing verified.
+
 ## [0.24.0] — 2026-09-10
 
 ### Fixed

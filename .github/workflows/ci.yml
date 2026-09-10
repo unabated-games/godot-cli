@@ -173,3 +173,14 @@ jobs:
           asset="Godot_v${{ matrix.godot }}_linux.x86_64"
           "godot-bin/${asset}" --version
           zig build test-godot -Dgodot="$PWD/godot-bin/${asset}"
+
+      # src/godot/class_table.zig carries a godot_version that, until this
+      # step, nothing read: the table could fall behind the engine while
+      # scene validate went on checking against it. Reported, never blocking
+      # -- regenerating changes what validate enforces, which is a deliberate
+      # change rather than something CI should demand.
+      - name: Class table against this engine
+        continue-on-error: true
+        run: |
+          asset="Godot_v${{ matrix.godot }}_linux.x86_64"
+          GODOT="$PWD/godot-bin/${asset}" tools/check_class_table.sh

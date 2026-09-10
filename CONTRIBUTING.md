@@ -43,6 +43,11 @@ newer engine like this, and commit the result:
 tools/gen_class_table.py ~/src/godot > src/godot/class_table.zig && zig fmt src/godot/class_table.zig
 ```
 
+CI reports drift between that table and the engine it tests against, from
+`tools/check_class_table.sh`, without failing on it: regenerating changes what
+`scene validate` enforces, so it is a deliberate change. The table carries a
+`godot_version`, and before that script existed nothing read it.
+
 The Godot round-trip suite needs a Godot 4.7 install:
 
 ```bash
