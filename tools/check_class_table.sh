@@ -38,9 +38,18 @@ if diff <(strip "$work/regen.zig") <(strip "$committed") > "$work/table.diff"; t
   exit 0
 fi
 
-added=$(grep -c '^< ' "$work/table.diff" || true)
-removed=$(grep -c '^> ' "$work/table.diff" || true)
-echo "class table differs from this engine: $added line(s) only in the engine, $removed only in the table"
-echo "regenerate deliberately with:"
+only_engine=$(grep -c '^< ' "$work/table.diff" || true)
+only_table=$(grep -c '^> ' "$work/table.diff" || true)
+
+# Direction matters, and only one of them means the table needs anything.
+# Against an engine older than the table, lines only in the table are the
+# classes that engine has not got yet -- expected, and not drift.
+echo "$only_engine line(s) in this engine's reference are not in the table"
+echo "$only_table line(s) in the table are not in this engine's reference"
+if [ "$only_engine" -eq 0 ]; then
+  echo "nothing here is missing from the table; the rest is this engine being older than it"
+  exit 0
+fi
+echo "the table is behind this engine. Regenerate deliberately with:"
 echo "  tools/gen_class_table.py <godot source checkout> > src/godot/class_table.zig && zig fmt src/godot/class_table.zig"
-sed -n '1,40p' "$work/table.diff"
+grep '^< ' "$work/table.diff" | head -20
