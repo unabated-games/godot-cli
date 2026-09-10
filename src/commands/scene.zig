@@ -34,6 +34,9 @@ const ValidateSetup = struct {
     owned_project_name: ?[]u8 = null,
     owned_resource_path: ?[]u8 = null,
     owned_cache: ?uid_cache.Cache = null,
+    /// Set when the project has a UID cache that could not be read, so the
+    /// result can say which check was skipped instead of leaving it silent.
+    cache_note: ?[]const u8 = null,
 
     pub fn deinit(self: *ValidateSetup, allocator: std.mem.Allocator) void {
         if (self.owned_project_name) |name| allocator.free(name);
@@ -49,7 +52,7 @@ const ValidateSetup = struct {
         setup.ctx.io = cli.io;
         setup.ctx.file_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited) catch null;
 
-        if (try loadCacheOptional(cli, inv)) |loaded| {
+        if (try loadCacheOptional(cli, inv, &setup.cache_note)) |loaded| {
             setup.owned_cache = loaded;
             setup.ctx.cache = &setup.owned_cache.?;
         }
@@ -177,13 +180,31 @@ fn writeWithPrepare(cli: *const app_mod.App, inv: *const spec.Invocation, output
     }
 }
 
-fn loadCacheOptional(cli: *const app_mod.App, inv: *const spec.Invocation) !?uid_cache.Cache {
+/// The project's UID cache, when it can be read.
+///
+/// A cache that will not parse used to fail the whole command with the bare
+/// word `Corrupt` -- on a `scene validate <file>` call, which reads as the
+/// scene being corrupt. It is not: the cache is Godot's, it belongs to the
+/// project rather than the file, and every other check works without it. So
+/// an unreadable one costs the `stale_uid_for_path` check and says so.
+fn loadCacheOptional(
+    cli: *const app_mod.App,
+    inv: *const spec.Invocation,
+    note: *?[]const u8,
+) !?uid_cache.Cache {
     const root = projectRootFrom(inv) orelse return null;
     const cache_path = try uid_cache.defaultCachePath(cli.allocator, root);
     defer cli.allocator.free(cache_path);
     return uid_cache.loadFromFile(cli.allocator, cli.io, cache_path) catch |err| switch (err) {
         error.Io => null,
-        else => return err,
+        else => {
+            note.* = try std.fmt.allocPrint(
+                cli.allocator,
+                "{s} could not be read ({s}), so uid:// references were not checked against it; everything else was. Running the project once, or opening it in the editor, rewrites the cache",
+                .{ cache_path, @errorName(err) },
+            );
+            return null;
+        },
     };
 }
 
@@ -229,17 +250,21 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind_for_comman
     );
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
+    var messages: std.ArrayList([]const u8) = .empty;
+    if (setup.cache_note) |note| try messages.append(cli.allocator, note);
+    const message_slice = try messages.toOwnedSlice(cli.allocator);
+
     if (id_validate.hasErrors(&report)) {
         return .{
             .data = .{ .object = data },
-            .messages = &.{},
+            .messages = message_slice,
             .exit_code = .failure,
         };
     }
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{},
+        .messages = message_slice,
     };
 }
 

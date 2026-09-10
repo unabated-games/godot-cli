@@ -267,6 +267,24 @@ fn noteUnknownOption(
         }
     }
 
+    // A parent command has no options of its own, so listing them produced
+    // "this command takes " and stopped. The real mistake there is options
+    // meant for a subcommand, so name those instead.
+    if (command.options.len == 0) {
+        var subcommands: std.ArrayList(u8) = .empty;
+        for (command.children, 0..) |child, i| {
+            subcommands.appendSlice(allocator, if (i == 0) "" else ", ") catch return;
+            subcommands.appendSlice(allocator, child.name) catch return;
+        }
+        const hint = if (command.children.len != 0)
+            std.fmt.allocPrint(allocator, "this command takes no options of its own; its subcommands do: {s}", .{subcommands.items}) catch return
+        else
+            allocator.dupe(u8, "this command takes no options") catch return;
+        const joined_parent = std.mem.join(allocator, " ", path) catch return;
+        error_details.record(.{ .command = joined_parent, .field = bare, .value = arg, .hint = hint });
+        return;
+    }
+
     var accepted: std.ArrayList(u8) = .empty;
     for (command.options, 0..) |opt, i| {
         accepted.appendSlice(allocator, if (i == 0) "--" else ", --") catch return;
@@ -542,4 +560,24 @@ test "the command path survives an error that happens before the invocation does
     const with_flags = commandPathForError(&commands.root, &.{ "--json", "scene", "validate", "a.tscn" }, &buf);
     try std.testing.expectEqual(@as(usize, 2), with_flags.len);
     try std.testing.expectEqualStrings("validate", with_flags[1]);
+}
+
+test "a parent command's unknown option names its subcommands, not an empty list" {
+    const commands = @import("../commands.zig");
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    // `uid cache` has subcommands and no options of its own, so listing its
+    // options produced "this command takes " and stopped there.
+    error_details.clear();
+    try std.testing.expectError(error.UnknownOption, parseArgv(arena, &commands.root, &.{
+        "uid", "cache", "--project-root", ".",
+    }));
+    const details = (try error_details.takeJson(arena)).?;
+    const hint = details.get("hint").?.string;
+    try std.testing.expect(std.mem.indexOf(u8, hint, "no options of its own") != null);
+    try std.testing.expect(std.mem.indexOf(u8, hint, "list") != null);
+    try std.testing.expect(std.mem.endsWith(u8, hint, " ") == false);
+    error_details.clear();
 }

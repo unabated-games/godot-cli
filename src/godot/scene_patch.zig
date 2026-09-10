@@ -685,10 +685,11 @@ fn subIdFromHint(allocator: std.mem.Allocator, res_type: []const u8, hint: []con
     return std.fmt.allocPrint(allocator, "{s}_{s}", .{ res_type, hint });
 }
 
+/// Shared with `scene ext add` and `scene instance add` deliberately: the
+/// count-plus-one bug lived in both, and fixing only the path a report came
+/// through has left the other broken here before.
 fn generatedExtId(allocator: std.mem.Allocator, doc: *const document.Document, seed_path: []const u8) Error![]const u8 {
-    scene_resources.seedResourceIds(seed_path);
-    const index = countExtResources(doc) + 1;
-    return scene_id.formatExtResourceId(allocator, @intCast(index));
+    return scene_resources.generateFreeExtId(allocator, doc, seed_path);
 }
 
 /// The id is seeded from the scene path and the type, so two `sub_add` ops of

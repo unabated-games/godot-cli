@@ -15,6 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.23.2] — 2026-09-10
+
+### Fixed
+
+- **A gap in the ext_resource numbering closed a scene to further additions.** The generated id took the *count* of ext_resources plus one, which is only free while the numbering is dense. Remove `2_abc12` from a file holding `1..4` and every later `scene ext add`, `scene instance add`, `assign_ext` and `instance_add` proposed `4_abc12` — already taken — and failed with `DuplicateResourceId`. Neither `--no-id-session` nor `scene normalize` offered a way back. The id is now allocated past the highest index present and stepped forward until free, in one function both the command and the patch paths call. Reported by another agent's session, which had to abandon a scene node and instantiate from code instead — the exact shape this tool exists to avoid.
+- **`scene validate` reported `Corrupt` on scenes that were not corrupt.** The word came from the project's `.godot/uid_cache.bin`, not the file being validated: an unreadable cache failed the whole command with `{"kind": "command_failed", "message": "Corrupt"}` on a `scene validate <file>` call, while `scene describe` and Godot itself read the same scene without complaint. The cache belongs to the project and feeds one check, so an unreadable one now costs `stale_uid_for_path` and says so in `messages`, naming the cache path and how to rebuild it. `catalog validate` already tolerated this; the two paths disagreed.
+- An unknown option on a command that has subcommands and no options of its own answered `this command takes ` and stopped. It names the subcommands now. Introduced in 0.22.0 by the message that fixed the previous version of this problem.
+
+### Notes
+
+- `scene normalize` still does not renumber ids to close a gap, and should not. Godot renumbers only as a side effect of rebuilding a file from a live scene tree, where it also discards every resource nothing references — checked against 4.8-dev4, which dropped two unreferenced `ext_resource` lines and renumbered the third. Reproducing half of that would write a file Godot would not have written; reproducing all of it would silently delete resources. Allocating past the highest index removes the need.
+
 ## [0.23.1] — 2026-09-10
 
 ### Fixed

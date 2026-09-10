@@ -204,11 +204,47 @@ pub fn addExtResource(
     res_type: []const u8,
     path: []const u8,
 ) Error!AddExtResult {
-    seedResourceIds(seed_path);
-    const ext_index = countSections(doc, "ext_resource") + 1;
-    const generated_id = try scene_id.formatExtResourceId(allocator, @intCast(ext_index));
+    const generated_id = try generateFreeExtId(allocator, doc, seed_path);
     defer allocator.free(generated_id);
     return addExtResourceWithId(allocator, doc, res_type, path, generated_id, null);
+}
+
+/// A generated ext_resource id that nothing in the document holds yet.
+///
+/// The index used to be the number of ext_resources plus one, which is only
+/// free while the numbering has no gaps. Remove `2_abc12` from a file holding
+/// `1..4` and every later add proposes `4_abc12`, which is taken -- the file
+/// becomes closed to further ext_resources through the tool, with `scene
+/// normalize` and `--no-id-session` no help. Counting from the highest index
+/// present, then stepping past anything still taken, keeps the editor's
+/// numbering without depending on it being dense.
+pub fn generateFreeExtId(
+    allocator: std.mem.Allocator,
+    doc: *const document.Document,
+    seed_path: []const u8,
+) Error![]u8 {
+    seedResourceIds(seed_path);
+    var index: u32 = highestExtIndex(doc) + 1;
+    while (index < 100_000) : (index += 1) {
+        const candidate = try scene_id.formatExtResourceId(allocator, index);
+        if (findResourceSectionIndex(doc, "ext_resource", candidate) == null) return candidate;
+        allocator.free(candidate);
+    }
+    return error.DuplicateResourceId;
+}
+
+/// The largest `N` across `N_suffix` ext_resource ids, or 0 when there are
+/// none. An id Godot did not shape this way contributes nothing.
+fn highestExtIndex(doc: *const document.Document) u32 {
+    var highest: u32 = 0;
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const id = section.header.getString("id") orelse continue;
+        const underscore = std.mem.indexOfScalar(u8, id, '_') orelse id.len;
+        const index = std.fmt.parseInt(u32, id[0..underscore], 10) catch continue;
+        if (index > highest) highest = index;
+    }
+    return highest;
 }
 
 pub fn addExtResourceWithId(
@@ -566,4 +602,54 @@ test "remove ext resource when unused" {
     try std.testing.expectEqual(@as(usize, 2), doc.sections.items.len);
     // Godot never writes load_steps=1, so the field goes with the last resource.
     try std.testing.expect(doc.sections.items[0].header.getInteger("load_steps") == null);
+}
+
+test "an ext_resource id is allocated past the highest index, not the count" {
+    const allocator = std.testing.allocator;
+    // 1, 3, 4: what a file looks like after `scene ext remove` takes the
+    // second of four. Counting gave 3 + 1 = 4, which is taken, so every
+    // later add failed with DuplicateResourceId and the file was closed to
+    // ext_resources through the tool. Another session hit this and worked
+    // around it by instantiating from code instead.
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="Script" path="res://a.gd" id="1_abc12"]
+        \\
+        \\[ext_resource type="Script" path="res://c.gd" id="3_abc12"]
+        \\
+        \\[ext_resource type="Script" path="res://d.gd" id="4_abc12"]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    try std.testing.expectEqual(@as(u32, 4), highestExtIndex(&doc));
+
+    const id = try generateFreeExtId(allocator, &doc, "res://m.tscn");
+    defer allocator.free(id);
+    const underscore = std.mem.indexOfScalar(u8, id, '_').?;
+    try std.testing.expectEqualStrings("5", id[0..underscore]);
+
+    // And the add itself goes through, which is what the report was about.
+    var result = try addExtResource(allocator, &doc, "res://m.tscn", "Script", "res://e.gd");
+    defer result.deinit(allocator);
+}
+
+test "a file with no ext_resources still starts at 1" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    try std.testing.expectEqual(@as(u32, 0), highestExtIndex(&doc));
+    const id = try generateFreeExtId(allocator, &doc, "res://m.tscn");
+    defer allocator.free(id);
+    try std.testing.expectEqualStrings("1", id[0..std.mem.indexOfScalar(u8, id, '_').?]);
 }
