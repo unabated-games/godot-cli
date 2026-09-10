@@ -15,6 +15,17 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-09-11
+
+### Fixed
+
+- **`scene validate` called every `Packed*Array` property a type mismatch, including on files the editor wrote.** `Line2D.points`, `Polygon2D.polygon`, `Gradient.offsets` and `colors` — anything typed `PackedVector2Array`, `PackedFloat32Array` and the rest. Every one of those is documented as a class, so the generated table gave them the kinds of a resource reference and validate demanded an `ExtResource(...)` where Godot writes `PackedVector2Array(0, 0, 10, 10)`. A repo fixture saved by Godot itself had been failing validation this whole time. Found by sweeping 98 scenes before shipping the table below, which is the whole reason for sweeping.
+- **The class table was missing 195 classes** — every class that lives in an engine module or platform rather than `doc/classes`: the tilemap family, `GridMap`, the CSG nodes, the audio streams. The generator only ever scanned `doc/classes`, so `scene validate` skipped all of them in silence. It scans `modules/*/doc_classes` and `platform/*/doc_classes` now. Godot moved the tilemap classes into a module for 4.8, so regenerating without this would have *dropped* `TileMap`, `TileMapLayer`, `TileSet` and `TileSetAtlasSource` from the table.
+
+### Changed
+
+- The class table is regenerated against Godot 4.8: 520 classes to 715. Strictly additive — no class removed, no property rule made stricter, so nothing that passed before can fail now except the two fixture files that are meant to.
+
 ### Added
 
 - **`scene validate` reports how wide its result is**: `classes_checked`, and `unknown_classes` for every type the class table does not carry, with a message naming them. A class the table lacks is skipped rather than misjudged, so a clean result read exactly like approval of it — another session had to enumerate its node types by hand to find out whether "all scenes validate" meant anything for the scenes it had. A script's `class_name` or an addon class is expected in that list; a core class means the table is behind the engine.

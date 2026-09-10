@@ -986,3 +986,48 @@ test "a clean report says how wide it was" {
     try std.testing.expectEqual(@as(usize, 1), report.unknown_classes.items.len);
     try std.testing.expectEqualStrings("TotallyNotAGodotClass", report.unknown_classes.items[0]);
 }
+
+test "a Packed array value is not a missing resource reference" {
+    const allocator = std.testing.allocator;
+    // Every Packed*Array is documented as a class, so the generated table gave
+    // them the kinds of a resource reference and validate called
+    // `points = PackedVector2Array(0, 0, 10, 10)` a type mismatch -- on files
+    // the editor itself wrote. A corpus sweep found it on a Godot-saved
+    // fixture committed to this repo.
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Main" type="Node2D"]
+        \\
+        \\[node name="Line" type="Line2D" parent="."]
+        \\points = PackedVector2Array(0, 0, 10, 10)
+        \\
+        \\[sub_resource type="Gradient" id="Gradient_a"]
+        \\offsets = PackedFloat32Array(0, 1)
+        \\colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var report = try validateDocument(allocator, &doc, .{});
+    defer report.deinit(allocator);
+
+    for (report.issues.items) |issue| {
+        try std.testing.expect(!std.mem.eql(u8, issue.kind, "property_type_mismatch"));
+    }
+
+    // And the classes carrying them are known, so this is a real check
+    // passing rather than a skipped one.
+    try std.testing.expectEqual(@as(usize, 0), report.unknown_classes.items.len);
+    try std.testing.expect(report.classes_checked >= 3);
+}
+
+test "classes that live in engine modules are in the table" {
+    // doc/classes is not the whole class reference: modules and platforms
+    // carry their own, and the generator scanned only the first. TileMapLayer
+    // moved into modules/tilemap in 4.8, so regenerating would have dropped
+    // it along with 270-odd others that had never been there.
+    try std.testing.expect(class_info.findClass("TileMapLayer") != null);
+    try std.testing.expect(class_info.findClass("GridMap") != null);
+    try std.testing.expect(class_info.findClass("CSGBox3D") != null);
+}

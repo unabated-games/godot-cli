@@ -53,6 +53,22 @@ SCALAR_KINDS = {
     "Signal": ("signal",),
     "Array": ("array",),
     "Dictionary": ("dictionary",),
+    # Every Packed*Array is documented as a class, so without these they fell
+    # through to OBJECT_KINDS and validate demanded a resource reference where
+    # the editor writes `PackedVector2Array(0, 0, 10, 10)`. Line2D.points,
+    # Polygon2D.polygon and Gradient.offsets were errors on files Godot itself
+    # saved. The parser reports one kind for all of them and carries the exact
+    # type separately, so this checks the shape and not which packed type.
+    "PackedByteArray": ("packed_array",),
+    "PackedInt32Array": ("packed_array",),
+    "PackedInt64Array": ("packed_array",),
+    "PackedFloat32Array": ("packed_array",),
+    "PackedFloat64Array": ("packed_array",),
+    "PackedStringArray": ("packed_array",),
+    "PackedVector2Array": ("packed_array",),
+    "PackedVector3Array": ("packed_array",),
+    "PackedVector4Array": ("packed_array",),
+    "PackedColorArray": ("packed_array",),
 }
 
 # A property whose type is a class takes a resource reference or null.
@@ -71,8 +87,18 @@ def main():
     if not os.path.isdir(class_dir):
         sys.exit(f"no class reference at {class_dir}")
 
+    # Modules and platforms carry their own doc_classes, and they are part of
+    # the same class reference: CSG, GridMap, the audio streams, and since
+    # 4.8 the whole tilemap family live there. Scanning only doc/classes left
+    # every one of them out of the table, so `scene validate` skipped them in
+    # silence -- and regenerating after tilemap moved would have dropped four
+    # classes that had been there.
+    paths = sorted(glob.glob(os.path.join(class_dir, "*.xml")))
+    for extra in ("modules", "platform"):
+        paths += sorted(glob.glob(os.path.join(root, extra, "*", "doc_classes", "*.xml")))
+
     classes = {}
-    for path in sorted(glob.glob(os.path.join(class_dir, "*.xml"))):
+    for path in paths:
         tree = ET.parse(path)
         node = tree.getroot()
         if node.tag != "class":
