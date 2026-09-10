@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-09" "godot-cli 0.22.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-09-10" "godot-cli 0.23.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -1778,8 +1778,26 @@ Comma\-separated tags
 Document a signal the root script declares: <signal>=<what
 it means>; repeatable, and fills the row catalog add scaffolds
 .TP
+\fB\-\-export\-doc\fR \fIvalue\fR
+Document an @export the root script declares: <property>=<what
+setting it does>; repeatable, and fills the row catalog add
+scaffolds
+.TP
+\fB\-\-function\-doc\fR \fIvalue\fR
+Document a method callers are meant to use: <function>=<what
+it does>; repeatable. Not scaffolded, since the script parse
+reads exports and signals but not functions
+.TP
 \fB\-\-related\-ids\fR \fIvalue\fR
 Comma\-separated related catalog ids
+.TP
+\fB\-\-prefer\-over\-ids\fR \fIvalue\fR
+Comma\-separated catalog ids this component should be chosen
+over
+.TP
+\fB\-\-export\-root\-script\fR \fIvalue\fR
+res:// script to read exports and signals from, when they are
+not on the root node's own script
 .TP
 \fB\-\-update\fR
 Update an existing manifest, keeping prose already written

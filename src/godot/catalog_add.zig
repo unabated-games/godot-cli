@@ -43,7 +43,21 @@ pub const Options = struct {
     /// Documentation for a signal the root script declares, so an entry
     /// written during a refactor is as complete as one written deliberately.
     signal_docs: []const SignalDoc = &.{},
+    /// Documentation for an `@export` the root script declares. Exports are
+    /// scaffolded the way signals are, so `catalog add` leaves a row per
+    /// export for whoever knows what it means.
+    export_docs: []const SignalDoc = &.{},
+    /// Documentation for a method callers are meant to use. Not scaffolded:
+    /// the GDScript parse reads exports and signals, not functions, so a row
+    /// exists only where one was given.
+    function_docs: []const SignalDoc = &.{},
     related_ids: []const []const u8 = &.{},
+    /// Ids this component should be chosen over, for `catalog export` and the
+    /// unresolved-reference check.
+    prefer_over_ids: []const []const u8 = &.{},
+    /// Script to read exports and signals from, when they are not on the
+    /// root node's own script.
+    export_root_script: ?[]const u8 = null,
     /// Update an existing manifest in place instead of refusing to overwrite.
     update: bool = false,
     /// Explicit output path; defaults to `<scene dir>/<scene name>.manifest.json`.
@@ -58,6 +72,7 @@ pub const Result = struct {
     scene: []const u8,
     scene_uid: []const u8,
     signals_scaffolded: usize = 0,
+    exports_scaffolded: usize = 0,
     updated: bool = false,
     json: []const u8,
 
@@ -104,6 +119,7 @@ const ExistingProse = struct {
     prefer_over_ids: []const []const u8 = &.{},
     export_root_script: []const u8 = "",
     signals: []catalog_scan.DocRow = &.{},
+    exports: []catalog_scan.DocRow = &.{},
     functions: []catalog_scan.DocRow = &.{},
 
     fn deinit(self: *ExistingProse, allocator: std.mem.Allocator) void {
@@ -120,6 +136,8 @@ const ExistingProse = struct {
         allocator.free(self.export_root_script);
         for (self.signals) |*row| row.deinit(allocator);
         allocator.free(self.signals);
+        for (self.exports) |*row| row.deinit(allocator);
+        allocator.free(self.exports);
         for (self.functions) |*row| row.deinit(allocator);
         allocator.free(self.functions);
     }
@@ -191,12 +209,29 @@ pub fn addManifest(
     const scene_uid = try readSceneHeaderUid(allocator, io, scene_fs_path);
     errdefer allocator.free(scene_uid);
 
-    const signals = try scaffoldSignals(allocator, io, project_root, options.scene, prose.signals, options.signal_docs);
+    const script_for_iface = options.export_root_script orelse
+        (if (prose.export_root_script.len > 0) prose.export_root_script else null);
+    const signals = try scaffoldSignals(allocator, io, project_root, options.scene, prose.signals, options.signal_docs, script_for_iface);
     errdefer {
         for (signals) |*row| row.deinit(allocator);
         allocator.free(signals);
     }
     const scaffolded = countBlankDocs(signals);
+
+    // Exports are scaffolded the same way, so an entry written during a
+    // refactor lists what an instancing caller can set without opening the
+    // scene. Functions are not: the GDScript parse does not read them.
+    const exports = try scaffoldExports(allocator, io, project_root, options.scene, prose.exports, options.export_docs, script_for_iface);
+    errdefer {
+        for (exports) |*row| row.deinit(allocator);
+        allocator.free(exports);
+    }
+    const exports_scaffolded = countBlankDocs(exports);
+    const functions = try mergeGivenDocs(allocator, prose.functions, options.function_docs);
+    errdefer {
+        for (functions) |*row| row.deinit(allocator);
+        allocator.free(functions);
+    }
 
     const json = try renderManifest(allocator, .{
         .id = id,
@@ -208,10 +243,11 @@ pub fn addManifest(
         .when_not_to_use = options.when_not_to_use orelse prose.when_not_to_use,
         .notes = options.notes orelse prose.notes,
         .related_ids = if (options.related_ids.len > 0) options.related_ids else prose.related_ids,
-        .prefer_over_ids = prose.prefer_over_ids,
-        .export_root_script = prose.export_root_script,
+        .prefer_over_ids = if (options.prefer_over_ids.len > 0) options.prefer_over_ids else prose.prefer_over_ids,
+        .export_root_script = options.export_root_script orelse prose.export_root_script,
         .signals = signals,
-        .functions = prose.functions,
+        .exports = exports,
+        .functions = functions,
     });
     errdefer allocator.free(json);
 
@@ -224,6 +260,10 @@ pub fn addManifest(
 
     for (signals) |*row| row.deinit(allocator);
     allocator.free(signals);
+    for (exports) |*row| row.deinit(allocator);
+    allocator.free(exports);
+    for (functions) |*row| row.deinit(allocator);
+    allocator.free(functions);
 
     return .{
         .manifest_path = manifest_path,
@@ -232,6 +272,7 @@ pub fn addManifest(
         .scene = try allocator.dupe(u8, options.scene),
         .scene_uid = scene_uid,
         .signals_scaffolded = scaffolded,
+        .exports_scaffolded = exports_scaffolded,
         .updated = exists,
         .json = json,
     };
@@ -250,6 +291,7 @@ const RenderInput = struct {
     prefer_over_ids: []const []const u8,
     export_root_script: []const u8,
     signals: []const catalog_scan.DocRow,
+    exports: []const catalog_scan.DocRow,
     functions: []const catalog_scan.DocRow,
 };
 
@@ -277,9 +319,13 @@ fn renderManifest(allocator: std.mem.Allocator, input: RenderInput) Error![]cons
     if (input.prefer_over_ids.len > 0) try writeStringArrayField(allocator, &out, "prefer_over_ids", input.prefer_over_ids, true);
     if (input.export_root_script.len > 0) try writeStringField(allocator, &out, "export_root_script", input.export_root_script, 1, true);
 
-    try writeDocRows(allocator, &out, "signals", input.signals, true, input.functions.len > 0);
+    const more_after_signals = input.exports.len > 0 or input.functions.len > 0;
+    try writeDocRows(allocator, &out, "signals", input.signals, "connect_example", more_after_signals);
+    if (input.exports.len > 0) {
+        try writeDocRows(allocator, &out, "exports", input.exports, null, input.functions.len > 0);
+    }
     if (input.functions.len > 0) {
-        try writeDocRows(allocator, &out, "functions", input.functions, false, false);
+        try writeDocRows(allocator, &out, "functions", input.functions, "when_to_call", false);
     }
 
     try out.appendSlice(allocator, "}\n");
@@ -339,12 +385,15 @@ fn writeStringArrayField(
     try out.appendSlice(allocator, if (comma) "],\n" else "]\n");
 }
 
+/// `extra` is the third field a row of this kind carries, or null when it
+/// carries none: an export has a name and a meaning and nothing to connect or
+/// call.
 fn writeDocRows(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
     name: []const u8,
     rows: []const catalog_scan.DocRow,
-    is_signal: bool,
+    extra: ?[]const u8,
     comma: bool,
 ) Error!void {
     if (rows.len == 0) {
@@ -355,11 +404,12 @@ fn writeDocRows(
     for (rows, 0..) |row, i| {
         try out.appendSlice(allocator, "    {\n");
         try writeStringField(allocator, out, "name", row.name, 3, true);
-        try writeStringField(allocator, out, "doc", row.doc, 3, true);
-        if (is_signal) {
-            try writeStringField(allocator, out, "connect_example", row.connect_example, 3, false);
+        if (extra) |field| {
+            try writeStringField(allocator, out, "doc", row.doc, 3, true);
+            const value = if (std.mem.eql(u8, field, "connect_example")) row.connect_example else row.when_to_call;
+            try writeStringField(allocator, out, field, value, 3, false);
         } else {
-            try writeStringField(allocator, out, "when_to_call", row.when_to_call, 3, false);
+            try writeStringField(allocator, out, "doc", row.doc, 3, false);
         }
         try out.appendSlice(allocator, if (i + 1 < rows.len) "    },\n" else "    }\n");
     }
@@ -376,6 +426,7 @@ fn scaffoldSignals(
     scene_res_path: []const u8,
     existing: []const catalog_scan.DocRow,
     supplied: []const SignalDoc,
+    script_override: ?[]const u8,
 ) Error![]catalog_scan.DocRow {
     var rows: std.ArrayList(catalog_scan.DocRow) = .empty;
     errdefer {
@@ -383,7 +434,7 @@ fn scaffoldSignals(
         rows.deinit(allocator);
     }
 
-    const script_res = try findRootScript(allocator, io, project_root, scene_res_path);
+    const script_res = try scriptToScan(allocator, io, project_root, scene_res_path, script_override);
     defer if (script_res) |path| allocator.free(path);
 
     if (script_res) |res_path| {
@@ -426,6 +477,125 @@ fn scaffoldSignals(
                 .when_to_call = try allocator.dupe(u8, row.when_to_call),
             });
         }
+    }
+
+    return try rows.toOwnedSlice(allocator);
+}
+
+/// The script whose interface describes this component: `export_root_script`
+/// when the manifest names one, since the exports and signals worth
+/// documenting are not always on the root node's own script.
+fn scriptToScan(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    scene_res_path: []const u8,
+    override: ?[]const u8,
+) Error!?[]const u8 {
+    if (override) |path| {
+        if (path.len > 0) return try allocator.dupe(u8, path);
+    }
+    return try findRootScript(allocator, io, project_root, scene_res_path);
+}
+
+/// Export rows for the script's `@export` vars, on the same terms as signals:
+/// prose already written against a name survives, a row for an export that no
+/// longer exists is dropped, and an explicit `--export-doc` wins.
+fn scaffoldExports(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    scene_res_path: []const u8,
+    existing: []const catalog_scan.DocRow,
+    supplied: []const SignalDoc,
+    script_override: ?[]const u8,
+) Error![]catalog_scan.DocRow {
+    var rows: std.ArrayList(catalog_scan.DocRow) = .empty;
+    errdefer {
+        for (rows.items) |*row| row.deinit(allocator);
+        rows.deinit(allocator);
+    }
+
+    const script_res = try scriptToScan(allocator, io, project_root, scene_res_path, script_override);
+    defer if (script_res) |path| allocator.free(path);
+
+    if (script_res) |res_path| {
+        const script_fs_maybe = project_config.resPathToFilesystem(allocator, project_root, res_path) catch null;
+        if (script_fs_maybe) |fs_path| {
+            defer allocator.free(fs_path);
+            const source = std.Io.Dir.cwd().readFileAlloc(io, fs_path, allocator, .unlimited) catch null;
+            if (source) |text| {
+                defer allocator.free(text);
+                var iface = gdscript_scan.parseScript(allocator, text) catch
+                    gdscript_scan.ScriptInterface{};
+                defer iface.deinit(allocator);
+
+                for (iface.exports) |export_info| {
+                    const prior = findRow(existing, export_info.name);
+                    var doc_text: []const u8 = if (prior) |p| p.doc else "";
+                    for (supplied) |given| {
+                        if (std.mem.eql(u8, given.name, export_info.name)) doc_text = given.doc;
+                    }
+                    try rows.append(allocator, .{
+                        .name = try allocator.dupe(u8, export_info.name),
+                        .doc = try allocator.dupe(u8, doc_text),
+                        .connect_example = try allocator.dupe(u8, ""),
+                        .when_to_call = try allocator.dupe(u8, if (prior) |p| p.when_to_call else ""),
+                    });
+                }
+            }
+        }
+    }
+
+    if (rows.items.len == 0) {
+        for (existing) |row| {
+            try rows.append(allocator, .{
+                .name = try allocator.dupe(u8, row.name),
+                .doc = try allocator.dupe(u8, row.doc),
+                .connect_example = try allocator.dupe(u8, ""),
+                .when_to_call = try allocator.dupe(u8, row.when_to_call),
+            });
+        }
+    }
+
+    return try rows.toOwnedSlice(allocator);
+}
+
+/// Rows that exist only because someone wrote them: nothing derives a
+/// function list, so a `--function-doc` adds or replaces one row and leaves
+/// the rest of the manifest's alone.
+fn mergeGivenDocs(
+    allocator: std.mem.Allocator,
+    existing: []const catalog_scan.DocRow,
+    supplied: []const SignalDoc,
+) Error![]catalog_scan.DocRow {
+    var rows: std.ArrayList(catalog_scan.DocRow) = .empty;
+    errdefer {
+        for (rows.items) |*row| row.deinit(allocator);
+        rows.deinit(allocator);
+    }
+
+    for (existing) |row| {
+        var doc_text = row.doc;
+        for (supplied) |given| {
+            if (std.mem.eql(u8, given.name, row.name)) doc_text = given.doc;
+        }
+        try rows.append(allocator, .{
+            .name = try allocator.dupe(u8, row.name),
+            .doc = try allocator.dupe(u8, doc_text),
+            .connect_example = try allocator.dupe(u8, row.connect_example),
+            .when_to_call = try allocator.dupe(u8, row.when_to_call),
+        });
+    }
+
+    for (supplied) |given| {
+        if (findRow(rows.items, given.name) != null) continue;
+        try rows.append(allocator, .{
+            .name = try allocator.dupe(u8, given.name),
+            .doc = try allocator.dupe(u8, given.doc),
+            .connect_example = try allocator.dupe(u8, ""),
+            .when_to_call = try allocator.dupe(u8, ""),
+        });
     }
 
     return try rows.toOwnedSlice(allocator);
@@ -533,6 +703,7 @@ fn readExistingProse(
     prose.related_ids = try dupJsonStringList(allocator, root, "related_ids");
     prose.prefer_over_ids = try dupJsonStringList(allocator, root, "prefer_over_ids");
     prose.signals = try dupJsonDocRows(allocator, root, "signals");
+    prose.exports = try dupJsonDocRows(allocator, root, "exports");
     prose.functions = try dupJsonDocRows(allocator, root, "functions");
     return prose;
 }
@@ -673,6 +844,7 @@ test "rendered manifest omits empty optionals and round-trips" {
         .prefer_over_ids = &.{},
         .export_root_script = "",
         .signals = &signals,
+        .exports = &.{},
         .functions = &.{},
     });
     defer allocator.free(json);
@@ -704,6 +876,7 @@ test "rendered manifest escapes quotes and newlines" {
         .prefer_over_ids = &.{},
         .export_root_script = "",
         .signals = &.{},
+        .exports = &.{},
         .functions = &.{},
     });
     defer allocator.free(json);
@@ -711,4 +884,60 @@ test "rendered manifest escapes quotes and newlines" {
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json, .{});
     defer parsed.deinit();
     try std.testing.expectEqualStrings("Say \"hello\"\nthen stop", parsed.value.object.get("summary").?.string);
+}
+
+test "exports are scaffolded and documented the way signals are" {
+    const allocator = std.testing.allocator;
+    const signals = [_]catalog_scan.DocRow{.{
+        .name = "submitted",
+        .doc = "Emitted on enter.",
+        .connect_example = "",
+        .when_to_call = "",
+    }};
+    const exports = [_]catalog_scan.DocRow{
+        .{ .name = "secret", .doc = "Hides the typed characters", .connect_example = "", .when_to_call = "" },
+        .{ .name = "placeholder", .doc = "", .connect_example = "", .when_to_call = "" },
+    };
+    const functions = [_]catalog_scan.DocRow{.{
+        .name = "focus_field",
+        .doc = "Give the field keyboard focus",
+        .connect_example = "",
+        .when_to_call = "",
+    }};
+
+    const json = try renderManifest(allocator, .{
+        .id = "ui/field",
+        .scene = "res://ui/field/field.tscn",
+        .scene_uid = "",
+        .tags = &.{},
+        .summary = "Text field",
+        .when_to_use = "",
+        .when_not_to_use = "",
+        .notes = "",
+        .related_ids = &.{},
+        .prefer_over_ids = &.{"ui/plain_input"},
+        .export_root_script = "res://ui/field/field_api.gd",
+        .signals = &signals,
+        .exports = &exports,
+        .functions = &functions,
+    });
+    defer allocator.free(json);
+
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json, .{});
+    defer parsed.deinit();
+    const root = parsed.value.object;
+
+    // Every field catalog validate reads is writable through catalog add now;
+    // before this they were readable, unwritable and undocumented.
+    try std.testing.expectEqualStrings("ui/plain_input", root.get("prefer_over_ids").?.array.items[0].string);
+    try std.testing.expectEqualStrings("res://ui/field/field_api.gd", root.get("export_root_script").?.string);
+    try std.testing.expectEqualStrings("focus_field", root.get("functions").?.array.items[0].object.get("name").?.string);
+
+    const rows = root.get("exports").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), rows.len);
+    try std.testing.expectEqualStrings("Hides the typed characters", rows[0].object.get("doc").?.string);
+    // An export has a name and a meaning: neither a signal's connect_example
+    // nor a function's when_to_call belongs on one.
+    try std.testing.expect(rows[0].object.get("connect_example") == null);
+    try std.testing.expect(rows[0].object.get("when_to_call") == null);
 }

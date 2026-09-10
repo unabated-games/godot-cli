@@ -5,6 +5,7 @@
 //! and an agent can author one directly.
 
 const std = @import("std");
+const catalog_builtins = @import("catalog_builtins.zig");
 const document = @import("text_format/document.zig");
 const property_line = @import("variant/property_line.zig");
 const parse = @import("variant/parse.zig");
@@ -70,6 +71,7 @@ pub const ManifestEntry = struct {
     notes: []const u8 = "",
     export_root_script: []const u8 = "",
     signal_docs: []DocRow = &.{},
+    export_docs: []DocRow = &.{},
     function_docs: []DocRow = &.{},
     issues: []Issue = &.{},
     valid: bool = false,
@@ -93,6 +95,8 @@ pub const ManifestEntry = struct {
         allocator.free(self.export_root_script);
         for (self.signal_docs) |*row| row.deinit(allocator);
         allocator.free(self.signal_docs);
+        for (self.export_docs) |*row| row.deinit(allocator);
+        allocator.free(self.export_docs);
         for (self.function_docs) |*row| row.deinit(allocator);
         allocator.free(self.function_docs);
         for (self.issues) |issue| {
@@ -267,6 +271,7 @@ fn parseJsonManifest(
     entry.notes = try jsonString(allocator, root, "notes");
     entry.export_root_script = try jsonString(allocator, root, "export_root_script");
     entry.signal_docs = try jsonDocRows(allocator, root, "signals");
+    entry.export_docs = try jsonDocRows(allocator, root, "exports");
     entry.function_docs = try jsonDocRows(allocator, root, "functions");
 
     try validateEntry(allocator, io, project_root, &entry);
@@ -434,6 +439,43 @@ fn validateCollected(allocator: std.mem.Allocator, entries: []ManifestEntry) Sca
                 try pushIssue(allocator, other, .@"error", "duplicate_scene", "multiple manifests reference the same scene");
             }
         }
+    }
+
+    // A related or preferred id that names nothing resolves to nothing and
+    // says so nowhere: the entry still validates, and the pointer an agent was
+    // meant to follow is a dead end. Builtins count, since they and project
+    // entries are peers in search results.
+    for (entries) |*entry| {
+        try noteUnresolvedIds(allocator, entries, entry, entry.related_ids, "related_ids");
+        try noteUnresolvedIds(allocator, entries, entry, entry.prefer_over_ids, "prefer_over_ids");
+    }
+}
+
+fn noteUnresolvedIds(
+    allocator: std.mem.Allocator,
+    entries: []ManifestEntry,
+    entry: *ManifestEntry,
+    ids: []const []const u8,
+    field: []const u8,
+) ScanError!void {
+    for (ids) |id| {
+        if (id.len == 0) continue;
+        if (catalog_builtins.isBuiltinId(id)) continue;
+        var found = false;
+        for (entries) |*candidate| {
+            if (std.mem.eql(u8, candidate.id, id)) {
+                found = true;
+                break;
+            }
+        }
+        if (found) continue;
+        const message = try std.fmt.allocPrint(
+            allocator,
+            "{s} names {s}, which is not a catalog id in this project and not a builtin",
+            .{ field, id },
+        );
+        defer allocator.free(message);
+        try pushIssue(allocator, entry, .warning, "unresolved_catalog_reference", message);
     }
 }
 

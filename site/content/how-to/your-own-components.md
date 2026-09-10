@@ -80,6 +80,26 @@ godot-cli catalog add ui/health_bar/health_bar.tscn --project-root . --id ui/hea
 
 `catalog add` scaffolds a row for every signal the root script declares; `--signal-doc <signal>=<text>` fills it in. `scene extract` takes `--summary`, `--tags`, `--when-to-use` and `--when-not-to-use` too, so a component pulled out of an existing scene arrives with the same prose as one written deliberately.
 
+**Exports work the same way, and matter more.** A caller instancing your component sets its exports; the script parse gives their names, types and defaults, but only you can say what setting one does:
+
+```bash
+godot-cli catalog add ui/field/field.tscn --project-root . --id ui/field \
+  --export-doc "secret=Hides the typed characters" \
+  --export-doc "revealable=Adds an eye toggle; only meaningful with secret" \
+  --function-doc "focus_field=Give the field keyboard focus"
+```
+
+A row is scaffolded for every `@export` the script declares, and the result says how many rows are still blank:
+
+```text
+1 signal row(s) and 3 export row(s) are scaffolded with an empty doc; fill them
+with --signal-doc <name>=<meaning> and --export-doc <name>=<meaning>
+```
+
+`--function-doc` is not scaffolded — the GDScript parse reads exports and signals, not functions — so a function row exists only where you wrote one. Three more flags cover the rest of the manifest: `--prefer-over-ids` for the components this one should be chosen over, `--related-ids` for the ones worth looking at next, and `--export-root-script` when the exports and signals live on a script other than the root node's.
+
+An id in either list that names no component in the project and no builtin comes back from `catalog validate` as `unresolved_catalog_reference`, so a typo in a pointer is not a pointer that silently goes nowhere.
+
 Open the manifest and fill in what the flags did not cover:
 
 ```json
@@ -113,15 +133,19 @@ godot-cli catalog show ui/health_bar --project-root . --json
   "exports_source": "gdscript_heuristic",
   "script_parse_complete": true,
   "exports": [
-    { "name": "max_health", "type_hint": "int", "default": "100" },
-    { "name": "label_text", "type_hint": "String", "default": "\"Health\"" }
+    { "name": "max_health", "type_hint": "int", "default": "100",
+      "doc": "Full health; the bar fills to this", "doc_source": "manifest" },
+    { "name": "label_text", "type_hint": "String", "default": "\"Health\"",
+      "doc": "", "doc_source": "gdscript_heuristic" }
   ],
   "signals": [ { "name": "depleted" }, { "name": "value_changed" } ],
   "scene": { "nodes": [ { "name": "HealthBar", "type": "MarginContainer" } ] }
 }
 ```
 
-If `script_parse_complete` is false, the GDScript parser hit something it could not read and the export list may be short. Set `export_root_script` in the manifest to point at a different script, or write the exports into the manifest yourself.
+`doc_source` says where the meaning came from: `manifest` when someone wrote it, `gdscript_heuristic` when nobody has and the row is still just a name and a type.
+
+If `script_parse_complete` is false, the GDScript parser hit something it could not read and the export list may be short. Point `--export-root-script` at a different script, or write the exports into the manifest yourself.
 
 ## 4. Export the digest the harness reads
 

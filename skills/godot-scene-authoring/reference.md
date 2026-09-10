@@ -31,6 +31,19 @@ godot-cli catalog export --project-root . --output AGENTS.md   # optional digest
 
 Project manifests define instancable PackedScenes (`ui/button`). Builtins (`godot/ui/Button`) are documentation for raw `scene node add`.
 
+`catalog show <id>` is what tells you how to configure one before instancing it: every `@export` with its type, default and — when someone documented it — what setting it does, plus the signals and the node tree. A `doc_source` of `gdscript_heuristic` means the name and type were parsed from the script and nobody has said what it is for.
+
+When registering a component, document it in the same call rather than editing the manifest:
+
+```bash
+godot-cli catalog add ui/field/field.tscn --project-root . --id ui/field \
+  --summary "Text field" --when-to-use "Any form input" \
+  --export-doc "secret=Hides the typed characters" \
+  --signal-doc "submitted=Fired when the user presses enter"
+```
+
+A row is scaffolded for every export and signal the root script declares; the result says how many are still blank. `--function-doc`, `--related-ids`, `--prefer-over-ids` and `--export-root-script` cover the rest of the manifest.
+
 ## Wiring external resources
 
 Pattern for scripts, textures, audio, `.tres` files:

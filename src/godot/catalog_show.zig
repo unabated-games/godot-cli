@@ -18,12 +18,18 @@ pub const MergedExport = struct {
     default_value: []const u8 = "",
     group: []const u8 = "",
     annotations: []const []const u8 = &.{},
+    /// What the export means, from the manifest. The script parse gives the
+    /// name, type and default; only a person can say what setting it does.
+    doc: []const u8 = "",
+    doc_source: []const u8 = "gdscript_heuristic",
 
     pub fn deinit(self: *const MergedExport, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
         allocator.free(self.type_hint);
         allocator.free(self.default_value);
         allocator.free(self.group);
+        allocator.free(self.doc);
+        allocator.free(self.doc_source);
         for (self.annotations) |annotation| allocator.free(annotation);
         allocator.free(self.annotations);
     }
@@ -205,7 +211,7 @@ pub fn showManifestEntry(
 
     const script_parsed = script_iface != null;
     if (script_iface) |*iface| {
-        exports = try mergeExports(allocator, iface.exports);
+        exports = try mergeExports(allocator, iface.exports, owned_entry.export_docs);
         signals = try mergeSignals(allocator, iface.signals, owned_entry.signal_docs);
         iface.deinit(allocator);
         script_iface = null;
@@ -291,6 +297,20 @@ fn cloneManifestEntry(allocator: std.mem.Allocator, entry: *const catalog_scan.M
         });
     }
 
+    var export_docs: std.ArrayList(catalog_scan.DocRow) = .empty;
+    errdefer {
+        for (export_docs.items) |*row| row.deinit(allocator);
+        export_docs.deinit(allocator);
+    }
+    for (entry.export_docs) |row| {
+        try export_docs.append(allocator, .{
+            .name = try allocator.dupe(u8, row.name),
+            .doc = try allocator.dupe(u8, row.doc),
+            .connect_example = try allocator.dupe(u8, row.connect_example),
+            .when_to_call = try allocator.dupe(u8, row.when_to_call),
+        });
+    }
+
     var function_docs: std.ArrayList(catalog_scan.DocRow) = .empty;
     errdefer {
         for (function_docs.items) |*row| row.deinit(allocator);
@@ -337,6 +357,7 @@ fn cloneManifestEntry(allocator: std.mem.Allocator, entry: *const catalog_scan.M
         .notes = try allocator.dupe(u8, entry.notes),
         .export_root_script = try allocator.dupe(u8, entry.export_root_script),
         .signal_docs = try signal_docs.toOwnedSlice(allocator),
+        .export_docs = try export_docs.toOwnedSlice(allocator),
         .function_docs = try function_docs.toOwnedSlice(allocator),
         .issues = try issues.toOwnedSlice(allocator),
         .valid = entry.valid,
@@ -410,19 +431,27 @@ fn buildSceneContext(
     };
 }
 
-fn mergeExports(allocator: std.mem.Allocator, parsed: []const gdscript_scan.ExportInfo) ShowError![]MergedExport {
+fn mergeExports(
+    allocator: std.mem.Allocator,
+    parsed: []const gdscript_scan.ExportInfo,
+    manifest_docs: []const catalog_scan.DocRow,
+) ShowError![]MergedExport {
     var out: std.ArrayList(MergedExport) = .empty;
     errdefer {
         for (out.items) |*item| item.deinit(allocator);
         out.deinit(allocator);
     }
     for (parsed) |export_info| {
+        const doc_row = findDocRow(manifest_docs, export_info.name);
+        const documented = doc_row != null and doc_row.?.doc.len > 0;
         try out.append(allocator, .{
             .name = try allocator.dupe(u8, export_info.name),
             .type_hint = try allocator.dupe(u8, export_info.type_hint),
             .default_value = try allocator.dupe(u8, export_info.default_value),
             .group = try allocator.dupe(u8, export_info.group),
             .annotations = try dupStringSlice(allocator, export_info.annotations),
+            .doc = try allocator.dupe(u8, if (doc_row) |row| row.doc else ""),
+            .doc_source = try allocator.dupe(u8, if (documented) "manifest" else "gdscript_heuristic"),
         });
     }
     return try out.toOwnedSlice(allocator);

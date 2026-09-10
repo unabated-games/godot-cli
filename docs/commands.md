@@ -1906,7 +1906,11 @@ godot-cli catalog add [options] <file>
 | `--notes` | `<value>` | Edge cases and variant notes | — |
 | `--tags` | `<value>` | Comma-separated tags | — |
 | `--signal-doc` | `<value>` | Document a signal the root script declares: &lt;signal&gt;=&lt;what it means&gt;; repeatable, and fills the row catalog add scaffolds | — |
+| `--export-doc` | `<value>` | Document an @export the root script declares: &lt;property&gt;=&lt;what setting it does&gt;; repeatable, and fills the row catalog add scaffolds | — |
+| `--function-doc` | `<value>` | Document a method callers are meant to use: &lt;function&gt;=&lt;what it does&gt;; repeatable. Not scaffolded, since the script parse reads exports and signals but not functions | — |
 | `--related-ids` | `<value>` | Comma-separated related catalog ids | — |
+| `--prefer-over-ids` | `<value>` | Comma-separated catalog ids this component should be chosen over | — |
+| `--export-root-script` | `<value>` | res:// script to read exports and signals from, when they are not on the root node's own script | — |
 | `--update` | — | Update an existing manifest, keeping prose already written | — |
 | `--output` | `<path>` | Manifest path (default: &lt;scene&gt;.manifest.json beside the scene) | — |
 | `--dry-run` | — | Render the manifest without writing it | — |

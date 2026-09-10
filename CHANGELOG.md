@@ -15,9 +15,18 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-09-10
+
+### Added
+
+- **Every manifest field the catalog reads can be written by `catalog add`.** `export_root_script`, `function_docs` and `prefer_over_ids` were read by the schema, surfaced by `catalog validate`, and settable only by hand-editing the manifest — in a tool whose first rule is not to hand-edit. New flags: `--export-doc <property>=<meaning>`, `--function-doc <function>=<meaning>`, `--prefer-over-ids`, `--export-root-script`. Reported by another agent's session with 12 catalogued components, six carrying root scripts with 21 exports between them.
+- **`@export` documentation, scaffolded the way signals already were.** `catalog add` leaves a row per export the root script declares, `--export-doc` fills it in, and `catalog show` returns each export's `doc` alongside its name, type and default, with `doc_source` saying whether a person wrote it or it is just what the parser found. The script parse gives a caller the names of what it can set; only a person can say what setting one does. The result also reports `exports_scaffolded` and names the rows still blank, since an undocumented export reads to the next caller exactly like one nobody needed to explain.
+- **`unresolved_catalog_reference`**: a `related_ids` or `prefer_over_ids` entry naming no component in the project and no builtin is a warning from `catalog validate` rather than a pointer that silently goes nowhere. Listed in the catalog design doc since the beginning and never implemented.
+
 ### Changed
 
 - The validation guide and the skill's reference say plainly what a clean `scene validate` does **not** prove. `unknown_property` skips more than it checks — any node with a script, any instanced node, and every namespaced name — and a partial check that says nothing reads exactly like a complete one that found nothing. Raised by the session the check came from.
+- The components guide and the skill cover documenting exports, the four new flags, and what `doc_source` means. `export_root_script` had never been documented anywhere a user would look: it is the script to read exports and signals from when they are not on the root node's own.
 
 ## [0.22.0] — 2026-09-09
 

@@ -87,6 +87,7 @@ fn buildEntryJson(allocator: std.mem.Allocator, entry: *const catalog_scan.Manif
     try obj.put(allocator, "notes", try jsonString(allocator, entry.notes));
     try obj.put(allocator, "export_root_script", try jsonString(allocator, entry.export_root_script));
     try obj.put(allocator, "signal_docs", .{ .array = try buildDocRowsJson(allocator, entry.signal_docs, true) });
+    try obj.put(allocator, "export_docs", .{ .array = try buildDocRowsJson(allocator, entry.export_docs, false) });
     try obj.put(allocator, "function_docs", .{ .array = try buildDocRowsJson(allocator, entry.function_docs, false) });
     try obj.put(allocator, "issues", .{ .array = try buildIssuesJson(allocator, entry.issues) });
     try obj.put(allocator, "valid", .{ .bool = entry.valid });
@@ -158,6 +159,8 @@ fn buildShowJson(allocator: std.mem.Allocator, shown: *const catalog_show.ShowRe
         try row.put(allocator, "default", try jsonString(allocator, export_info.default_value));
         try row.put(allocator, "group", try jsonString(allocator, export_info.group));
         try row.put(allocator, "export_annotations", .{ .array = try buildStringArrayJson(allocator, export_info.annotations) });
+        try row.put(allocator, "doc", try jsonString(allocator, export_info.doc));
+        try row.put(allocator, "doc_source", try jsonString(allocator, export_info.doc_source));
         try exports_json.append(.{ .object = row });
     }
     try obj.put(allocator, "exports", .{ .array = exports_json });
@@ -189,13 +192,20 @@ fn buildShowJson(allocator: std.mem.Allocator, shown: *const catalog_show.ShowRe
     return .{ .object = obj };
 }
 
-/// `--signal-doc pressed=Fired when the player confirms`, repeatable.
-fn parseSignalDocs(allocator: std.mem.Allocator, inv: *const spec.Invocation) ![]const catalog_add.SignalDoc {
-    const texts = try inv.getOptionAll(allocator, "signal-doc");
+/// `--signal-doc pressed=Fired when the player confirms`, and the same shape
+/// for `--export-doc` and `--function-doc`. Repeatable.
+fn parseDocPairs(
+    allocator: std.mem.Allocator,
+    inv: *const spec.Invocation,
+    option: []const u8,
+    example: []const u8,
+) ![]const catalog_add.SignalDoc {
+    const texts = try inv.getOptionAll(allocator, option);
     var out: std.ArrayList(catalog_add.SignalDoc) = .empty;
     for (texts) |text| {
         const equals = std.mem.indexOfScalar(u8, text, '=') orelse {
-            error_details.record(.{ .field = "signal-doc", .value = text, .hint = "write <signal>=<documentation>, e.g. pressed=Fired when the player confirms" });
+            const hint = try std.fmt.allocPrint(allocator, "write <name>=<documentation>, e.g. {s}", .{example});
+            error_details.record(.{ .field = option, .value = text, .hint = hint });
             return error.InvalidValue;
         };
         try out.append(allocator, .{
@@ -232,6 +242,8 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     defer freeStringList(cli.allocator, tags);
     const related = try parseTagsOption(cli.allocator, inv.getOption("related-ids"));
     defer freeStringList(cli.allocator, related);
+    const prefer_over = try parseTagsOption(cli.allocator, inv.getOption("prefer-over-ids"));
+    defer freeStringList(cli.allocator, prefer_over);
 
     var result = try catalog_add.addManifest(cli.allocator, cli.io, project_root, .{
         .scene = inv.positionals[0],
@@ -241,8 +253,12 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .when_not_to_use = inv.getOption("when-not-to-use"),
         .notes = inv.getOption("notes"),
         .tags = tags,
-        .signal_docs = try parseSignalDocs(cli.allocator, inv),
+        .signal_docs = try parseDocPairs(cli.allocator, inv, "signal-doc", "pressed=Fired when the player confirms"),
+        .export_docs = try parseDocPairs(cli.allocator, inv, "export-doc", "secret=Hides the typed characters"),
+        .function_docs = try parseDocPairs(cli.allocator, inv, "function-doc", "focus_field=Give the field keyboard focus"),
         .related_ids = related,
+        .prefer_over_ids = prefer_over,
+        .export_root_script = inv.getOption("export-root-script"),
         .update = inv.flag("update"),
         .output = inv.getOption("output"),
         .dry_run = inv.flag("dry-run"),
@@ -256,8 +272,20 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "scene", try jsonString(cli.allocator, result.scene));
     try data.put(cli.allocator, "scene_uid", try jsonString(cli.allocator, result.scene_uid));
     try data.put(cli.allocator, "signals_scaffolded", .{ .integer = @intCast(result.signals_scaffolded) });
+    try data.put(cli.allocator, "exports_scaffolded", .{ .integer = @intCast(result.exports_scaffolded) });
     try data.put(cli.allocator, "updated", .{ .bool = result.updated });
     var messages: std.ArrayList([]const u8) = .empty;
+    // A blank row is the whole point of scaffolding, but it is only useful if
+    // someone is told it is waiting: an undocumented export reads to the next
+    // caller exactly like one nobody needed to explain.
+    if (result.signals_scaffolded > 0 or result.exports_scaffolded > 0) {
+        const note = try std.fmt.allocPrint(
+            cli.allocator,
+            "{d} signal row(s) and {d} export row(s) are scaffolded with an empty doc; fill them with --signal-doc <name>=<meaning> and --export-doc <name>=<meaning> so catalog show tells a caller what they do",
+            .{ result.signals_scaffolded, result.exports_scaffolded },
+        );
+        try messages.append(cli.allocator, note);
+    }
     if (result.scene_uid.len == 0) {
         try messages.append(cli.allocator, "scene has no uid=\"uid://...\" in its header, so scene_uid is empty; scene new stamps one on new scenes, and the editor adds one when it next saves this file. Re-run catalog add --update afterwards");
     }
@@ -626,7 +654,11 @@ pub fn commands() spec.CommandSpec {
         .{ .long = "notes", .kind = .string, .description = "Edge cases and variant notes" },
         .{ .long = "tags", .kind = .string, .description = "Comma-separated tags" },
         .{ .long = "signal-doc", .kind = .string, .description = "Document a signal the root script declares: <signal>=<what it means>; repeatable, and fills the row catalog add scaffolds", .repeatable = true },
+        .{ .long = "export-doc", .kind = .string, .description = "Document an @export the root script declares: <property>=<what setting it does>; repeatable, and fills the row catalog add scaffolds", .repeatable = true },
+        .{ .long = "function-doc", .kind = .string, .description = "Document a method callers are meant to use: <function>=<what it does>; repeatable. Not scaffolded, since the script parse reads exports and signals but not functions", .repeatable = true },
         .{ .long = "related-ids", .kind = .string, .description = "Comma-separated related catalog ids" },
+        .{ .long = "prefer-over-ids", .kind = .string, .description = "Comma-separated catalog ids this component should be chosen over" },
+        .{ .long = "export-root-script", .kind = .string, .description = "res:// script to read exports and signals from, when they are not on the root node's own script" },
         .{ .long = "update", .kind = .flag, .description = "Update an existing manifest, keeping prose already written" },
         .{ .long = "output", .kind = .path, .description = "Manifest path (default: <scene>.manifest.json beside the scene)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Render the manifest without writing it" },

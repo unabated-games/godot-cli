@@ -236,7 +236,7 @@ _godot_cli_options() {
             echo "--reference"
             ;;
         'catalog add')
-            echo "--project-root --id --summary --when-to-use --when-not-to-use --notes --tags --signal-doc --related-ids --update --output --dry-run"
+            echo "--project-root --id --summary --when-to-use --when-not-to-use --notes --tags --signal-doc --export-doc --function-doc --related-ids --prefer-over-ids --export-root-script --update --output --dry-run"
             ;;
         'catalog relink')
             echo "--project-root --dry-run"
