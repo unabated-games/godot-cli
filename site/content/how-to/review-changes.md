@@ -59,6 +59,11 @@ Both are deliberately quiet about anything the table cannot speak for: a class
 it does not carry, a `theme_override_*` entry, a `metadata/*` key, a script's
 exported variables, and a connection whose endpoint lives inside an instance.
 
+If a run answers `uid_cache_unreadable`, the damaged file is Godot's
+`.godot/uid_cache.bin` and not the scene you passed — delete it and run the
+project once to rebuild it. `scene validate` itself does not fail on that any
+more; it skips the `stale_uid_for_path` check and says so in `messages`.
+
 **So read a clean `scene validate` for what it is.** It says nothing here was
 found wrong; it does not say every property is real, every signal exists, or
 every value is right. `unknown_property` in particular skips more than it

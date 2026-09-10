@@ -15,6 +15,12 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.23.3] — 2026-09-10
+
+### Fixed
+
+- **`uid cache list` and `uid cache lookup` answered a damaged cache with the bare word `Corrupt`.** 0.23.2 stopped `scene validate` failing on it, but left the two commands someone reaches for *to diagnose that* saying nothing: no path, no cause, no remedy. They now fail with `uid_cache_unreadable`, naming `.godot/uid_cache.bin` and how to rebuild it. Failing is still right there — the cache is what those commands are about — but the answer has to say which file. Prompted by the reporting session's observation that the original failure named the file you passed, "which is exactly where the problem is not".
+
 ## [0.23.2] — 2026-09-10
 
 ### Fixed

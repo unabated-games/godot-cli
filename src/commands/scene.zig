@@ -419,13 +419,33 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     };
 }
 
+/// The cache, for the two commands that exist to inspect it. A failure here
+/// is about the cache rather than about a scene, so it says which file and
+/// what to do -- `uid cache list` is what someone reaches for to work out why
+/// a validate went red, and answering "Corrupt" with no path sends them
+/// looking at the wrong file.
+fn loadCacheOrExplain(cli: *const app_mod.App, root: []const u8) !uid_cache.Cache {
+    const cache_path = try uid_cache.defaultCachePath(cli.allocator, root);
+    defer cli.allocator.free(cache_path);
+    return uid_cache.loadFromFile(cli.allocator, cli.io, cache_path) catch |err| {
+        const hint = try std.fmt.allocPrint(
+            cli.allocator,
+            "Godot writes this file; delete it and run the project once, or open the project in the editor, to rebuild it. Other commands do not need it: scene validate skips only its uid:// check and says so",
+            .{},
+        );
+        error_details.record(.{
+            .field = "uid_cache",
+            .value = try cli.allocator.dupe(u8, cache_path),
+            .hint = hint,
+        });
+        return err;
+    };
+}
+
 fn uidCacheListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
     const root = projectRootFrom(inv) orelse return error.Usage;
-    const cache_path = try uid_cache.defaultCachePath(cli.allocator, root);
-    defer cli.allocator.free(cache_path);
-
-    const cache = try uid_cache.loadFromFile(cli.allocator, cli.io, cache_path);
+    const cache = try loadCacheOrExplain(cli, root);
 
     var arr = std.json.Array.init(cli.allocator);
     for (cache.entries.items) |entry| {
@@ -450,10 +470,7 @@ fn uidCacheLookupHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
     const root = projectRootFrom(inv) orelse return error.Usage;
     const query = inv.positionals[0];
 
-    const cache_path = try uid_cache.defaultCachePath(cli.allocator, root);
-    defer cli.allocator.free(cache_path);
-
-    const cache = try uid_cache.loadFromFile(cli.allocator, cli.io, cache_path);
+    const cache = try loadCacheOrExplain(cli, root);
 
     if (std.mem.startsWith(u8, query, "uid://")) {
         const id = resource_uid.textToId(query);

@@ -266,6 +266,15 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
             failure.details = .{ .object = details };
         }
     }
+    // Corrupt comes only from the UID cache parser, and the command that hit
+    // it names a project rather than that file.
+    if (std.mem.eql(u8, name, "Corrupt")) {
+        failure.kind = "uid_cache_unreadable";
+        failure.message = "the project's UID cache could not be read";
+        if (error_details.takeJson(allocator) catch null) |details| {
+            failure.details = .{ .object = details };
+        }
+    }
     if (std.mem.eql(u8, name, "NodeNotFound")) {
         if (error_details.takeJson(allocator) catch null) |details| {
             failure.kind = "node_not_found";
