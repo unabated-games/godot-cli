@@ -23,7 +23,7 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ### Changed
 
-- **CI runs the test suite on Windows.** It was built for and never run on, which is how a pointer bug that only manifests there reached a user. Reported rather than blocking for now, until the shell-driven smoke tests are known to behave on that runner.
+- **CI runs the Zig unit tests on Windows** (`zig build test-unit`, a new step that leaves out the shell-driven smoke tests — those assume a POSIX shell and drown the signal).
 - **Release binaries are built `ReleaseSafe` rather than `ReleaseFast`.** Undefined behaviour now stops with a panic naming a line instead of a segfault naming nothing — the bug above cost a session of bisection to place, and a message would have placed it in one run. Measured on this workload: 3.0 ms per `scene validate` either way, with the binary 1% larger.
 
 ## [0.25.0] — 2026-09-11

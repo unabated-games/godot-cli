@@ -417,6 +417,18 @@ test "every runnable command outside the exclusion set is a tool with a valid na
     }
 }
 
+/// A confinement root shaped the way the server makes one: `mcp` opens the
+/// directory and stores `realPath`, so the root is always absolute and
+/// normalised. Tests that hard-coded "/tmp/project" passed on POSIX and failed
+/// on Windows, where `resolve` rewrites that into a drive-rooted path and the
+/// raw string no longer prefixes it -- a test artifact that hid whether the
+/// real contract holds on Windows. Deriving it the same way asks the real
+/// question on both.
+fn testRoot(buf: []u8, dir: std.testing.TmpDir) ![]const u8 {
+    const len = try dir.dir.realPath(std.testing.io, buf);
+    return buf[0..len];
+}
+
 test "argv is built in path, option, project root, positional order" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
@@ -441,7 +453,12 @@ test "argv is built in path, option, project root, positional order" {
     try values.append(.{ .string = "Color(1, 1, 1, 1)" });
     try args.put(arena, "value", .{ .array = values });
 
-    const outcome = try buildArgv(arena, tool, args, .{ .root = "/tmp/project" });
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var root_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root = try testRoot(&root_buf, tmp);
+
+    const outcome = try buildArgv(arena, tool, args, .{ .root = root });
     const argv = outcome.argv;
     try std.testing.expectEqualStrings("scene", argv[0]);
     try std.testing.expectEqualStrings("node", argv[1]);
@@ -488,19 +505,24 @@ test "schema violations and escaped paths are reported by name" {
 
     var escaped: std.json.ObjectMap = .{};
     try escaped.put(arena, "file", .{ .string = "../../outside.tscn" });
-    const outside = try buildArgv(arena, tool, escaped, .{ .root = "/tmp/project" });
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var root_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root = try testRoot(&root_buf, tmp);
+
+    const outside = try buildArgv(arena, tool, escaped, .{ .root = root });
     try std.testing.expect(std.mem.indexOf(u8, outside.invalid, "outside the project root") != null);
 
     var inside: std.json.ObjectMap = .{};
     try inside.put(arena, "file", .{ .string = "scenes/../main.tscn" });
-    const ok = try buildArgv(arena, tool, inside, .{ .root = "/tmp/project" });
+    const ok = try buildArgv(arena, tool, inside, .{ .root = root });
     try std.testing.expect(ok == .argv);
 
     // In pinned mode project-root is the server's to set, not the caller's.
     var pinned_root: std.json.ObjectMap = .{};
     try pinned_root.put(arena, "file", .{ .string = "main.tscn" });
     try pinned_root.put(arena, "project-root", .{ .string = "/elsewhere" });
-    const rejected = try buildArgv(arena, tool, pinned_root, .{ .root = "/tmp/project" });
+    const rejected = try buildArgv(arena, tool, pinned_root, .{ .root = root });
     try std.testing.expect(rejected == .invalid);
 }
 

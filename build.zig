@@ -163,6 +163,14 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    // The Zig tests alone, without the shell-driven CLI smoke tests. Those
+    // assume a POSIX shell and POSIX paths, so on Windows they drown a real
+    // signal in harness noise -- and a real signal is what this is for: the
+    // pointer bug that segfaulted there would have shown up in these.
+    const unit_step = b.step("test-unit", "Run the Zig unit tests only (no shell smoke tests)");
+    unit_step.dependOn(&run_mod_tests.step);
+    unit_step.dependOn(&run_exe_tests.step);
+
     // The MCP server over a real pipe: both protocol openings, a tool call,
     // a confined path, resources, and the prompt.
     const mcp_smoke = b.addSystemCommand(&.{ "bash", "tools/test_mcp.sh" });

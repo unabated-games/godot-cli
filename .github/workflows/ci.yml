@@ -58,7 +58,7 @@ jobs:
 
       - name: Run unit tests
         shell: bash
-        run: zig build test
+        run: zig build test-unit
 
   cross-compile:
     name: cross-compile
