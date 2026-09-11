@@ -31,7 +31,36 @@ Add the `source` line to `~/.zshrc` or `~/.bashrc` to keep it.
 
 To pin a version, pass `--version 0.12.0`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
 
-Windows has no installer script. Unpack the `.zip` from the [releases page](https://github.com/unabated-games/godot-cli/releases) and put `bin\` on `PATH`.
+### Windows
+
+The same command works in **Git Bash** (which comes with Git for Windows), MSYS2 or Cygwin:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.sh | bash
+source "$HOME/.godot-cli/env.sh"
+```
+
+It fetches the `.zip` rather than the tarball, verifies it against the same
+`SHA256SUMS`, and installs `godot-cli.exe`. `env.sh` sets `PATH` for that
+shell; add the `source` line to `~/.bashrc` to keep it.
+
+Without a POSIX shell, there is a PowerShell installer:
+
+```powershell
+irm https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.ps1 | iex
+. "$env:USERPROFILE\.godot-cli\env.ps1"
+```
+
+It takes `-InstallSkill` to copy the agent skill into the editor directories,
+and `-AddToPath` to put `bin\` on your user `PATH` permanently.
+
+**The Git Bash path is the tested one.** `install.sh` has been run end to end
+against the real Windows archive; `install.ps1` has not yet been run on
+Windows by its author — if it fails for you, the fallback is to unpack the
+`.zip` from the [releases page](https://github.com/unabated-games/godot-cli/releases)
+and add `bin\` to `PATH`, and please
+[open an issue](https://github.com/unabated-games/godot-cli/issues) with what
+it said.
 
 ## Author a scene
 

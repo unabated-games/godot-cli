@@ -15,6 +15,11 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **The installer works on Windows.** `install.sh` refused on anything but macOS and Linux, so a Windows user unpacked the archive and wired up the env file, the skill and the docs by hand. It now detects Git Bash, MSYS2 and Cygwin, fetches the `.zip` rather than the tarball, unpacks it with whichever of `unzip`, `tar` or PowerShell is present, and installs `godot-cli.exe`. Verified end to end by faking the platform on macOS — real Windows archive, real checksum, real unpack — and the `godot-cli.exe` it installed was then run under wine.
+- **`install.ps1`, for Windows without a POSIX shell**: `irm https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.ps1 | iex`, with `-InstallSkill` and `-AddToPath`. Same checksum verification, same layout. **It has not been run on Windows** — there is no PowerShell on any machine its author can reach — so the Git Bash path is the recommended one and the docs say so. Its assumptions about the archive were checked against the real artifact, which caught two mistakes before it shipped.
+
 ## [0.25.1] — 2026-09-11
 
 ### Fixed

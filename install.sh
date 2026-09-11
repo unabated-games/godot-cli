@@ -139,6 +139,21 @@ need() {
 # Release download
 # ---------------------------------------------------------------------------
 
+# Git for Windows, MSYS2 and Cygwin all run this script happily; only the
+# platform detection ever refused. A Windows user reported unpacking the
+# archive and wiring it up by hand because of this branch.
+is_windows_shell() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# `.exe` on Windows; the archive and the build both produce that name.
+exe_suffix() {
+  if is_windows_shell; then echo ".exe"; else echo ""; fi
+}
+
 release_target() {
   local os arch
   os="$(uname -s)"
@@ -147,6 +162,7 @@ release_target() {
   case "$os" in
     Darwin) os="macos" ;;
     Linux) os="linux-musl" ;;
+    MINGW*|MSYS*|CYGWIN*) os="windows" ;;
     *) die "No published binary for $os. Build from source: https://github.com/$REPO#building" ;;
   esac
 
@@ -205,14 +221,39 @@ sha256_of() {
 
 # Downloads and verifies the release archive, then echoes the directory it was
 # unpacked into.
+# Unpack a release archive into a directory. Windows ships `.zip`, and which
+# unpacker exists there varies: Git Bash may have neither `unzip` nor a tar
+# that reads zip, but every Windows 10 or later has PowerShell.
+unpack_archive() {
+  local archive="$1" dest="$2"
+
+  case "$archive" in
+    *.zip)
+      if command -v unzip >/dev/null 2>&1; then
+        unzip -q "$archive" -d "$dest"
+      elif tar -xf "$archive" -C "$dest" 2>/dev/null; then
+        : # bsdtar, which Windows 10+ ships as tar.exe, reads zip
+      elif command -v powershell >/dev/null 2>&1; then
+        powershell -NoProfile -Command \
+          "Expand-Archive -LiteralPath '$(cygpath -w "$archive" 2>/dev/null || echo "$archive")' -DestinationPath '$(cygpath -w "$dest" 2>/dev/null || echo "$dest")' -Force"
+      else
+        die "No way to unpack $archive: install unzip, or use a shell with tar or powershell on PATH."
+      fi
+      ;;
+    *)
+      tar -xzf "$archive" -C "$dest"
+      ;;
+  esac
+}
+
 fetch_release() {
   need curl
-  need tar
 
   local version="$1"
-  local target archive url tmp expected actual
+  local target archive url tmp expected actual extension
   target="$(release_target)"
-  archive="godot-cli-${version}-${target}.tar.gz"
+  if is_windows_shell; then extension="zip"; else extension="tar.gz"; fi
+  archive="godot-cli-${version}-${target}.${extension}"
   url="$DOWNLOAD_BASE/v${version}/${archive}"
 
   tmp="$(mktemp -d)"
@@ -239,7 +280,7 @@ fetch_release() {
     die "Could not download SHA256SUMS for v${version}; refusing to install unverified binaries."
   fi
 
-  tar -xzf "$tmp/$archive" -C "$tmp" || die "Could not unpack $archive."
+  unpack_archive "$tmp/$archive" "$tmp" || die "Could not unpack $archive."
 
   local extracted="$tmp/godot-cli-${version}-${target}"
   [[ -d "$extracted" ]] || die "Unexpected archive layout in $archive."
@@ -333,13 +374,14 @@ if [[ "$FROM_RELEASE" -eq 1 ]]; then
   fi
   echo "Installing godot-cli $RELEASE_VERSION from a release"
   SOURCE_ROOT="$(fetch_release "$RELEASE_VERSION")"
-  SRC_BIN="$SOURCE_ROOT/bin/godot-cli"
+  SRC_BIN="$SOURCE_ROOT/bin/godot-cli$(exe_suffix)"
 else
   SOURCE_ROOT="$SCRIPT_DIR"
 
-  if [[ "$(uname -s)" != "Darwin" && "$(uname -s)" != "Linux" ]]; then
-    echo "Note: install.sh is tested on macOS and Linux; proceeding on $(uname -s)." >&2
-  fi
+  case "$(uname -s)" in
+    Darwin|Linux|MINGW*|MSYS*|CYGWIN*) ;;
+    *) echo "Note: install.sh is tested on macOS, Linux and Git Bash; proceeding on $(uname -s)." >&2 ;;
+  esac
 
   if [[ "$DO_BUILD" -eq 1 ]]; then
     command -v zig >/dev/null 2>&1 ||
@@ -348,7 +390,7 @@ else
     (cd "$SOURCE_ROOT" && zig build -Doptimize="$OPTIMIZE")
   fi
 
-  SRC_BIN="$SOURCE_ROOT/zig-out/bin/godot-cli"
+  SRC_BIN="$SOURCE_ROOT/zig-out/bin/godot-cli$(exe_suffix)"
 fi
 
 [[ -x "$SRC_BIN" ]] || die "Binary not found: $SRC_BIN"
@@ -365,7 +407,7 @@ echo "Installing to $PREFIX"
 mkdir -p "$BIN_DIR" "$TEMPLATES_DIR" "$DOCS_DIR" "$EXAMPLES_DIR" \
   "$COMPLETIONS_DIR" "$MAN_DIR" "$(dirname "$SKILLS_DIR")"
 
-install -m 755 "$SRC_BIN" "$BIN_DIR/godot-cli"
+install -m 755 "$SRC_BIN" "$BIN_DIR/godot-cli$(exe_suffix)"
 cp -R "$SOURCE_ROOT/templates/." "$TEMPLATES_DIR/"
 for doc in agent_quickstart.md agent_godot_basics.md agent_scene_authoring.md agent_batch_commands.md commands.md mcp_tools.json; do
   [[ -f "$SOURCE_ROOT/docs/$doc" ]] && cp "$SOURCE_ROOT/docs/$doc" "$DOCS_DIR/"
@@ -388,7 +430,7 @@ fi
 cat >"$PREFIX/env.sh" <<EOF
 # godot-cli agent environment — source this file in your shell or agent session.
 export GODOT_CLI_HOME="$PREFIX"
-export GODOT_CLI="\$GODOT_CLI_HOME/bin/godot-cli"
+export GODOT_CLI="\$GODOT_CLI_HOME/bin/godot-cli$(exe_suffix)"
 export GODOT_CLI_TEMPLATES_ROOT="\$GODOT_CLI_HOME/templates"
 export PATH="\$GODOT_CLI_HOME/bin:\$PATH"
 export MANPATH="\$GODOT_CLI_HOME/share/man:\${MANPATH:-}"
@@ -405,7 +447,7 @@ EOF
 cat >"$PREFIX/VERSION" <<EOF
 installed_from=$([[ "$FROM_RELEASE" -eq 1 ]] && echo "release v$RELEASE_VERSION" || echo "$SOURCE_ROOT")
 installed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-binary_version=$("$BIN_DIR/godot-cli" --version 2>/dev/null || echo unknown)
+binary_version=$("$BIN_DIR/godot-cli$(exe_suffix)" --version 2>/dev/null || echo unknown)
 EOF
 
 if [[ "$INSTALL_SKILL" -eq 1 ]]; then
@@ -416,7 +458,7 @@ fi
 echo ""
 echo "Installed godot-cli to $PREFIX"
 echo ""
-echo "  Binary:       $BIN_DIR/godot-cli"
+echo "  Binary:       $BIN_DIR/godot-cli$(exe_suffix)"
 echo "  Templates:    $TEMPLATES_DIR"
 echo "  Docs:         $DOCS_DIR"
 echo "  Examples:     $EXAMPLES_DIR"

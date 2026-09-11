@@ -67,6 +67,7 @@ zig build                 # binary at zig-out/bin/godot-cli
 ```
 
 Releases ship Linux (musl), macOS, and Windows binaries for x86_64 and aarch64.
+On Windows the same `install.sh` works from Git Bash, MSYS2 or Cygwin.
 See [Getting started](docs/getting_started.md) for the full install matrix,
 agent setup, and a first-scene walkthrough.
 

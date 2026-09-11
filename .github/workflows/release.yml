@@ -77,7 +77,7 @@ jobs:
           cp -R share/man "dist/$name/share/man"
           cp -R skills "dist/$name/skills"
           cp -R third_party "dist/$name/third_party"
-          cp README.md CHANGELOG.md LICENSE THIRDPARTY.md install.sh "dist/$name/"
+          cp README.md CHANGELOG.md LICENSE THIRDPARTY.md install.sh install.ps1 "dist/$name/"
           cd dist
           case "${{ matrix.target }}" in
             *windows)
