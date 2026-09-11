@@ -15,6 +15,17 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.25.1] — 2026-09-11
+
+### Fixed
+
+- **`scene validate --project-root` segfaulted on Windows whenever the project had a `.godot/uid_cache.bin`.** Not scene-specific: every scene in every such project. The validation context held a pointer to the loaded uid cache, and that pointer was taken inside a function that then returned the struct **by value** — so the caller's copy kept the address of a stack frame that had been left. macOS and Linux survive it because the return slot happens to land where the local was; Windows places the copy elsewhere, and the dereference is a crash with no message. The context is filled in the caller's own storage now, so the pointer is inside the struct it belongs to by construction. Reported by a Windows user who bisected it to the uid cache themselves.
+
+### Changed
+
+- **CI runs the test suite on Windows.** It was built for and never run on, which is how a pointer bug that only manifests there reached a user. Reported rather than blocking for now, until the shell-driven smoke tests are known to behave on that runner.
+- **Release binaries are built `ReleaseSafe` rather than `ReleaseFast`.** Undefined behaviour now stops with a panic naming a line instead of a segfault naming nothing — the bug above cost a session of bisection to place, and a message would have placed it in one run. Measured on this workload: 3.0 ms per `scene validate` either way, with the binary 1% larger.
+
 ## [0.25.0] — 2026-09-11
 
 ### Fixed

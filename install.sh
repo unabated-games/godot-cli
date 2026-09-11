@@ -27,7 +27,11 @@ FROM_RELEASE=0
 RELEASE_VERSION=""
 INSTALL_SKILL=0
 SKILLS_ONLY=0
-OPTIMIZE="ReleaseFast"
+# ReleaseSafe, not ReleaseFast: the safety checks cost nothing measurable on
+# this workload (3.0ms a validate either way) and they turn undefined
+# behaviour into a panic that names a line. A Windows user hit a segfault with
+# no message at all, which took a session to narrow down by bisection.
+OPTIMIZE="ReleaseSafe"
 # Comma-separated subset of: cursor,claude,opencode,agents (empty = all)
 SKILL_TARGETS=""
 
@@ -44,7 +48,7 @@ Source options:
   --from-release        Download a released binary instead of building
   --version VERSION     Release to install (default: latest); implies --from-release
   --no-build            Skip zig build; require zig-out/bin/godot-cli
-  --debug               Build with Debug optimize (default: ReleaseFast)
+  --debug               Build with Debug optimize (default: ReleaseSafe)
 
 Install options:
   --prefix DIR          Install root (default: ~/.godot-cli)

@@ -45,28 +45,35 @@ const ValidateSetup = struct {
         if (self.owned_cache) |*cache| cache.deinit(allocator);
     }
 
-    pub fn init(cli: *const app_mod.App, inv: *const spec.Invocation, path: []const u8) !ValidateSetup {
-        var setup: ValidateSetup = .{ .ctx = .{} };
+    /// Fills the caller's own storage rather than returning a value.
+    ///
+    /// `ctx.cache` points at `owned_cache` inside this struct. Built in a
+    /// local and returned by value, that pointer aimed at the frame `init`
+    /// was leaving: the caller's copy kept an address that was no longer its
+    /// own. macOS and Linux survived it because the return slot happens to
+    /// land where the local was; Windows placed the copy elsewhere and every
+    /// `scene validate --project-root` on a project with a uid cache
+    /// segfaulted. Taking `*ValidateSetup` makes the pointer point into the
+    /// caller's storage by construction, which is the only way this stays
+    /// fixed.
+    pub fn load(self: *ValidateSetup, cli: *const app_mod.App, inv: *const spec.Invocation, path: []const u8) !void {
+        const root = projectRootFrom(inv) orelse return;
+        self.ctx.project_root = root;
+        self.ctx.io = cli.io;
+        self.ctx.file_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited) catch null;
 
-        const root = projectRootFrom(inv) orelse return setup;
-        setup.ctx.project_root = root;
-        setup.ctx.io = cli.io;
-        setup.ctx.file_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, path, cli.allocator, .unlimited) catch null;
-
-        if (try loadCacheOptional(cli, inv, &setup.cache_note)) |loaded| {
-            setup.owned_cache = loaded;
-            setup.ctx.cache = &setup.owned_cache.?;
+        if (try loadCacheOptional(cli, inv, &self.cache_note)) |loaded| {
+            self.owned_cache = loaded;
+            self.ctx.cache = &self.owned_cache.?;
         }
 
-        setup.owned_project_name = project_config.readProjectName(cli.allocator, cli.io, root) catch null;
-        setup.ctx.project_name = setup.owned_project_name;
+        self.owned_project_name = project_config.readProjectName(cli.allocator, cli.io, root) catch null;
+        self.ctx.project_name = self.owned_project_name;
 
-        if (setup.owned_project_name != null) {
-            setup.owned_resource_path = try project_config.filesystemToResPath(cli.allocator, root, path);
-            setup.ctx.resource_path = setup.owned_resource_path;
+        if (self.owned_project_name != null) {
+            self.owned_resource_path = try project_config.filesystemToResPath(cli.allocator, root, path);
+            self.ctx.resource_path = self.owned_resource_path;
         }
-
-        return setup;
     }
 };
 
@@ -232,8 +239,9 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind_for_comman
     const kind: []const u8 = if (std.mem.endsWith(u8, path, ".tres")) "resource" else if (std.mem.endsWith(u8, path, ".tscn")) "scene" else kind_for_command;
 
     const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
-    var setup = try ValidateSetup.init(cli, inv, path);
+    var setup: ValidateSetup = .{ .ctx = .{} };
     defer setup.deinit(cli.allocator);
+    try setup.load(cli, inv, path);
 
     const report = try id_validate.validateDocument(cli.allocator, &doc, setup.ctx);
 
@@ -559,8 +567,9 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
     try data.put(cli.allocator, "sections", .{ .array = arr });
 
     if (validate) {
-        var setup = try ValidateSetup.init(cli, inv, path);
+        var setup: ValidateSetup = .{ .ctx = .{} };
         defer setup.deinit(cli.allocator);
+        try setup.load(cli, inv, path);
         const report = try id_validate.validateDocument(cli.allocator, &doc, setup.ctx);
         const issues = try buildIssuesJson(cli, &report);
         try data.put(cli.allocator, "issues", .{ .array = issues });
@@ -1444,7 +1453,9 @@ fn validateBatchHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []co
 
     for (inv.positionals) |path| {
         const doc = try text_format.document.parseFile(cli.allocator, cli.io, path);
-        var setup = try ValidateSetup.init(cli, inv, path);
+        var setup: ValidateSetup = .{ .ctx = .{} };
+        defer setup.deinit(cli.allocator);
+        try setup.load(cli, inv, path);
         const report = try id_validate.validateDocument(cli.allocator, &doc, setup.ctx);
         setup.deinit(cli.allocator);
 
@@ -3109,4 +3120,24 @@ test "set-property refuses a header attribute instead of writing a line Godot ig
     try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("node", "name"), "scene node rename") != null);
     try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("node", "parent"), "scene node reparent") != null);
     try std.testing.expect(std.mem.indexOf(u8, headerAttributeHint("sub_resource", "id"), "header attribute") != null);
+}
+
+test "the validate context points at the caller's own cache, not a dead frame" {
+    // `ctx.cache` used to be aimed at a local that `init` returned by value,
+    // so the caller's copy held the address of a frame that had gone. macOS
+    // and Linux survived it; on Windows every `scene validate --project-root`
+    // on a project with a uid cache segfaulted, which is how it was found.
+    //
+    // Asserted as an address relationship because that is what has to hold on
+    // every platform: whatever storage the struct ends up in, the pointer has
+    // to be inside that same storage.
+    var setup: ValidateSetup = .{ .ctx = .{} };
+    setup.owned_cache = uid_cache.Cache.init(std.testing.allocator);
+    defer setup.deinit(std.testing.allocator);
+    setup.ctx.cache = &setup.owned_cache.?;
+
+    const cache_ptr = @intFromPtr(setup.ctx.cache.?);
+    const self_start = @intFromPtr(&setup);
+    try std.testing.expect(cache_ptr >= self_start);
+    try std.testing.expect(cache_ptr < self_start + @sizeOf(ValidateSetup));
 }

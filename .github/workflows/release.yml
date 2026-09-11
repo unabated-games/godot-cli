@@ -56,7 +56,7 @@ jobs:
         run: |
           zig build \
             -Dtarget=${{ matrix.target }} \
-            -Doptimize=ReleaseFast \
+            -Doptimize=ReleaseSafe \
             -Dversion-string=${{ steps.version.outputs.version }} \
             --prefix out
 

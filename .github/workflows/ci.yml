@@ -39,6 +39,27 @@ jobs:
       - name: Run tests
         run: zig build test
 
+  # Windows was built for and never run on. A pointer into a returned-by-value
+  # struct survived on macOS and Linux and segfaulted there, and the only way
+  # anyone found out was a user bisecting it by hand. Reported, not blocking,
+  # until the shell-driven smoke tests are known to behave on this runner --
+  # the unit tests are the part that would have caught that bug.
+  windows:
+    name: unit tests (windows)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Run unit tests
+        shell: bash
+        run: zig build test
+
   cross-compile:
     name: cross-compile
     runs-on: ubuntu-latest
