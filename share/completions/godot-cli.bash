@@ -54,7 +54,7 @@ _godot_cli_children() {
             echo "add relink scan list show validate search export"
             ;;
         'project')
-            echo "new import run show move apply input settings autoload plugins rendering physics"
+            echo "new import resave run show move apply input settings autoload plugins rendering physics"
             ;;
         'project input')
             echo "list apply validate"
@@ -271,6 +271,9 @@ _godot_cli_options() {
         'project import')
             echo "--project-root --godot"
             ;;
+        'project resave')
+            echo "--project-root --godot --output --no-import"
+            ;;
         'project run')
             echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click --type --focus --keep-cursor --frame-at --log-lines"
             ;;
@@ -436,6 +439,7 @@ _godot_cli_takes_args() {
         'batch') return 0 ;;
         'project new') return 0 ;;
         'project import') return 0 ;;
+        'project resave') return 0 ;;
         'project run') return 0 ;;
         'project show') return 0 ;;
         'project move') return 0 ;;

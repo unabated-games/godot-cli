@@ -27,28 +27,96 @@ pub fn documentsEqual(a: *const document.Document, b: *const document.Document) 
 /// Godot save may rewrite ext_resource ids, drop default sub_resource fields, and omit load_steps.
 /// This compares node tree shape, ext paths, and normalized property values.
 pub fn documentsMatchGodotSave(allocator: std.mem.Allocator, original: *const document.Document, godot_saved: *const document.Document) bool {
-    const orig_nodes = collectNodeSections(allocator, original) catch return false;
-    defer allocator.free(orig_nodes);
-    const saved_nodes = collectNodeSections(allocator, godot_saved) catch return false;
-    defer allocator.free(saved_nodes);
-
-    if (orig_nodes.len != saved_nodes.len) return false;
-
-    const orig_ext = collectExtResourcePaths(allocator, original) catch return false;
-    defer allocator.free(orig_ext);
-    const saved_ext = collectExtResourcePaths(allocator, godot_saved) catch return false;
-    defer allocator.free(saved_ext);
-
-    if (orig_ext.len != saved_ext.len) return false;
-    for (orig_ext, saved_ext) |a, b| {
-        if (!std.mem.eql(u8, a, b)) return false;
-    }
-
-    for (orig_nodes, saved_nodes) |na, nb| {
-        if (!nodeHeadersEquivalent(na.header, nb.header)) return false;
-        if (!propertiesEquivalentIgnoringExtIds(allocator, na, nb, original, godot_saved)) return false;
+    const difference = firstGodotSaveDifference(allocator, original, godot_saved) catch return false;
+    if (difference) |text| {
+        allocator.free(text);
+        return false;
     }
     return true;
+}
+
+/// The first way `original` differs from a Godot save of it, or null when it
+/// matches. Compared: the node tree (order, headers, `unique_id`), each node's
+/// properties with ext_resource ids read as the paths they name, the
+/// ext_resource paths, and the scene's and each ext_resource's `uid` wherever
+/// both sides carry one. Not compared: ext_resource ids, which Godot renumbers;
+/// `load_steps`; and sub_resources, whose default fields Godot drops. A
+/// reference saved from a script can omit uids, so a missing one is not a
+/// difference; trial 35's check matched a scene whose mesh uid was wrong.
+pub fn firstGodotSaveDifference(allocator: std.mem.Allocator, original: *const document.Document, godot_saved: *const document.Document) !?[]const u8 {
+    const orig_nodes = try collectNodeSections(allocator, original);
+    defer allocator.free(orig_nodes);
+    const saved_nodes = try collectNodeSections(allocator, godot_saved);
+    defer allocator.free(saved_nodes);
+    if (orig_nodes.len != saved_nodes.len) {
+        return try std.fmt.allocPrint(allocator, "{d} node(s) here, {d} in the Godot save", .{ orig_nodes.len, saved_nodes.len });
+    }
+
+    if (headerUid(original)) |a| if (headerUid(godot_saved)) |b| if (!std.mem.eql(u8, a, b)) {
+        return try std.fmt.allocPrint(allocator, "the scene's uid is {s} here and {s} in the Godot save", .{ a, b });
+    };
+
+    const orig_ext = collectExtResourcePaths(allocator, original) catch return try allocator.dupe(u8, "an ext_resource here has no path");
+    defer allocator.free(orig_ext);
+    const saved_ext = collectExtResourcePaths(allocator, godot_saved) catch return try allocator.dupe(u8, "an ext_resource in the Godot save has no path");
+    defer allocator.free(saved_ext);
+    if (orig_ext.len != saved_ext.len) {
+        return try std.fmt.allocPrint(allocator, "{d} ext_resource(s) here, {d} in the Godot save", .{ orig_ext.len, saved_ext.len });
+    }
+    for (orig_ext, saved_ext) |a, b| {
+        if (!std.mem.eql(u8, a, b)) return try std.fmt.allocPrint(allocator, "ext_resource {s} here where the Godot save has {s}", .{ a, b });
+        if (extUid(original, a)) |uid_a| if (extUid(godot_saved, b)) |uid_b| if (!std.mem.eql(u8, uid_a, uid_b)) {
+            return try std.fmt.allocPrint(allocator, "ext_resource {s} has uid {s} here and {s} in the Godot save", .{ a, uid_a, uid_b });
+        };
+    }
+
+    var orig_ids = try buildExtIdToPath(allocator, original);
+    defer orig_ids.deinit();
+    var saved_ids = try buildExtIdToPath(allocator, godot_saved);
+    defer saved_ids.deinit();
+    for (orig_nodes, saved_nodes) |na, nb| {
+        const name = na.header.getString("name") orelse "?";
+        for ([_][]const u8{ "name", "type", "parent", "unique_id" }) |field| {
+            if (!headerFieldEqual(&na.header, &nb.header, field)) {
+                return try std.fmt.allocPrint(allocator, "node {s}: its {s} differs from the Godot save", .{ name, field });
+            }
+        }
+        // An instance names its scene by ext_resource id, which a save to a
+        // new path renumbers; compare the scene it names. Compared literally,
+        // every instanced node was a mismatch against a `project resave` copy.
+        const instance_a = na.header.getString("instance");
+        const instance_b = nb.header.getString("instance");
+        if ((instance_a == null) != (instance_b == null)) {
+            return try std.fmt.allocPrint(allocator, "node {s}: it is an instance on only one side", .{name});
+        }
+        if (instance_a) |a| {
+            const scene_a = try normalizeExtResourceRef(allocator, a, &orig_ids);
+            defer allocator.free(scene_a);
+            const scene_b = try normalizeExtResourceRef(allocator, instance_b.?, &saved_ids);
+            defer allocator.free(scene_b);
+            if (!std.mem.eql(u8, scene_a, scene_b)) {
+                return try std.fmt.allocPrint(allocator, "node {s}: it instances {s} here and {s} in the Godot save", .{ name, scene_a, scene_b });
+            }
+        }
+        if (!propertiesEquivalentIgnoringExtIds(allocator, na, nb, original, godot_saved)) {
+            return try std.fmt.allocPrint(allocator, "node {s}: its properties differ from the Godot save (names, order, or values)", .{name});
+        }
+    }
+    return null;
+}
+
+fn headerUid(doc: *const document.Document) ?[]const u8 {
+    if (doc.sections.items.len == 0) return null;
+    return doc.sections.items[0].header.getString("uid");
+}
+
+fn extUid(doc: *const document.Document, path: []const u8) ?[]const u8 {
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const section_path = section.header.getString("path") orelse continue;
+        if (std.mem.eql(u8, section_path, path)) return section.header.getString("uid");
+    }
+    return null;
 }
 
 const NodeView = struct {
@@ -321,4 +389,62 @@ test "byte-identical Godot save with id session and format stripping" {
     defer allocator.free(written);
 
     try std.testing.expectEqualStrings(godot_saved, written);
+}
+
+test "a Godot save with a different uid is a difference, a missing one is not" {
+    // Trial 35's compare matched a scene whose mesh uid had been swapped.
+    const allocator = std.testing.allocator;
+    const scene =
+        \\[gd_scene format=3 uid="uid://c8quarrymain1"]
+        \\
+        \\[ext_resource type="BoxMesh" uid="uid://bc628hhe4x5yp" path="res://crate.res" id="1_crate"]
+        \\
+        \\[node name="Main" type="Node3D"]
+        \\
+    ;
+    var original = try document.parseBytes(allocator, scene);
+    defer original.deinit(allocator);
+
+    var wrong = try document.parseBytes(allocator, scene);
+    defer wrong.deinit(allocator);
+    try wrong.sections.items[1].header.setStringField(allocator, "uid", "uid://byggqned6p7ih");
+    const difference = (try firstGodotSaveDifference(allocator, &original, &wrong)).?;
+    defer allocator.free(difference);
+    try std.testing.expect(std.mem.indexOf(u8, difference, "uid://byggqned6p7ih") != null);
+
+    // A script-side save can leave uids out entirely: still a match.
+    var bare = try document.parseBytes(allocator, scene);
+    defer bare.deinit(allocator);
+    bare.sections.items[1].header.removeField(allocator, "uid");
+    bare.sections.items[0].header.removeField(allocator, "uid");
+    try std.testing.expect(documentsMatchGodotSave(allocator, &original, &bare));
+}
+
+test "an instance is compared by the scene it names, not its ext_resource id" {
+    // A save to a new path renumbers ext ids; `project resave` copies are
+    // exactly that, and every instanced node read as a mismatch.
+    const allocator = std.testing.allocator;
+    var here = try document.parseBytes(allocator,
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="PackedScene" path="res://hud.tscn" id="1_aaaaa"]
+        \\
+        \\[node name="Main" type="Node"]
+        \\
+        \\[node name="HUD" parent="." instance=ExtResource("1_aaaaa")]
+        \\
+    );
+    defer here.deinit(allocator);
+    var saved = try document.parseBytes(allocator,
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="PackedScene" path="res://hud.tscn" id="1_bbbbb"]
+        \\
+        \\[node name="Main" type="Node"]
+        \\
+        \\[node name="HUD" parent="." instance=ExtResource("1_bbbbb")]
+        \\
+    );
+    defer saved.deinit(allocator);
+    try std.testing.expect(documentsMatchGodotSave(allocator, &here, &saved));
 }

@@ -13,6 +13,7 @@ const project_rendering = @import("../godot/project_rendering.zig");
 const project_physics = @import("../godot/project_physics.zig");
 const project_unified = @import("../godot/project_unified.zig");
 const project_move = @import("../godot/project_move.zig");
+const pos = @import("positionals.zig");
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
@@ -103,6 +104,87 @@ fn importHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "summary", .{ .string = if (ok) "imported project resources" else "godot import exited with an error" });
     if (!ok) try data.put(cli.allocator, "stderr_tail", .{ .string = outcome.stderr });
     return .{ .data = .{ .object = data }, .exit_code = if (ok) .success else .failure };
+}
+
+/// Godot's own save of a scene or resource, as the reference `scene
+/// compare-godot` checks against. Trial 35 wrote this script by hand and ran
+/// Godot from the shell to get one. The copy goes elsewhere, never over the
+/// file: letting headless Godot rewrite a scene is what the authoring rules
+/// warn against.
+fn resaveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse ".";
+    const source = project_move.normalizeResPath(cli.allocator, root, inv.positionals[0]) catch {
+        error_details.record(.{ .field = "file", .value = inv.positionals[0], .hint = "a res:// path or a path inside the project" });
+        return error.InvalidPath;
+    };
+    const output = if (inv.getOption("output")) |out|
+        project_move.normalizeResPath(cli.allocator, root, out) catch {
+            error_details.record(.{ .field = "output", .value = out, .hint = "a res:// path or a path inside the project" });
+            return error.InvalidPath;
+        }
+    else
+        try std.fmt.allocPrint(cli.allocator, "res://.godot/godot-cli/resave/{s}", .{source["res://".len..]});
+    if (std.mem.eql(u8, output, source)) {
+        error_details.record(.{ .field = "output", .value = output, .hint = "resave writes a copy to compare against; having headless Godot rewrite the file itself is what the authoring rules warn against. Leave --output out, or give another path" });
+        return error.ResaveOverSource;
+    }
+    const output_fs = try std.fs.path.join(cli.allocator, &.{ root, output["res://".len..] });
+    if (std.fs.path.dirname(output_fs)) |dir| std.Io.Dir.cwd().createDirPath(cli.io, dir) catch {};
+    std.Io.Dir.cwd().deleteFile(cli.io, output_fs) catch {};
+
+    const godot = try godot_run.locateGodot(cli.allocator, cli.io, cli.environ, inv.getOption("godot"));
+    if (!inv.flag("no-import")) {
+        const imported = try godot_run.runProcess(cli.allocator, cli.environ, root, &.{ godot, "--headless", "--path", ".", "--import", "--quit" });
+        _ = imported;
+    }
+    const driver_rel = ".godot/godot-cli/resave.gd";
+    const driver_fs = try std.fs.path.join(cli.allocator, &.{ root, driver_rel });
+    io_util.writeFileAtomic(cli.io, driver_fs,
+        \\extends SceneTree
+        \\
+        \\# Written by godot-cli project resave: load a file and save a copy of it.
+        \\func _init() -> void:
+        \\    var args := OS.get_cmdline_user_args()
+        \\    var res := ResourceLoader.load(args[0], "", ResourceLoader.CACHE_MODE_IGNORE)
+        \\    if res == null:
+        \\        print("godot-cli resave: could not load ", args[0])
+        \\        quit(1)
+        \\        return
+        \\    var err := ResourceSaver.save(res, args[1])
+        \\    print("godot-cli resave: err=", err)
+        \\    quit(0 if err == OK else 1)
+        \\
+    ) catch return error.Io;
+    const outcome = try godot_run.runProcess(cli.allocator, cli.environ, root, &.{ godot, "--headless", "--path", ".", "--script", "res://" ++ driver_rel, "--", source, output });
+    const code: ?u8 = switch (outcome.term) {
+        .exited => |c| c,
+        else => null,
+    };
+    const written = if (std.Io.Dir.cwd().access(cli.io, output_fs, .{})) |_| true else |_| false;
+    const ok = code != null and code.? == 0 and written;
+
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "file", .{ .string = source });
+    try data.put(cli.allocator, "output", .{ .string = output });
+    try data.put(cli.allocator, "output_path", .{ .string = output_fs });
+    try data.put(cli.allocator, "godot", .{ .string = godot });
+    if (code) |c| try data.put(cli.allocator, "exit", .{ .integer = c });
+    if (!ok) {
+        try data.put(cli.allocator, "stdout_tail", .{ .string = tail(outcome.stdout, 1200) });
+        try data.put(cli.allocator, "stderr_tail", .{ .string = tail(outcome.stderr, 1200) });
+    }
+    const summary = if (ok)
+        try std.fmt.allocPrint(cli.allocator, "Godot saved {s} as {s}; compare with scene compare-godot {s} {s}", .{ source, output, inv.positionals[0], output_fs })
+    else
+        try std.fmt.allocPrint(cli.allocator, "Godot could not load and save {s}; see stdout_tail and stderr_tail", .{source});
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    return .{ .data = .{ .object = data }, .exit_code = if (ok) .success else .failure };
+}
+
+fn tail(text: []const u8, max: usize) []const u8 {
+    return if (text.len > max) text[text.len - max ..] else text;
 }
 
 fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -1199,6 +1281,12 @@ const import_options = [_]spec.OptionSpec{
     .{ .long = "project-root", .kind = .path, .description = "Godot project root (default: current directory)" },
     godot_option,
 };
+const resave_options = [_]spec.OptionSpec{
+    .{ .long = "project-root", .kind = .path, .description = "Godot project root (default: current directory)" },
+    godot_option,
+    .{ .long = "output", .kind = .string, .description = "Where the copy goes, res:// or project-relative; default .godot/godot-cli/resave/<the file's path>, where Godot imports nothing" },
+    .{ .long = "no-import", .kind = .flag, .description = "Skip the import that runs first; a project never imported cannot load its textures" },
+};
 const run_options = [_]spec.OptionSpec{
     .{ .long = "project-root", .kind = .path, .description = "Godot project root (default: current directory)" },
     godot_option,
@@ -1287,6 +1375,14 @@ pub fn commands() spec.CommandSpec {
                 .description = "godot --headless --path . --import --quit, from the project root. Run it once after adding scenes, scripts, or textures, before running the game or filling catalog scene_uid fields. Godot writes into the project as it imports: a .import file beside each asset, a .uid file beside each script, and the .godot/ folder, which holds the uid cache. Commit the .import and .uid files: a UID is assigned once and kept there, and if the file changes later, a checkout without them would be assigned a different one.",
                 .options = &import_options,
                 .handler = importHandler,
+            },
+            .{
+                .name = "resave",
+                .summary = "Have Godot load a scene or resource and save a copy, the reference for compare-godot",
+                .description = "Imports (unless --no-import), then runs Godot headless to load the file and save a copy to --output, by default .godot/godot-cli/resave/<its path>, where Godot imports nothing. Never over the file itself. The copy is Godot's own writing of the file's content, so scene compare-godot <file> <copy> answers \"is this written the way Godot writes it?\" in two calls. Saved to a new path, the copy's ext_resource ids are renumbered and its uids left out; compare-godot allows for both, and scene validate checks uids against the files. Result data: file, output, output_path, exit, summary.",
+                .options = &resave_options,
+                .handler = resaveHandler,
+                .positionals = &pos.file,
             },
             .{
                 .name = "run",

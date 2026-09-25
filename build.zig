@@ -812,6 +812,13 @@ pub fn build(b: *std.Build) void {
         \\grep -q '^light_energy = 2.0$' "$t/main.tscn" && grep -q '^omni_range = 5.0$' "$t/main.tscn" &&
         \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Pic --type Sprite3D --properties '{"render_priority":2.0}' --project-root "$t" --json >/dev/null &&
         \\grep -q '^render_priority = 2$' "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene normalize "$t/main.tscn" --project-root "$t" --dry-run --json | grep -q '"changed":false' &&
+        \\cp "$t/main.tscn" "$t/clean.tscn" && sed -i.bak 's/ unique_id=[0-9]*//' "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene normalize "$t/main.tscn" --project-root "$t" --dry-run --json | grep -q '"changed":true' &&
+        \\cp "$t/clean.tscn" "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene apply "$t/main.tscn" --intent-json '{"steps":[{"recipe":"camera_3d","parent":"/root/Main","name":"Cam","position":[-1.5,1.5,4],"look_at":[-1.5,0,0]},{"recipe":"place_3d","path":"/root/Main/Bulb","position":"Vector3(0, 4, 0)"}]}' --project-root "$t" --json >/dev/null &&
+        \\grep -q '^transform = Transform3D(1, 0, 0, 0, 0.936329, 0.351123, 0, -0.351123, 0.936329, -1.5, 1.5, 4)$' "$t/main.tscn" &&
+        \\grep -q '^transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)$' "$t/main.tscn" &&
         \\rm -rf "$t"
     });
     backlog_smoke.setCwd(b.path("."));
@@ -895,6 +902,9 @@ pub fn build(b: *std.Build) void {
         \\grep -q 'autoload fixture play pressed' test_fixtures/autoload_project/.godot/godot-cli/godot.log &&
         \\rm -rf test_fixtures/autoload_project/.godot &&
         \\./zig-out/bin/godot-cli project import --project-root test_fixtures/project --godot "$GODOT" --json | grep -q '"ok":true' &&
+        \\./zig-out/bin/godot-cli project resave multi_ext_godot_saved.tscn --project-root test_fixtures/project --godot "$GODOT" --no-import --json | grep -q '"ok":true' &&
+        \\./zig-out/bin/godot-cli scene compare-godot test_fixtures/project/multi_ext_godot_saved.tscn test_fixtures/project/.godot/godot-cli/resave/multi_ext_godot_saved.tscn --json | grep -q '"matches_godot_save":true' &&
+        \\! ./zig-out/bin/godot-cli project resave multi_ext_godot_saved.tscn --output multi_ext_godot_saved.tscn --project-root test_fixtures/project --godot "$GODOT" --json >/dev/null &&
         \\rm -rf test_fixtures/project/.godot/godot-cli
     });
     run_smoke.setCwd(b.path("."));

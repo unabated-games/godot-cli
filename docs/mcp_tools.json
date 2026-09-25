@@ -2155,6 +2155,26 @@
       }
     },
     {
+      "name": "project_resave",
+      "argv": [
+        "project",
+        "resave",
+        "<file>",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "resave",
+          "main.tscn",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
       "name": "project_run",
       "argv": [
         "project",

@@ -261,6 +261,8 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
         .{ .err = "InvalidEvent", .kind = "invalid_event", .message = "no input event type with that name" },
         .{ .err = "UnknownKey", .kind = "unknown_key", .message = "no key with that name" },
         .{ .err = "NoUidRecorded", .kind = "no_uid_recorded", .message = "the file records no UID" },
+        .{ .err = "InvalidPath", .kind = "invalid_path", .message = "the path is not one this command can use" },
+        .{ .err = "ResaveOverSource", .kind = "resave_over_source", .message = "project resave writes a copy, never over the file it reads" },
         .{ .err = "UidCacheMissing", .kind = "uid_cache_missing", .message = "the project has no uid cache yet" },
         .{ .err = "BinaryResourceUnreadable", .kind = "binary_resource_unreadable", .message = "the binary resource's header could not be read" },
     };

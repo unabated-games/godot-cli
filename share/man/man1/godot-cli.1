@@ -1132,10 +1132,10 @@ document as a file (\-\-intent, \-\-patch) or inline (\-\-intent\-json,
 An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main",
 "name": "Player"}]}. Recipes: add_node, node_set, assign_ext,
 connect, instance_catalog, instance_scene, instance_override,
-catalog_button, player_2d, static_body_2d, camera_2d, ui_panel,
-tilemap_layer, audio_player. Every recipe takes "parent" and
-"name" except node_set, assign_ext, instance_override, and
-connect, which address existing nodes by "path" (or "from"/"to").
+catalog_button, player_2d, static_body_2d, camera_2d, camera_3d,
+place_3d, ui_panel, tilemap_layer, audio_player. Every recipe
+takes "parent" and "name" except node_set, assign_ext, instance_override,
+and connect, which address existing nodes by "path" (or "from"/"to").
 The fields of each recipe: scene recipes (MCP resource godot\-cli://docs/recipes).
 
 A patch is {"ops": [{"op": "node_add", "parent": "/root/Main",
@@ -1182,14 +1182,14 @@ and preview_diff the change node by node.
 An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main",
 "name": "Player"}]}. Recipes: add_node, node_set, assign_ext,
 connect, instance_catalog, instance_scene, instance_override,
-catalog_button, player_2d, static_body_2d, camera_2d, ui_panel,
-tilemap_layer, audio_player; their fields: scene recipes (MCP
-resource godot\-cli://docs/recipes). A patch is {"ops": [{"op":
-"node_add", "parent": "/root/Main", "name": "HUD", "type":
-"CanvasLayer", "properties": {"visible": false}}]}. In a properties
-object a string carries its own quotes: "text": "\e"Score\e"".
-Full reference: agent_scene_authoring.md, served over MCP as
-godot\-cli://docs/scene\-authoring.
+catalog_button, player_2d, static_body_2d, camera_2d, camera_3d,
+place_3d, ui_panel, tilemap_layer, audio_player; their fields:
+scene recipes (MCP resource godot\-cli://docs/recipes). A patch
+is {"ops": [{"op": "node_add", "parent": "/root/Main", "name":
+"HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}.
+In a properties object a string carries its own quotes: "text":
+"\e"Score\e"". Full reference: agent_scene_authoring.md, served
+over MCP as godot\-cli://docs/scene\-authoring.
 .TP
 \fIfile\fR
 Scene file (.tscn)
@@ -1405,6 +1405,10 @@ Repair scene\-local IDs and sort ext_resource sections for
 save
 .PP
 Runs Godot\-compatible save preparation without editing properties.
+changed says whether the save changes the file, so \-\-dry\-run
+answers "is this file already written the way a save writes
+it?"; a dry run also returns preview_sections, the exact text
+of each section a save would change or add.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -1497,8 +1501,14 @@ Check structure preservation without writing
 .SS godot\-cli scene compare\-godot
 Compare a scene to a Godot headless save (semantic match)
 .PP
-Ignores ext_resource id suffixes and default sub_resource fields
-stripped by Godot.
+Compares the node tree (order, headers, unique_id), each node's
+properties with ext_resource ids read as the paths they name,
+the ext_resource paths, and the scene's and each ext_resource's
+uid wherever both files carry one. Not compared: ext_resource
+ids, which Godot renumbers; load_steps; and sub_resources,
+whose default fields Godot drops. On a mismatch, difference
+names the first one. The Godot save is the second positional,
+or \-\-reference, the same thing. project resave makes one.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -1880,6 +1890,12 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli resource normalize
 Repair scene\-local IDs and sort ext_resource sections for
 save
+.PP
+Runs Godot\-compatible save preparation without editing properties.
+changed says whether the save changes the file, so \-\-dry\-run
+answers "is this file already written the way a save writes
+it?"; a dry run also returns preview_sections, the exact text
+of each section a save would change or add.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -1972,6 +1988,12 @@ Output path (default: overwrite input)
 Check structure preservation without writing
 .SS godot\-cli resource compare\-godot
 Compare a resource to a Godot headless save (semantic match)
+.PP
+A resource has no node tree, so this compares only its ext_resource
+paths and the uids both files carry; the [resource] and sub_resource
+sections are not compared. On a mismatch, difference names
+it. The Godot save is the second positional, or \-\-reference,
+the same thing.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -2196,6 +2218,37 @@ Godot project root (default: current directory)
 \fB\-\-godot\fR \fIpath\fR
 Godot binary; default $GODOT, then godot on PATH, then the
 macOS app bundle
+.SS godot\-cli project resave
+Have Godot load a scene or resource and save a copy, the reference
+for compare\-godot
+.PP
+Imports (unless \-\-no\-import), then runs Godot headless to
+load the file and save a copy to \-\-output, by default .godot/godot\-cli/resave/<its
+path>, where Godot imports nothing. Never over the file itself.
+The copy is Godot's own writing of the file's content, so scene
+compare\-godot <file> <copy> answers "is this written the way
+Godot writes it?" in two calls. Saved to a new path, the copy's
+ext_resource ids are renumbered and its uids left out; compare\-godot
+allows for both, and scene validate checks uids against the
+files. Result data: file, output, output_path, exit, summary.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.TP
+\fB\-\-godot\fR \fIpath\fR
+Godot binary; default $GODOT, then godot on PATH, then the
+macOS app bundle
+.TP
+\fB\-\-output\fR \fIvalue\fR
+Where the copy goes, res:// or project\-relative; default .godot/godot\-cli/resave/<the
+file's path>, where Godot imports nothing
+.TP
+\fB\-\-no\-import\fR
+Skip the import that runs first; a project never imported cannot
+load its textures
 .SS godot\-cli project run
 Run the game for a few frames and capture the last frame and
 the log

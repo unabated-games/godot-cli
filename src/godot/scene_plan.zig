@@ -1,6 +1,7 @@
 //! Expand high-level intent JSON into patch ops and preview plans (no write).
 
 const std = @import("std");
+const lex = @import("variant/lex.zig");
 const error_details = @import("error_details.zig");
 const scene_patch = @import("scene_patch.zig");
 const document = @import("text_format/document.zig");
@@ -640,6 +641,35 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         return;
     }
 
+    if (std.mem.eql(u8, recipe, "camera_3d")) {
+        const parent = try requiredString(step, "parent");
+        const name = try requiredString(step, "name");
+        try ops.append(try makeOpObject(ops_alloc, &[_]Field{
+            .{ "op", "node_add" },
+            .{ "parent", parent },
+            .{ "name", name },
+            .{ "type", "Camera3D" },
+        }));
+        var props: std.json.ObjectMap = .{};
+        try props.put(ops_alloc, "transform", .{ .string = try placementTransform(ops_alloc, recipe, step) });
+        if (readBool(step.get("current"))) |current| try props.put(ops_alloc, "current", .{ .bool = current });
+        if (readFloat(step.get("fov"))) |fov| try props.put(ops_alloc, "fov", .{ .float = fov });
+        const last = &ops.items[ops.items.len - 1];
+        try last.object.put(ops_alloc, "properties", .{ .object = props });
+        return;
+    }
+
+    if (std.mem.eql(u8, recipe, "place_3d")) {
+        const path = try requiredString(step, "path");
+        var op: std.json.ObjectMap = .{};
+        try op.put(ops_alloc, "op", .{ .string = "node_set" });
+        try op.put(ops_alloc, "path", .{ .string = try ops_alloc.dupe(u8, path) });
+        try op.put(ops_alloc, "property", .{ .string = "transform" });
+        try op.put(ops_alloc, "value", .{ .string = try placementTransform(ops_alloc, recipe, step) });
+        try ops.append(.{ .object = op });
+        return;
+    }
+
     if (std.mem.eql(u8, recipe, "camera_2d")) {
         const parent = try requiredString(step, "parent");
         const name = try requiredString(step, "name");
@@ -766,6 +796,8 @@ pub const recipes = [_]Recipe{
     .{ .name = "player_2d", .summary = "CharacterBody2D with capsule collision, optional sprite, script, and position", .required = &.{ "parent", "name" }, .optional = &.{ "position", "radius", "texture", "sprite_texture", "texture_path", "script", "modulate", "sprite", "shape_id_hint" } },
     .{ .name = "static_body_2d", .summary = "StaticBody2D with a rectangle collision centred on position, size as Vector2(w, h); texture tiles a sprite, color draws a filled polygon so the body is visible", .required = &.{ "parent", "name" }, .optional = &.{ "position", "size", "texture", "color", "shape_id_hint" } },
     .{ .name = "camera_2d", .summary = "Camera2D; under the player it follows, under the root it sits at position (the origin unless given)", .required = &.{ "parent", "name" }, .optional = &.{ "position", "zoom", "enabled" } },
+    .{ .name = "camera_3d", .summary = "Camera3D at position (the origin unless given) facing look_at, each a point as [x, y, z] or \"Vector3(x, y, z)\"; the transform is written the way the editor writes it", .required = &.{ "parent", "name" }, .optional = &.{ "position", "look_at", "current", "fov" } },
+    .{ .name = "place_3d", .summary = "Set an existing 3D node's transform: at position, and facing look_at when given (its -Z toward the point, as Node3D.look_at turns it)", .required = &.{"path"}, .optional = &.{ "position", "look_at" } },
     .{ .name = "ui_panel", .summary = "Panel with an optional title label", .required = &.{ "parent", "name" }, .optional = &.{ "title", "full_rect" } },
     .{ .name = "tilemap_layer", .summary = "TileMapLayer with an optional tileset", .required = &.{ "parent", "name" }, .optional = &.{ "tileset", "with_tilemap", "tilemap_name" } },
     .{ .name = "audio_player", .summary = "AudioStreamPlayer (or 2D with spatial) with optional stream", .required = &.{ "parent", "name" }, .optional = &.{ "stream", "autoplay", "volume_db", "spatial" } },
@@ -812,8 +844,8 @@ test "the recipe table and the name list agree" {
 
 /// Every recipe `expandRecipe` accepts, in the order the docs list them. The
 /// command descriptions repeat this list; a test keeps the two in step.
-pub const recipe_names = [_][]const u8{ "add_node", "node_set", "assign_ext", "connect", "instance_catalog", "instance_scene", "instance_override", "catalog_button", "player_2d", "static_body_2d", "camera_2d", "ui_panel", "tilemap_layer", "audio_player" };
-pub const recipe_names_text = "add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player";
+pub const recipe_names = [_][]const u8{ "add_node", "node_set", "assign_ext", "connect", "instance_catalog", "instance_scene", "instance_override", "catalog_button", "player_2d", "static_body_2d", "camera_2d", "camera_3d", "place_3d", "ui_panel", "tilemap_layer", "audio_player" };
+pub const recipe_names_text = "add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, camera_3d, place_3d, ui_panel, tilemap_layer, audio_player";
 
 test "every listed recipe is one expandRecipe accepts" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -829,6 +861,95 @@ test "every listed recipe is one expandRecipe accepts" {
     }
     var ops: std.json.Array = .init(arena);
     try std.testing.expectError(error.UnknownRecipe, expandRecipe(arena, "teleport", .{}, &ops));
+}
+
+/// `Transform3D(...)` text for a node at `position` (the origin when absent),
+/// turned to face `look_at` when given, the way `Node3D.look_at` turns it:
+/// -Z toward the target, +Y up (`Basis::looking_at`). Godot writes the basis
+/// row by row, then the origin. Trial 35 worked a camera's matrix out by hand;
+/// each number is rounded to six places, as that hand-written camera was, and
+/// a Godot re-save of it wrote the same text back.
+fn placementTransform(allocator: std.mem.Allocator, recipe: []const u8, step: std.json.ObjectMap) Error![]const u8 {
+    const position = (try readVec3(recipe, step, "position")) orelse [3]f64{ 0, 0, 0 };
+    var rows = [3][3]f64{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } };
+    if (try readVec3(recipe, step, "look_at")) |target| {
+        const dir = [3]f64{ target[0] - position[0], target[1] - position[1], target[2] - position[2] };
+        if (vecLength(dir) < 1e-9) {
+            error_details.record(.{ .op = recipe, .field = "look_at", .hint = "look_at is the node's own position; give a point elsewhere" });
+            return error.InvalidIntent;
+        }
+        const z = vecScale(dir, -1.0 / vecLength(dir));
+        var x = vecCross(.{ 0, 1, 0 }, z);
+        if (vecLength(x) < 1e-6) {
+            error_details.record(.{ .op = recipe, .field = "look_at", .hint = "look_at is straight above or below the node, so which way is up is undefined; move one of them sideways a little" });
+            return error.InvalidIntent;
+        }
+        x = vecScale(x, 1.0 / vecLength(x));
+        const y = vecCross(z, x);
+        for (0..3) |i| rows[i] = .{ x[i], y[i], z[i] };
+    }
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    errdefer out.deinit();
+    out.writer.writeAll("Transform3D(") catch return error.OutOfMemory;
+    var first = true;
+    for (rows) |row| for (row) |value| {
+        try writeComponent(allocator, &out.writer, value, first);
+        first = false;
+    };
+    for (position) |value| try writeComponent(allocator, &out.writer, value, false);
+    out.writer.writeAll(")") catch return error.OutOfMemory;
+    return out.toOwnedSlice() catch return error.OutOfMemory;
+}
+
+fn writeComponent(allocator: std.mem.Allocator, w: *std.Io.Writer, value: f64, first: bool) Error!void {
+    var rounded = @round(value * 1e6) / 1e6;
+    if (rounded == 0) rounded = 0; // no -0
+    const text = lex.formatGodotFloat(allocator, rounded) catch return error.OutOfMemory;
+    defer allocator.free(text);
+    if (!first) w.writeAll(", ") catch return error.OutOfMemory;
+    w.writeAll(text) catch return error.OutOfMemory;
+}
+
+/// A point as `[x, y, z]` or as `"Vector3(x, y, z)"`; null when the field is absent.
+fn readVec3(recipe: []const u8, step: std.json.ObjectMap, key: []const u8) Error!?[3]f64 {
+    const value = step.get(key) orelse return null;
+    var out: [3]f64 = undefined;
+    switch (value) {
+        .array => |items| {
+            if (items.items.len != 3) return badVec3(recipe, key);
+            for (items.items, 0..) |item, i| out[i] = readFloat(item) orelse return badVec3(recipe, key);
+        },
+        .string => |text| {
+            const trimmed = std.mem.trim(u8, text, " ");
+            if (!std.mem.startsWith(u8, trimmed, "Vector3(") or !std.mem.endsWith(u8, trimmed, ")")) return badVec3(recipe, key);
+            var parts = std.mem.splitScalar(u8, trimmed["Vector3(".len .. trimmed.len - 1], ',');
+            var i: usize = 0;
+            while (parts.next()) |part| : (i += 1) {
+                if (i == 3) return badVec3(recipe, key);
+                out[i] = std.fmt.parseFloat(f64, std.mem.trim(u8, part, " ")) catch return badVec3(recipe, key);
+            }
+            if (i != 3) return badVec3(recipe, key);
+        },
+        else => return badVec3(recipe, key),
+    }
+    return out;
+}
+
+fn badVec3(recipe: []const u8, key: []const u8) Error {
+    error_details.record(.{ .op = recipe, .field = key, .hint = "a point, as [x, y, z] or \"Vector3(x, y, z)\"" });
+    return error.InvalidIntent;
+}
+
+fn vecLength(v: [3]f64) f64 {
+    return @sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+fn vecScale(v: [3]f64, k: f64) [3]f64 {
+    return .{ v[0] * k, v[1] * k, v[2] * k };
+}
+
+fn vecCross(a: [3]f64, b: [3]f64) [3]f64 {
+    return .{ a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
 }
 
 const Field = struct { []const u8, []const u8 };
@@ -1425,4 +1546,31 @@ test "every field the recipe expanders read is in the recipe table" {
             return error.TestExpectedEqual;
         }
     }
+}
+
+test "camera_3d aims with Godot's look_at, written row by row" {
+    // Trial 35's camera, worked out by hand, which rendered Rock and Crate
+    // and survived a Godot re-save unchanged.
+    const allocator = std.testing.allocator;
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator,
+        \\{"position": [-1.5, 1.5, 4], "look_at": "Vector3(-1.5, 0, 0)"}
+    , .{});
+    defer parsed.deinit();
+    const text = try placementTransform(allocator, "camera_3d", parsed.value.object);
+    defer allocator.free(text);
+    try std.testing.expectEqualStrings("Transform3D(1, 0, 0, 0, 0.936329, 0.351123, 0, -0.351123, 0.936329, -1.5, 1.5, 4)", text);
+
+    var plain = try std.json.parseFromSlice(std.json.Value, allocator,
+        \\{"position": [6, 0, 0]}
+    , .{});
+    defer plain.deinit();
+    const placed = try placementTransform(allocator, "place_3d", plain.value.object);
+    defer allocator.free(placed);
+    try std.testing.expectEqualStrings("Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)", placed);
+
+    var straight_down = try std.json.parseFromSlice(std.json.Value, allocator,
+        \\{"position": [0, 5, 0], "look_at": [0, 0, 0]}
+    , .{});
+    defer straight_down.deinit();
+    try std.testing.expectError(error.InvalidIntent, placementTransform(allocator, "camera_3d", straight_down.value.object));
 }

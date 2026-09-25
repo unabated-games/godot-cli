@@ -636,33 +636,94 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
     };
 }
 
+/// Everything writeWithPrepare does to a document short of writing it: the
+/// ext_resource uid refresh, then the save preparation, with the id session
+/// read but not saved. A dry run that shows text must show a write's text.
+fn prepareInMemory(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8, doc: *text_format.document.Document) !void {
+    if (!inv.flag("no-prepare-save")) {
+        if (projectRootFrom(inv)) |root| {
+            _ = resource_uid_lookup.refreshExtResourceUids(cli.allocator, cli.io, root, doc) catch 0;
+        }
+    }
+    var prepare = try prepareSaveOptions(cli, inv, output_path);
+    defer prepare.deinit(cli.allocator);
+    if (prepare.options) |options| try text_format.save_prepare.prepareDocument(cli.allocator, doc, options);
+}
+
+/// The exact text of each section `after` has that `before` does not: every
+/// section whose written text the file does not already hold, in file order.
+/// Trial 33 needed a patch's text before writing it.
+fn changedSections(cli: *const app_mod.App, before: *const text_format.document.Document, after: *const text_format.document.Document) !std.json.Array {
+    var before_texts: std.StringHashMapUnmanaged(usize) = .empty;
+    for (before.sections.items) |*section| {
+        const text = try text_format.writer.writeSection(cli.allocator, section);
+        const gop = try before_texts.getOrPut(cli.allocator, text);
+        gop.value_ptr.* = if (gop.found_existing) gop.value_ptr.* + 1 else 1;
+    }
+    var sections = std.json.Array.init(cli.allocator);
+    for (after.sections.items) |*section| {
+        const text = try text_format.writer.writeSection(cli.allocator, section);
+        if (before_texts.getPtr(text)) |count| {
+            if (count.* > 0) {
+                count.* -= 1;
+                continue;
+            }
+        }
+        try sections.append(.{ .string = text });
+    }
+    return sections;
+}
+
 fn normalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
     const input_path = inv.positionals[0];
     const output_path = inv.getOption("output") orelse input_path;
 
-    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    // The file exactly as it is, so the result can say whether a write
+    // changes it: trial 35 asked "is this editor-clean?" and got only
+    // "prepared scene save".
+    const original_bytes = std.Io.Dir.cwd().readFileAlloc(cli.io, input_path, cli.allocator, .unlimited) catch {
+        error_details.record(.{ .field = "file", .value = input_path });
+        return error.FileNotFound;
+    };
+    var doc = try text_format.document.parseBytes(cli.allocator, original_bytes);
+    const doc_before = try text_format.document.parseBytes(cli.allocator, original_bytes);
 
     var norm_stats: ?text_format.normalize_properties.Stats = null;
     if (inv.flag("normalize-properties")) {
         norm_stats = try text_format.normalize_properties.normalizeDocument(cli.allocator, &doc);
     }
 
-    var prepare = try prepareSaveOptions(cli, inv, output_path);
-    defer prepare.deinit(cli.allocator);
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
-    } else if (prepare.options) |options| {
-        try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
+    } else {
+        try prepareInMemory(cli, inv, output_path, &doc);
     }
+    const written = try text_format.writer.writeDocument(cli.allocator, &doc);
+    const changed = !std.mem.eql(u8, written, original_bytes);
 
-    const summary = try std.fmt.allocPrint(cli.allocator, "prepared {s} save for {s}", .{ kind, output_path });
+    const summary = if (changed)
+        (if (inv.flag("dry-run"))
+            try std.fmt.allocPrint(cli.allocator, "checked {s}: a save would change it", .{output_path})
+        else
+            try std.fmt.allocPrint(cli.allocator, "normalized {s}: the save changed it", .{output_path}))
+    else
+        try std.fmt.allocPrint(cli.allocator, "{s} is already written the way a save writes it", .{output_path});
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = output_path });
     try data.put(cli.allocator, "kind", .{ .string = kind });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     try data.put(cli.allocator, "normalize_properties", .{ .bool = inv.flag("normalize-properties") });
+    try data.put(cli.allocator, "changed", .{ .bool = changed });
+    var messages: std.ArrayList([]const u8) = .empty;
+    if (inv.flag("dry-run")) {
+        const sections = try changedSections(cli, &doc_before, &doc);
+        if (changed and sections.items.len == 0) {
+            try messages.append(cli.allocator, "no section's text changes: a save changes only the blank lines between sections or their order");
+        }
+        try data.put(cli.allocator, "preview_sections", .{ .array = sections });
+    }
     if (norm_stats) |stats| {
         try data.put(cli.allocator, "properties_normalized", .{ .integer = @intCast(stats.normalized) });
         try data.put(cli.allocator, "properties_preserved", .{ .integer = @intCast(stats.preserved) });
@@ -671,7 +732,7 @@ fn normalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const 
 
     return .{
         .data = .{ .object = data },
-        .messages = &.{},
+        .messages = messages.items,
     };
 }
 
@@ -1688,13 +1749,15 @@ fn compareGodotHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []con
     var reference = try text_format.document.parseFile(cli.allocator, cli.io, reference_path);
     defer reference.deinit(cli.allocator);
 
-    const match = text_format.roundtrip.documentsMatchGodotSave(cli.allocator, &original, &reference);
+    const difference = try text_format.roundtrip.firstGodotSaveDifference(cli.allocator, &original, &reference);
+    const match = difference == null;
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = input_path });
     try data.put(cli.allocator, "reference", .{ .string = reference_path });
     try data.put(cli.allocator, "kind", .{ .string = kind });
     try data.put(cli.allocator, "matches_godot_save", .{ .bool = match });
+    if (difference) |text| try data.put(cli.allocator, "difference", .{ .string = text });
 
     const summary = try std.fmt.allocPrint(
         cli.allocator,
@@ -2242,47 +2305,15 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
     } else {
-        // Everything a write would do to the document, so the preview is the
-        // text a write produces: the uid refresh writeWithPrepare runs first,
-        // then the save preparation.
-        if (!inv.flag("no-prepare-save")) {
-            if (projectRootFrom(inv)) |root| {
-                _ = resource_uid_lookup.refreshExtResourceUids(cli.allocator, cli.io, root, &doc) catch 0;
-                _ = resource_uid_lookup.refreshExtResourceUids(cli.allocator, cli.io, root, &doc_before) catch 0;
-            }
-        }
-        var prepare = try prepareSaveOptions(cli, inv, output_path);
-        defer prepare.deinit(cli.allocator);
-        if (prepare.options) |options| {
-            try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
-            try text_format.save_prepare.prepareDocument(cli.allocator, &doc_before, options);
-        }
+        try prepareInMemory(cli, inv, output_path, &doc);
+        try prepareInMemory(cli, inv, output_path, &doc_before);
     }
 
     // The exact text of each section a write would add or change: every
     // section of the result whose text the file does not already hold. Trial
     // 33 needed a patch's text before writing it, and only node add showed it.
     var preview_sections: ?std.json.Array = null;
-    if (inv.flag("dry-run")) {
-        var before_texts: std.StringHashMapUnmanaged(usize) = .empty;
-        for (doc_before.sections.items) |*section| {
-            const text = try text_format.writer.writeSection(cli.allocator, section);
-            const gop = try before_texts.getOrPut(cli.allocator, text);
-            gop.value_ptr.* = if (gop.found_existing) gop.value_ptr.* + 1 else 1;
-        }
-        var sections = std.json.Array.init(cli.allocator);
-        for (doc.sections.items) |*section| {
-            const text = try text_format.writer.writeSection(cli.allocator, section);
-            if (before_texts.getPtr(text)) |count| {
-                if (count.* > 0) {
-                    count.* -= 1;
-                    continue;
-                }
-            }
-            try sections.append(.{ .string = text });
-        }
-        preview_sections = sections;
-    }
+    if (inv.flag("dry-run")) preview_sections = try changedSections(cli, &doc_before, &doc);
 
     var preview_diff: ?std.json.ObjectMap = null;
     if (inv.flag("dry-run")) {
@@ -2968,7 +2999,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description =
                 \\Expands an intent into patch ops and previews them; with a scene path, dry-runs the patch against that scene. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json).
                 \\
-                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name" except node_set, assign_ext, instance_override, and connect, which address existing nodes by "path" (or "from"/"to"). The fields of each recipe: scene recipes (MCP resource godot-cli://docs/recipes).
+                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, camera_3d, place_3d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name" except node_set, assign_ext, instance_override, and connect, which address existing nodes by "path" (or "from"/"to"). The fields of each recipe: scene recipes (MCP resource godot-cli://docs/recipes).
                 \\
                 \\A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object, numbers and booleans are JSON and a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
                 ,
@@ -2982,7 +3013,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .description =
                 \\Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run, whose preview_sections holds the exact text of every section a write would add or change, in file order and with the unique_ids a write assigns, and preview_diff the change node by node.
                 \\
-                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
+                \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, camera_3d, place_3d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
                 ,
                 .options = &apply_options,
                 .handler = sceneApplyHandler,
@@ -3029,7 +3060,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "normalize",
                 .summary = "Repair scene-local IDs and sort ext_resource sections for save",
-                .description = "Runs Godot-compatible save preparation without editing properties.",
+                .description = "Runs Godot-compatible save preparation without editing properties. changed says whether the save changes the file, so --dry-run answers \"is this file already written the way a save writes it?\"; a dry run also returns preview_sections, the exact text of each section a save would change or add.",
                 .options = &save_options,
                 .handler = sceneNormalizeHandler,
                 .positionals = &pos.file,
@@ -3051,7 +3082,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "compare-godot",
                 .summary = "Compare a scene to a Godot headless save (semantic match)",
-                .description = "Ignores ext_resource id suffixes and default sub_resource fields stripped by Godot.",
+                .description = "Compares the node tree (order, headers, unique_id), each node's properties with ext_resource ids read as the paths they name, the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. Not compared: ext_resource ids, which Godot renumbers; load_steps; and sub_resources, whose default fields Godot drops. On a mismatch, difference names the first one. The Godot save is the second positional, or --reference, the same thing. project resave makes one.",
                 .options = &compare_godot_options,
                 .handler = sceneCompareGodotHandler,
                 .positionals = &pos.file_and_reference,
@@ -3192,6 +3223,7 @@ pub fn resourceCommands() spec.CommandSpec {
             .{
                 .name = "normalize",
                 .summary = "Repair scene-local IDs and sort ext_resource sections for save",
+                .description = "Runs Godot-compatible save preparation without editing properties. changed says whether the save changes the file, so --dry-run answers \"is this file already written the way a save writes it?\"; a dry run also returns preview_sections, the exact text of each section a save would change or add.",
                 .options = &save_options,
                 .handler = resourceNormalizeHandler,
                 .positionals = &pos.file,
@@ -3213,6 +3245,7 @@ pub fn resourceCommands() spec.CommandSpec {
             .{
                 .name = "compare-godot",
                 .summary = "Compare a resource to a Godot headless save (semantic match)",
+                .description = "A resource has no node tree, so this compares only its ext_resource paths and the uids both files carry; the [resource] and sub_resource sections are not compared. On a mismatch, difference names it. The Godot save is the second positional, or --reference, the same thing.",
                 .options = &compare_godot_options,
                 .handler = resourceCompareGodotHandler,
                 .positionals = &pos.file_and_reference,

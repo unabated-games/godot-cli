@@ -113,6 +113,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli project`](#godot-cli-project) | Read and write Godot project.godot settings |
 | [`godot-cli project new`](#godot-cli-project-new) | Create a project.godot in a new or empty folder |
 | [`godot-cli project import`](#godot-cli-project-import) | Run Godot's headless import so new files get UIDs and .import data |
+| [`godot-cli project resave`](#godot-cli-project-resave) | Have Godot load a scene or resource and save a copy, the reference for compare-godot |
 | [`godot-cli project run`](#godot-cli-project-run) | Run the game for a few frames and capture the last frame and the log |
 | [`godot-cli project show`](#godot-cli-project-show) | Summarize key project.godot configuration |
 | [`godot-cli project move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
@@ -1183,7 +1184,7 @@ Expand intent JSON to a patch and preview (no write)
 
 Expands an intent into patch ops and previews them; with a scene path, dry-runs the patch against that scene. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json).
 
-An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name" except node_set, assign_ext, instance_override, and connect, which address existing nodes by "path" (or "from"/"to"). The fields of each recipe: scene recipes (MCP resource godot-cli://docs/recipes).
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, camera_3d, place_3d, ui_panel, tilemap_layer, audio_player. Every recipe takes "parent" and "name" except node_set, assign_ext, instance_override, and connect, which address existing nodes by "path" (or "from"/"to"). The fields of each recipe: scene recipes (MCP resource godot-cli://docs/recipes).
 
 A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object, numbers and booleans are JSON and a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
 
@@ -1214,7 +1215,7 @@ Apply a declarative JSON patch to a scene
 
 Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run, whose preview_sections holds the exact text of every section a write would add or change, in file order and with the unique_ids a write assigns, and preview_diff the change node by node.
 
-An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
+An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, camera_3d, place_3d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
 
 ```
 godot-cli scene apply [options] <file>
@@ -1382,7 +1383,7 @@ godot-cli scene set-property [options] <file>
 
 Repair scene-local IDs and sort ext_resource sections for save
 
-Runs Godot-compatible save preparation without editing properties.
+Runs Godot-compatible save preparation without editing properties. changed says whether the save changes the file, so --dry-run answers "is this file already written the way a save writes it?"; a dry run also returns preview_sections, the exact text of each section a save would change or add.
 
 ```
 godot-cli scene normalize [options] <file>
@@ -1464,7 +1465,7 @@ godot-cli scene round-trip [options] <file>
 
 Compare a scene to a Godot headless save (semantic match)
 
-Ignores ext_resource id suffixes and default sub_resource fields stripped by Godot.
+Compares the node tree (order, headers, unique_id), each node's properties with ext_resource ids read as the paths they name, the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. Not compared: ext_resource ids, which Godot renumbers; load_steps; and sub_resources, whose default fields Godot drops. On a mismatch, difference names the first one. The Godot save is the second positional, or --reference, the same thing. project resave makes one.
 
 ```
 godot-cli scene compare-godot [options] <file> [saved]
@@ -1800,6 +1801,8 @@ godot-cli resource set-property [options] <file>
 
 Repair scene-local IDs and sort ext_resource sections for save
 
+Runs Godot-compatible save preparation without editing properties. changed says whether the save changes the file, so --dry-run answers "is this file already written the way a save writes it?"; a dry run also returns preview_sections, the exact text of each section a save would change or add.
+
 ```
 godot-cli resource normalize [options] <file>
 ```
@@ -1879,6 +1882,8 @@ godot-cli resource round-trip [options] <file>
 ### `godot-cli resource compare-godot`
 
 Compare a resource to a Godot headless save (semantic match)
+
+A resource has no node tree, so this compares only its ext_resource paths and the uids both files carry; the [resource] and sub_resource sections are not compared. On a mismatch, difference names it. The Godot save is the second positional, or --reference, the same thing.
 
 ```
 godot-cli resource compare-godot [options] <file> [saved]
@@ -2113,6 +2118,7 @@ godot-cli project [options]
 |------------|---------|
 | [`new`](#godot-cli-project-new) | Create a project.godot in a new or empty folder |
 | [`import`](#godot-cli-project-import) | Run Godot's headless import so new files get UIDs and .import data |
+| [`resave`](#godot-cli-project-resave) | Have Godot load a scene or resource and save a copy, the reference for compare-godot |
 | [`run`](#godot-cli-project-run) | Run the game for a few frames and capture the last frame and the log |
 | [`show`](#godot-cli-project-show) | Summarize key project.godot configuration |
 | [`move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
@@ -2168,6 +2174,31 @@ godot-cli project import [options]
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (default: current directory) | — |
 | `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
+
+### `godot-cli project resave`
+
+Have Godot load a scene or resource and save a copy, the reference for compare-godot
+
+Imports (unless --no-import), then runs Godot headless to load the file and save a copy to --output, by default .godot/godot-cli/resave/&lt;its path&gt;, where Godot imports nothing. Never over the file itself. The copy is Godot's own writing of the file's content, so scene compare-godot &lt;file&gt; &lt;copy&gt; answers "is this written the way Godot writes it?" in two calls. Saved to a new path, the copy's ext_resource ids are renumbered and its uids left out; compare-godot allows for both, and scene validate checks uids against the files. Result data: file, output, output_path, exit, summary.
+
+```
+godot-cli project resave [options] <file>
+```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+| `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
+| `--output` | `<value>` | Where the copy goes, res:// or project-relative; default .godot/godot-cli/resave/&lt;the file's path&gt;, where Godot imports nothing | — |
+| `--no-import` | — | Skip the import that runs first; a project never imported cannot load its textures | — |
 
 ### `godot-cli project run`
 
