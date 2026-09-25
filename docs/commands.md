@@ -2179,7 +2179,7 @@ godot-cli project import [options]
 
 Have Godot load a scene or resource and save a copy, the reference for compare-godot
 
-Imports (unless --no-import), then runs Godot headless to load the file and save a copy to --output, by default .godot/godot-cli/resave/&lt;its path&gt;, where Godot imports nothing. Never over the file itself. The copy is Godot's own writing of the file's content, so scene compare-godot &lt;file&gt; &lt;copy&gt; answers "is this written the way Godot writes it?" in two calls. Saved to a new path, the copy's ext_resource ids are renumbered and its uids left out; compare-godot allows for both, and scene validate checks uids against the files. Result data: file, output, output_path, exit, summary.
+Imports (unless --no-import), then runs Godot headless to load the file and save a copy to --output, by default .godot/godot-cli/resave/&lt;its path&gt;, where Godot imports nothing. Never over the file itself. The copy is Godot's own writing of the file's content, so scene compare-godot &lt;file&gt; &lt;copy&gt; checks the file against it. That check is semantic, not byte for byte: saved to a new path, the copy's ext_resource ids are renumbered and its uids left out, so compare-godot leaves those out of the comparison, and scene validate checks uids against the files. A byte-for-byte check would need Godot to save over the file, which this never does. The driver script it runs is written to .godot/godot-cli/resave.gd. Result data: file, output, output_path, exit, summary.
 
 ```
 godot-cli project resave [options] <file>

@@ -1,8 +1,8 @@
 # Open asks
 
-**Nothing is outstanding.** Every ask from the agent trials has shipped,
-trial 35's included. The record is below, by release; the changelog carries
-the detail.
+One small ask is open, from trial 36 (2026-09-25), the pre-release trial for
+0.26.0, which passed everything it was set with no failed call and no
+workaround. Everything else has shipped, and the record is below, by release.
 
 ## How this list is kept
 
@@ -18,6 +18,10 @@ them was pointing at a real bug or a real gap rather than being careless: a
 generated id that collided, a connection that could not cross an instance
 boundary, a header attribute written as a property. That is the signal worth
 chasing first when the next one turns up.
+
+## Open
+
+1. **The two commands that compare two scenes name their files differently.** (S) `scene diff` takes `a` and `b`. `scene compare-godot` takes `file`, then `saved` or `--reference`, which are the same thing. Over MCP those are the argument names an agent has to learn. Trial 36 noticed. Settling on one pair is an interface change, so it belongs in a minor release with a note, and the old names should keep working for a while.
 
 ## Closed since 0.7.0
 

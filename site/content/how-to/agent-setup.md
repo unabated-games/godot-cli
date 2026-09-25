@@ -72,8 +72,10 @@ For a screen that does not move, --frames 5 is enough; the default, 60, is one
 second, which leaves room for movement and clicks. The run imports first, which
 writes a .import file beside each asset and a .uid file beside each script.
 Those belong in version control; .godot/ does not. A 3D scene needs a Camera3D
-for the frame to show anything: without one the frame is plain grey, and the
-run proves only that the scene loads.
+for the frame to show anything: without one, none of the scene appears, only
+the clear colour, and the run proves only that the scene loads. The camera_3d
+recipe places one and aims it (position, look_at), and place_3d does the same
+for any 3D node.
 
 Validation checks property values against the node's class and connections
 against the signals that class emits, so a wrong type or a misspelled signal
