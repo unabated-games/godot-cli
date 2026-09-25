@@ -1,8 +1,9 @@
 # Open asks
 
-**Nothing is outstanding.** Every ask from the agent trials has shipped,
-trial 34's included. The record is below, by release; the changelog carries
-the detail.
+Four asks are open, from trial 35 (2026-09-25), the pre-release trial for
+0.26.0. It passed everything it was set, and a Godot re-save of its scene
+matched byte for byte. These are what it found beyond that. Everything else
+has shipped, and the record is below, by release.
 
 ## How this list is kept
 
@@ -18,6 +19,13 @@ them was pointing at a real bug or a real gap rather than being careless: a
 generated id that collided, a connection that could not cross an instance
 boundary, a header attribute written as a property. That is the signal worth
 chasing first when the next one turns up.
+
+## Open
+
+1. **`scene compare-godot` ignores UIDs.** (S) It reports `matches_godot_save: true` for a scene whose ext_resource carries the wrong `uid=`. That was reproduced on trial 35's own scene by swapping a mesh's UID. A match should mean the UIDs agree too. At least where both sides carry one, a difference should be a mismatch. And the description should say what the comparison covers, and why it takes both `reference` and `saved`.
+2. **There is no godot-cli way to make the Godot save that `compare-godot` compares against.** (S–M) Trial 35 wrote a GDScript and ran Godot headless by hand to re-save its scene under `.godot/`. `project import` and `project run` already drive Godot, so a `project resave <scene> --output <path>` would make "is this editor-clean?" one call.
+3. **`scene normalize --dry-run` does not say whether a write would change anything.** (S) Its result is "prepared scene save", so it cannot answer "is this file already editor-clean?". A `changed` field, or the `preview_sections` that `scene apply` now returns, would.
+4. **Nothing helps place or aim a 3D node.** (M) The recipes are mostly 2D, with `camera_2d` but no `camera_3d`, and there is no look-at helper. Trial 35 worked out a camera's rotation matrix by hand, and it checked the row-major basis order in the frame, not the docs. The docs now state that order.
 
 ## Closed since 0.7.0
 

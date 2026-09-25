@@ -216,9 +216,10 @@ Then add the project rules to the same file you exported the digest into. This i
 
 Author scenes with godot-cli. Do not hand-edit .tscn text and do not build
 static structure in GDScript.
-Over MCP each command is a tool of the same name: its options are fields
-without the dashes, output is always JSON, and the server supplies the project
-root, so there is no --json or --project-root to pass.
+Over MCP each command is a tool of the same name: its options are fields named
+as the option is, minus the leading -- (--dry-run is dry-run), output is always
+JSON, and the server supplies the project root, so there is no --json or
+--project-root to pass.
 
 Before adding UI or level structure:
   godot-cli catalog list --project-root . --json

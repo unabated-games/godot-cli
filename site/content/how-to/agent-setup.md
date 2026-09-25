@@ -33,9 +33,10 @@ hand-edit scene text.
 
 Work from the project root and pass --json. Pass --project-root . for writes,
 catalog lookups, validation, and apply.
-Over MCP each command is a tool of the same name: its options are fields
-without the dashes, output is always JSON, and the server supplies the project
-root, so there is no --json or --project-root to pass.
+Over MCP each command is a tool of the same name: its options are fields named
+as the option is, minus the leading -- (--dry-run is dry-run), output is always
+JSON, and the server supplies the project root, so there is no --json or
+--project-root to pass.
 
 Before changing a scene, read it in one call:
   godot-cli scene describe <scene> --project-root . --json
