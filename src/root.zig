@@ -9,4 +9,9 @@ pub const app = @import("cli/app.zig");
 
 test {
     @import("std").testing.refAllDecls(@import("commands.zig"));
+    // A file's `test` blocks run only when a test block reaches it, and an
+    // ordinary import does not count. Nothing reached these two, so the tests
+    // against committed Godot saves in fixtures.zig had never run.
+    _ = @import("godot/root.zig");
+    _ = @import("cli/json_input.zig");
 }

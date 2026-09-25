@@ -22,6 +22,7 @@ Derived files:
 |------|-------------|
 | `src/godot/hash.zig` | `core/templates/hashfuncs.h`, `core/string/ustring.cpp` |
 | `src/godot/resource_uid.zig` | `core/io/resource_uid.cpp` |
+| `src/godot/binary_resource.zig` | Binary resource header layout from `core/io/resource_format_binary.cpp`; `RSCC` block framing from `core/io/file_access_compressed.cpp` |
 | `src/godot/scene_id.zig`, `src/godot/node_id.zig` | Godot scene/resource ID seeding behaviour |
 
 Upstream: <https://github.com/godotengine/godot>

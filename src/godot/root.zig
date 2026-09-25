@@ -25,6 +25,7 @@ pub const catalog_search = @import("catalog_search.zig");
 pub const catalog_export = @import("catalog_export.zig");
 pub const scene_instance = @import("scene_instance.zig");
 pub const resource_uid_lookup = @import("resource_uid_lookup.zig");
+pub const binary_resource = @import("binary_resource.zig");
 pub const project_godot = @import("project_godot.zig");
 pub const project_input = @import("project_input.zig");
 pub const project_settings = @import("project_settings.zig");

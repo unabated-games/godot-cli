@@ -153,7 +153,7 @@ pub fn getOrAddExtResource(
         const section = &doc.sections.items[section_index];
         const id = section.header.getString("id") orelse return error.InvalidResourceKind;
         if (scene_uid) |uid| {
-            try section.header.setStringField(allocator, "uid", uid);
+            try section.header.setUidField(allocator, uid);
         }
         return .{
             .section_index = section_index,
@@ -165,7 +165,7 @@ pub fn getOrAddExtResource(
 
     const added = try addExtResource(allocator, doc, seed_path, res_type, path);
     if (scene_uid) |uid| {
-        try doc.sections.items[added.section_index].header.setStringField(allocator, "uid", uid);
+        try doc.sections.items[added.section_index].header.setUidField(allocator, uid);
     }
     return added;
 }
@@ -183,7 +183,7 @@ pub fn getOrAddExtResourceWithId(
         const section = &doc.sections.items[section_index];
         const existing_id = section.header.getString("id") orelse return error.InvalidResourceKind;
         if (scene_uid) |uid| {
-            try section.header.setStringField(allocator, "uid", uid);
+            try section.header.setUidField(allocator, uid);
         }
         return .{
             .section_index = section_index,
@@ -276,7 +276,7 @@ pub fn addExtResourceWithId(
     try header.setStringField(allocator, "type", res_type);
     try header.setStringField(allocator, "path", path);
     try header.setStringField(allocator, "id", id_copy);
-    if (scene_uid) |uid| try header.setStringField(allocator, "uid", uid);
+    if (scene_uid) |uid| try header.setUidField(allocator, uid);
 
     const section_index = try insertResourceSection(allocator, doc, "ext_resource", .{
         .line = 0,

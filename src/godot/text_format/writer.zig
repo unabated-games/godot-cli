@@ -11,7 +11,11 @@ pub fn writeDocument(allocator: std.mem.Allocator, doc: *const document.Document
     errdefer out.deinit(allocator);
 
     for (doc.sections.items, 0..) |section, index| {
-        if (section.leading_blank_lines > 0) {
+        if (index > 0 and extResourceRun(doc, index)) {
+            // Godot writes the ext_resource block as adjacent lines, whatever
+            // spacing the file had. A blank line here was a diff against the
+            // editor's own save on every rewrite of a scene with two or more.
+        } else if (section.leading_blank_lines > 0) {
             var i: usize = 0;
             while (i < section.leading_blank_lines) : (i += 1) {
                 try out.append(allocator, '\n');
@@ -32,6 +36,29 @@ pub fn writeDocument(allocator: std.mem.Allocator, doc: *const document.Document
     }
 
     return try out.toOwnedSlice(allocator);
+}
+
+/// One section as a write would put it in the file: its header line and its
+/// properties, without the blank line that separates it from the previous one.
+pub fn writeSection(allocator: std.mem.Allocator, section: *const document.Section) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    const header = try tag.formatLine(allocator, &section.header);
+    defer allocator.free(header);
+    try out.appendSlice(allocator, header);
+    try out.append(allocator, '\n');
+    for (section.properties.items) |prop| {
+        try out.appendSlice(allocator, prop.raw);
+        try out.append(allocator, '\n');
+    }
+    return out.toOwnedSlice(allocator);
+}
+
+/// `ResourceFormatSaverTextInstance::save` writes each ext_resource with a
+/// single trailing newline and one blank line after the whole block.
+fn extResourceRun(doc: *const document.Document, index: usize) bool {
+    return std.mem.eql(u8, doc.sections.items[index].header.name, "ext_resource") and
+        std.mem.eql(u8, doc.sections.items[index - 1].header.name, "ext_resource");
 }
 
 /// Godot separates every section with a blank line except consecutive

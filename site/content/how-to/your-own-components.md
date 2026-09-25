@@ -216,6 +216,9 @@ Then add the project rules to the same file you exported the digest into. This i
 
 Author scenes with godot-cli. Do not hand-edit .tscn text and do not build
 static structure in GDScript.
+Over MCP each command is a tool of the same name: its options are fields
+without the dashes, output is always JSON, and the server supplies the project
+root, so there is no --json or --project-root to pass.
 
 Before adding UI or level structure:
   godot-cli catalog list --project-root . --json
@@ -224,6 +227,9 @@ Before adding UI or level structure:
 Instance a project component by id, never by copying its nodes:
   godot-cli scene instance add <scene> --parent <path> --name <Name> \
     --catalog-id <id> --project-root .
+A scene with no catalog entry is instanced by its path instead:
+  godot-cli scene instance add <scene> --parent <path> --name <Name> \
+    --scene res://<path/to/scene.tscn> --project-root .
 
 Adding a child node in _ready() with load().instantiate() is only for objects
 the game spawns while playing, such as projectiles or enemy waves. Menus, HUDs,

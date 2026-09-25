@@ -7,9 +7,19 @@ const scene_id = @import("../godot/scene_id.zig");
 const id_session = @import("../godot/id_session.zig");
 const text_format = @import("../godot/text_format/root.zig");
 const project_config = @import("../godot/project_config.zig");
+const binary_resource = @import("../godot/binary_resource.zig");
+const resource_uid_lookup = @import("../godot/resource_uid_lookup.zig");
+const error_details = @import("../godot/error_details.zig");
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
+}
+
+/// A resource UID's number as decimal text. It is 63 bits, and a JSON
+/// parser that reads numbers as doubles, JavaScript's included, rounds it:
+/// trial 30 was handed 5402782583183944000 for 5402782583183943612.
+pub fn idNumberText(allocator: std.mem.Allocator, id: i64) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "{d}", .{id});
 }
 
 fn uidEncodeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -30,9 +40,10 @@ fn uidDecodeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const text = inv.positionals[0];
     const id = resource_uid.textToId(text);
     if (id == resource_uid.invalid_id) return error.Usage;
+    const number = try idNumberText(cli.allocator, id);
     return .{
-        .data = .{ .integer = id },
-        .messages = try cli.allocator.dupe([]const u8, &.{text}),
+        .data = .{ .string = number },
+        .messages = try cli.allocator.dupe([]const u8, &.{number}),
     };
 }
 
@@ -48,8 +59,97 @@ fn uidCreateForPathHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     const text = try resource_uid.idToText(cli.allocator, id);
 
     var map: std.json.ObjectMap = .{};
-    try map.put(cli.allocator, "id", .{ .integer = id });
+    try map.put(cli.allocator, "id", .{ .string = try idNumberText(cli.allocator, id) });
     try map.put(cli.allocator, "uid", .{ .string = text });
+
+    return .{
+        .data = .{ .object = map },
+        .messages = try cli.allocator.dupe([]const u8, &.{text}),
+    };
+}
+
+/// The UID a file itself records, the way Godot finds it: a scene or resource
+/// in its header, text or binary; a script in its `.uid` sidecar; an imported
+/// asset in its `.import` file. No uid cache, so it works on a fresh clone.
+fn uidReadHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len == 0) return error.Usage;
+    const cli = appFrom(ctx);
+    const path = inv.positionals[0];
+
+    std.Io.Dir.cwd().access(cli.io, path, .{}) catch {
+        error_details.record(.{ .field = "file", .value = path });
+        return error.FileNotFound;
+    };
+
+    var map: std.json.ObjectMap = .{};
+    try map.put(cli.allocator, "path", .{ .string = path });
+
+    var source: []const u8 = undefined;
+    var missing_hint: []const u8 = undefined;
+    const uid_text: ?[]const u8 = blk: {
+        if (std.mem.endsWith(u8, path, ".tscn") or std.mem.endsWith(u8, path, ".tres")) {
+            source = "text_header";
+            missing_hint = "the [gd_scene] or [gd_resource] line has no uid attribute";
+            const doc = text_format.document.parseFile(cli.allocator, cli.io, path) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => {
+                    error_details.record(.{ .field = "file", .value = path, .hint = "not a readable Godot text scene or resource" });
+                    return error.Io;
+                },
+            };
+            if (doc.sections.items.len == 0) break :blk null;
+            const header = &doc.sections.items[0].header;
+            if (!std.mem.eql(u8, header.name, "gd_scene") and !std.mem.eql(u8, header.name, "gd_resource")) break :blk null;
+            break :blk header.getString("uid");
+        }
+        if (binary_resource.isBinaryResourceFile(cli.io, path)) {
+            source = "binary_header";
+            missing_hint = "the binary header's UID slot is empty, so references to this file resolve by its res:// path";
+            const header = binary_resource.readHeader(cli.allocator, cli.io, path) catch |err| {
+                const hint: []const u8 = switch (err) {
+                    error.OutOfMemory => return error.OutOfMemory,
+                    error.UnsupportedCompression => "compressed with a mode other than zstd, which Godot's resource saver never writes",
+                    error.UnsupportedVersion => "saved in a binary format newer than this godot-cli reads; upgrade godot-cli",
+                    else => "the header is truncated or damaged",
+                };
+                error_details.record(.{ .field = "file", .value = path, .hint = hint });
+                return error.BinaryResourceUnreadable;
+            };
+            try map.put(cli.allocator, "class", .{ .string = header.class_name });
+            try map.put(cli.allocator, "compressed", .{ .bool = header.compressed });
+            try map.put(cli.allocator, "godot_version", .{ .string = try std.fmt.allocPrint(cli.allocator, "{d}.{d}", .{ header.engine_major, header.engine_minor }) });
+            try map.put(cli.allocator, "format_version", .{ .integer = header.format_version });
+            const id = header.uid orelse break :blk null;
+            break :blk try resource_uid.idToText(cli.allocator, id);
+        }
+        missing_hint = "no .uid sidecar or .import file beside it; Godot writes one when it imports the project (godot-cli project import)";
+        if (resource_uid_lookup.readSidecarUid(cli.allocator, cli.io, path)) |uid| {
+            source = "uid_sidecar";
+            break :blk uid;
+        }
+        if (resource_uid_lookup.readImportFileUid(cli.allocator, cli.io, path)) |uid| {
+            source = "import_file";
+            break :blk uid;
+        }
+        break :blk null;
+    };
+
+    const text = uid_text orelse {
+        error_details.record(.{ .field = "file", .value = path, .hint = missing_hint });
+        return error.NoUidRecorded;
+    };
+    const id = resource_uid.textToId(text);
+    if (id == resource_uid.invalid_id) {
+        error_details.record(.{ .field = "uid", .value = text, .hint = "the recorded value is not valid uid:// text" });
+        return error.NoUidRecorded;
+    }
+    // No numeric id: a 64-bit integer does not survive a JSON parser that
+    // reads numbers as doubles, JavaScript's included. An agent in a trial was
+    // handed 5402782583183944000 for 5402782583183943612 by its MCP client.
+    // The uid:// text is the identifier and arrives exact; `uid decode` gives
+    // the number to anyone who needs it.
+    try map.put(cli.allocator, "uid", .{ .string = text });
+    try map.put(cli.allocator, "source", .{ .string = source });
 
     return .{
         .data = .{ .object = map },
@@ -169,19 +269,27 @@ pub fn commands() spec.CommandSpec {
             .{
                 .name = "decode",
                 .summary = "Decode uid:// text to a numeric Resource UID",
+                .description = "The number comes back as a decimal string, not a JSON number: a UID is 63 bits, far past the 53 a JSON parser that reads numbers as doubles can hold, JavaScript's included, so such a parser would round it. Store it as a signed 64-bit integer or as text.",
                 .handler = uidDecodeHandler,
                 .positionals = &pos.uid_text,
             },
             .{
                 .name = "create-for-path",
-                .summary = "Deterministic Resource UID for a project path and file",
-                .description = "Matches ResourceUID.create_id_for_path using project name, Godot resource path, and file bytes.",
+                .summary = "The UID Godot would assign a new file (to read a file's existing UID, use uid read)",
+                .description = "Matches ResourceUID.create_id_for_path using project name, Godot resource path, and file bytes: the UID Godot would assign a file that has none. To find the UID a file already has, use uid read; a binary resource's never equals this. Result data: uid, and id as a decimal string, since a 63-bit number does not survive a JSON parser that reads numbers as doubles.",
                 .options = &.{
                     .{ .long = "project-name", .kind = .string, .description = "Project application/config/name" },
                     .{ .long = "resource-path", .kind = .string, .description = "Godot path e.g. res://main.tscn" },
                 },
                 .handler = uidCreateForPathHandler,
                 .positionals = &pos.file,
+            },
+            .{
+                .name = "read",
+                .summary = "Read the UID a file records, from the file itself",
+                .description = "Needs no uid_cache.bin, so it works on a fresh clone. A scene or resource keeps its UID in its own header, binary (.res, .scn) or text (.tscn, .tres); a script keeps it in a .uid sidecar and an imported asset in its .import file. Fails with no_uid_recorded when the file records none. Result data: path, uid, source (text_header, binary_header, uid_sidecar or import_file), and for a binary resource its class, compressed, godot_version and format_version.",
+                .handler = uidReadHandler,
+                .positionals = &pos.uid_file,
             },
             .{
                 .name = "scene-id",
@@ -207,5 +315,5 @@ pub fn commands() spec.CommandSpec {
 test "uid command tree" {
     const tree = commands();
     try std.testing.expectEqualStrings("uid", tree.name);
-    try std.testing.expectEqual(@as(usize, 6), tree.children.len);
+    try std.testing.expectEqual(@as(usize, 7), tree.children.len);
 }

@@ -22,7 +22,8 @@ pub const rules =
     \\   (tree with properties, connections, references, scripts), catalog_list
     \\   for components the project already has, with the prose that says which
     \\   to pick.
-    \\3. A project catalog id is instanced (scene_instance_add with catalog-id); a
+    \\3. A project catalog id is instanced (scene_instance_add with catalog-id), and
+    \\   a scene with no catalog entry by its path (scene with res://...); a
     \\   godot/... builtin is a plain node (scene_node_add with type), never instanced.
     \\4. Presentation lives on nodes (anchor_*, grow_*, theme_override_*,
     \\   custom_minimum_size), signals in connection sections (scene_connection_add),

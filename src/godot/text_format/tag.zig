@@ -73,6 +73,47 @@ pub const Tag = struct {
         try self.fields.put(allocator, key_copy, .{ .string = value_copy });
     }
 
+    /// Set `uid` where Godot writes it. A new one goes before `path`, the
+    /// editor's `type, uid, path, id` order on an ext_resource; a header with
+    /// no `path`, such as `[gd_scene]`, takes it last, as Godot writes that.
+    /// Appending it everywhere put it after `id` on every added reference.
+    pub fn setUidField(self: *Tag, allocator: std.mem.Allocator, value: []const u8) !void {
+        if (self.fields.contains("uid")) return self.setStringField(allocator, "uid", value);
+        const value_copy = try allocator.dupe(u8, value);
+        errdefer allocator.free(value_copy);
+        try self.insertField(allocator, "uid", .{ .string = value_copy }, &.{"path"});
+    }
+
+    /// Set a node's `unique_id` where Godot writes it: after `index`, before
+    /// `node_paths`, `groups` and the instance fields. Appended, it followed
+    /// `instance=` on every instanced node that was given one.
+    pub fn setUniqueIdField(self: *Tag, allocator: std.mem.Allocator, value: i64) !void {
+        if (self.fields.contains("unique_id")) return self.setIntegerField(allocator, "unique_id", value);
+        try self.insertField(allocator, "unique_id", .{ .integer = value }, &.{ "node_paths", "groups", "instance_placeholder", "instance" });
+    }
+
+    /// Add a field that is not present yet, ahead of the first of `later`
+    /// that is, or last when none is. Takes ownership of `value` on success.
+    fn insertField(self: *Tag, allocator: std.mem.Allocator, key: []const u8, value: Value, later: []const []const u8) !void {
+        var at: ?usize = null;
+        for (later) |name| {
+            if (self.fields.getIndex(name)) |index| at = if (at) |current| @min(current, index) else index;
+        }
+        const key_copy = try allocator.dupe(u8, key);
+        errdefer allocator.free(key_copy);
+        const insert_at = at orelse return self.fields.put(allocator, key_copy, value);
+
+        var reordered: std.StringArrayHashMapUnmanaged(Value) = .{};
+        try reordered.ensureTotalCapacity(allocator, self.fields.count() + 1);
+        for (self.fields.keys(), self.fields.values(), 0..) |existing_key, existing, index| {
+            if (index == insert_at) reordered.putAssumeCapacity(key_copy, value);
+            reordered.putAssumeCapacity(existing_key, existing);
+        }
+        // The keys and values moved across; only the old map's storage goes.
+        self.fields.deinit(allocator);
+        self.fields = reordered;
+    }
+
     /// Store an unquoted value to be written verbatim.
     pub fn setRawField(self: *Tag, allocator: std.mem.Allocator, key: []const u8, value: []const u8) !void {
         const value_copy = try allocator.dupe(u8, value);
@@ -384,4 +425,38 @@ test "instance reference stays unquoted after a parse" {
     const out = try formatLine(allocator, &tag);
     defer allocator.free(out);
     try std.testing.expectEqualStrings(line, out);
+}
+
+test "a uid added to an ext_resource goes where the editor writes it" {
+    const allocator = std.testing.allocator;
+    var header = Tag{ .name = try allocator.dupe(u8, "ext_resource"), .fields = .{} };
+    defer header.deinit(allocator);
+    try header.setStringField(allocator, "type", "PackedScene");
+    try header.setStringField(allocator, "path", "res://ui/hud.tscn");
+    try header.setStringField(allocator, "id", "1_hud");
+    try header.setUidField(allocator, "uid://byhqeak2spha2");
+
+    const line = try formatLine(allocator, &header);
+    defer allocator.free(line);
+    try std.testing.expectEqualStrings("[ext_resource type=\"PackedScene\" uid=\"uid://byhqeak2spha2\" path=\"res://ui/hud.tscn\" id=\"1_hud\"]", line);
+
+    // Replacing one keeps its place.
+    try header.setUidField(allocator, "uid://tidkmw585t0t");
+    const again = try formatLine(allocator, &header);
+    defer allocator.free(again);
+    try std.testing.expectEqualStrings("[ext_resource type=\"PackedScene\" uid=\"uid://tidkmw585t0t\" path=\"res://ui/hud.tscn\" id=\"1_hud\"]", again);
+}
+
+test "a unique_id given to an instanced node goes before instance, as Godot writes it" {
+    const allocator = std.testing.allocator;
+    var header = Tag{ .name = try allocator.dupe(u8, "node"), .fields = .{} };
+    defer header.deinit(allocator);
+    try header.setStringField(allocator, "name", "HUD");
+    try header.setStringField(allocator, "parent", ".");
+    try header.setRawField(allocator, "instance", "ExtResource(\"1_hud\")");
+    try header.setUniqueIdField(allocator, 33873413);
+
+    const line = try formatLine(allocator, &header);
+    defer allocator.free(line);
+    try std.testing.expectEqualStrings("[node name=\"HUD\" parent=\".\" unique_id=33873413 instance=ExtResource(\"1_hud\")]", line);
 }

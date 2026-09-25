@@ -1,8 +1,9 @@
 # Open asks
 
-**Nothing is outstanding.** Every ask from the agent trials and from the
-maintainers has shipped, as of v0.20.1 (2026-09-09). The record of what they
-were is below, by release; the changelog carries the detail.
+Two asks are open: one found on 2026-09-25 while testing the `scene apply`
+preview, and one from trial 34 the same day, which passed every question it
+was set in 13 turns.
+Everything else has shipped, and the record is below, by release.
 
 ## How this list is kept
 
@@ -18,6 +19,11 @@ them was pointing at a real bug or a real gap rather than being careless: a
 generated id that collided, a connection that could not cross an instance
 boundary, a header attribute written as a property. That is the signal worth
 chasing first when the next one turns up.
+
+## Open
+
+1. **A float property given a whole number is written without `.0` unless its name matches a hand-written list.** (S) `{"light_energy": 2.0}` writes `light_energy = 2`, where Godot writes `2.0`. That happens through `scene node add --properties` and through a patch alike, and 0.25.1 does the same. `scene_patch.isFloatProperty` decides by name prefix. `energy` is on its list, but as a prefix it matches `energy`, not `light_energy`. The class table already records `light_energy` as `float`, so asking it, with the list as a fallback for unknown classes, would cover every float property the engine declares.
+2. **`project run` passes a 3D scene with no camera, and the frame shows nothing.** (S) The rules block now warns about it, but the result says `ok` with a grey frame, and three trials in a row had to work out why. The run could note when the scene it ran is 3D and has no `Camera3D`, the way it already names errors from the log.
 
 ## Closed since 0.7.0
 
@@ -37,3 +43,4 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.18.0: `scene extract --retarget-dropped-connections`, `--editable` and the catalog prose options; `project move --import` and `--rename-ids`; `catalog add --signal-doc`; `scene set-property` refusing a header attribute.
 - 0.19.0: repeatable `--frame-at` and `--log-lines`; a headless click that cannot reach its target reported instead of passing silently; undo patches restoring child order and unique ids; a `properties` object on the `node_set` recipe.
 - 0.20.0: usage prose in `catalog list`; `manifest_res_path` under a relative project root (and with it the id seed); a stated minimum Godot version; a per-event input device; the `[input]` formatting question answered.
+- Unreleased: trial 30's four asks. UID numbers are decimal strings in JSON; a missing uid cache is `uid_cache_missing`; MCP descriptions name fields, not flags, and `properties` has a constructor example; consecutive ext_resources stay adjacent, as Godot writes them. Clearing that last one turned up two more field-order gaps and five tests that had never run, all fixed. Then trial 31's three: `scene diff --properties` lists an added node's properties and resolves an instanced node's class; the agent rules give the `--scene res://...` fallback for a scene with no catalog entry; `project import` and `project run` say what the import writes into the project. Then trial 32's five, and a `scene node get` failure seen in passing: a pinned server's refusal of an outside path says where a scratch copy can go; `scene diff` reports resources and `unique_id` changes; a node or instance add dry run returns the section it would write; `scene validate` flags a 3D node's placement written as `position` and the like, swept against 218 classes Godot saved first; the agent rules cover MCP, the import's files, and camera-less 3D frames; and a missing node is `node_not_found`. Then trial 33's three: `--snapshot` on every write and `--auto-snapshot` under `.godot/`; `preview_sections` on `scene apply --dry-run`; the rules block's frame count.

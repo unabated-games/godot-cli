@@ -206,7 +206,7 @@ pub fn build(b: *std.Build) void {
         \\out=$(./zig-out/bin/godot-cli scene extract "$t/main.tscn" /root/Main/HUD --output ui/hud.tscn --project-root "$t" --json) &&
         \\echo "$out" | grep -q '"moved_nodes":3' && echo "$out" | grep -q '"moved_connections":1' && echo "$out" | grep -q 'crossed the boundary' &&
         \\grep -q 'name="Score" type="Label" parent="."' "$t/ui/hud.tscn" && grep -q 'from="Go" to="."' "$t/ui/hud.tscn" && grep -q 'offset_left = 8.0' "$t/ui/hud.tscn" &&
-        \\grep -q 'name="HUD" parent="." instance=ExtResource' "$t/main.tscn" && ! grep -q 'name="Score"' "$t/main.tscn" &&
+        \\grep -q 'name="HUD" parent="." unique_id=[0-9]* instance=ExtResource' "$t/main.tscn" && ! grep -q 'name="Score"' "$t/main.tscn" &&
         \\./zig-out/bin/godot-cli scene validate "$t/ui/hud.tscn" --project-root "$t" --json | grep -q '"ok":true' &&
         \\./zig-out/bin/godot-cli scene validate "$t/main.tscn" --project-root "$t" --json | grep -q '"ok":true' &&
         \\./zig-out/bin/godot-cli scene node get "$t/ui/hud.tscn" /root/HUD/Score --json | grep -q '"properties"' &&
@@ -730,6 +730,89 @@ pub fn build(b: *std.Build) void {
     catalog_relink_smoke.setCwd(b.path("."));
     catalog_relink_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&catalog_relink_smoke.step);
+
+    // A binary resource (.res, .scn) keeps its UID in its own header. With no
+    // uid cache, which is every fresh clone, each save once replaced correct
+    // references to one with a hash of its bytes, and validate called correct
+    // ones stale; a reference to an edited, reimported asset too.
+    const binary_uid_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\t=$(mktemp -d) &&
+        \\./zig-out/bin/godot-cli project new --project-root "$t" --name Bin --json >/dev/null &&
+        \\cp test_fixtures/project/resources/mesh_godot_saved.res "$t/box.res" &&
+        \\cp test_fixtures/project/resources/mesh_compressed_godot_saved.res "$t/ball.res" &&
+        \\printf 'bytes changed since import' > "$t/tex.png" &&
+        \\printf '[remap]\n\nimporter="texture"\ntype="CompressedTexture2D"\nuid="uid://n31061k412df"\n' > "$t/tex.png.import" &&
+        \\printf '[gd_scene format=3]\n\n[ext_resource type="BoxMesh" uid="uid://bc628hhe4x5yp" path="res://box.res" id="1_box"]\n[ext_resource type="SphereMesh" uid="uid://ci8fbl838ce7m" path="res://ball.res" id="2_ball"]\n[ext_resource type="Texture2D" uid="uid://n31061k412df" path="res://tex.png" id="3_tex"]\n\n[node name="Main" type="Node3D"]\n\n[node name="Box" type="MeshInstance3D" parent="."]\nmesh = ExtResource("1_box")\n\n[node name="Ball" type="MeshInstance3D" parent="."]\nmesh = ExtResource("2_ball")\n\n[node name="Tex" type="Sprite3D" parent="."]\ntexture = ExtResource("3_tex")\n' > "$t/main.tscn" &&
+        \\test ! -e "$t/.godot/uid_cache.bin" &&
+        \\./zig-out/bin/godot-cli scene set-property "$t/main.tscn" --node /root/Main/Box --property visible --value false --project-root "$t" --json | grep -q '"ok":true' &&
+        \\grep -q 'visible = false' "$t/main.tscn" &&
+        \\grep -q 'uid="uid://bc628hhe4x5yp" path="res://box.res"' "$t/main.tscn" &&
+        \\grep -q 'uid="uid://ci8fbl838ce7m" path="res://ball.res"' "$t/main.tscn" &&
+        \\grep -q 'uid="uid://n31061k412df" path="res://tex.png"' "$t/main.tscn" &&
+        \\! ./zig-out/bin/godot-cli scene validate "$t/main.tscn" --project-root "$t" --json | grep -q stale_uid_for_path &&
+        \\sed -i.bak 's/bc628hhe4x5yp/byggqned6p7ih/' "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene validate "$t/main.tscn" --project-root "$t" --json | grep -q stale_uid_for_path &&
+        \\./zig-out/bin/godot-cli scene normalize "$t/main.tscn" --project-root "$t" --json >/dev/null &&
+        \\grep -q 'uid="uid://bc628hhe4x5yp" path="res://box.res"' "$t/main.tscn" &&
+        \\test "$(./zig-out/bin/godot-cli uid read "$t/ball.res" | head -1)" = 'uid://ci8fbl838ce7m' &&
+        \\./zig-out/bin/godot-cli uid read "$t/ball.res" --json | grep -q '"class":"SphereMesh"' &&
+        \\./zig-out/bin/godot-cli uid read "$t/tex.png" --json | grep -q '"source":"import_file"' &&
+        \\out=$(./zig-out/bin/godot-cli uid read test_fixtures/project/resources/mesh_no_uid_godot_saved.res --json || true) &&
+        \\echo "$out" | grep -q '"kind":"no_uid_recorded"' &&
+        \\out=$(./zig-out/bin/godot-cli uid cache lookup res://box.res --project-root "$t" --json || true) &&
+        \\echo "$out" | grep -q '"kind":"uid_cache_missing"' &&
+        \\./zig-out/bin/godot-cli uid decode uid://tidkmw585t0t --json | grep -q '"data":"1350303725746704497"' &&
+        \\test "$(./zig-out/bin/godot-cli uid decode uid://tidkmw585t0t | head -1)" = 1350303725746704497 &&
+        \\./zig-out/bin/godot-cli scene new --output "$t/sub.tscn" --root-name Sub --root-type Node3D --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene instance add "$t/main.tscn" --parent /root/Main --name Sub --scene res://sub.tscn --project-root "$t" --json >/dev/null &&
+        \\grep -q 'uid="uid://[a-z0-9]*" path="res://sub.tscn"' "$t/main.tscn" &&
+        \\grep -q '^\[node name="Sub" parent="." unique_id=[0-9]* instance=ExtResource' "$t/main.tscn" &&
+        \\! tr '\n' '|' < "$t/main.tscn" | grep -q '\[ext_resource [^|]*||\[ext_resource' &&
+        \\rm -rf "$t"
+    });
+    binary_uid_smoke.setCwd(b.path("."));
+    binary_uid_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&binary_uid_smoke.step);
+
+    // Trials 31 and 32's backlog, end to end: a missing node is named, a dry
+    // run shows the text it would write and writes nothing, a 3D node's
+    // position is flagged as never stored, and the diff reports resources.
+    const backlog_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\t=$(mktemp -d) &&
+        \\./zig-out/bin/godot-cli project new --project-root "$t" --name Backlog --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene new --output "$t/main.tscn" --root-name Main --root-type Node3D --json >/dev/null &&
+        \\out=$(./zig-out/bin/godot-cli scene node get "$t/main.tscn" /root/Nope --json || true) &&
+        \\echo "$out" | grep -q '"kind":"node_not_found"' && echo "$out" | grep -q '"field":"node"' &&
+        \\cp "$t/main.tscn" "$t/before.tscn" &&
+        \\out=$(./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Probe --type MeshInstance3D --properties '{"visible":false}' --project-root "$t" --dry-run --json) &&
+        \\echo "$out" | grep -q '"section_text":"\[node name=\\"Probe\\" type=\\"MeshInstance3D\\" parent=\\".\\" unique_id=[0-9]*\]\\nvisible = false\\n"' &&
+        \\cmp -s "$t/main.tscn" "$t/before.tscn" &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Probe --type MeshInstance3D --properties '{"position":"Vector3(6, 0, 0)"}' --project-root "$t" --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene validate "$t/main.tscn" --project-root "$t" --json | grep -q '"kind":"property_not_stored"' &&
+        \\./zig-out/bin/godot-cli scene new --output "$t/hud.tscn" --root-name HUD --root-type Control --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene instance add "$t/main.tscn" --parent /root/Main --name HUD --scene res://hud.tscn --project-root "$t" --json >/dev/null &&
+        \\out=$(./zig-out/bin/godot-cli scene diff "$t/before.tscn" "$t/main.tscn" --properties --project-root "$t" --json) &&
+        \\echo "$out" | grep -q '"section":"ext_resource","path":"res://hud.tscn"' &&
+        \\echo "$out" | grep -q '"type_b":"Control"' && echo "$out" | grep -q '"property":"position"' &&
+        \\cp "$t/main.tscn" "$t/pre.tscn" &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Snap --type Node3D --project-root "$t" --snapshot "$t/.godot/before.tscn" --json >/dev/null &&
+        \\cmp -s "$t/pre.tscn" "$t/.godot/before.tscn" &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Dry --type Node3D --project-root "$t" --snapshot "$t/.godot/dry.tscn" --dry-run --json >/dev/null &&
+        \\test ! -e "$t/.godot/dry.tscn" &&
+        \\cp "$t/.godot/before.tscn" "$t/kept.tscn" &&
+        \\./zig-out/bin/godot-cli scene restore "$t/main.tscn" --snapshot "$t/.godot/before.tscn" --json >/dev/null &&
+        \\cmp -s "$t/main.tscn" "$t/pre.tscn" && cmp -s "$t/.godot/before.tscn" "$t/kept.tscn" &&
+        \\out=$(./zig-out/bin/godot-cli scene apply "$t/main.tscn" --patch-json '{"ops":[{"op":"node_add","parent":"/root/Main","name":"Lamp","type":"OmniLight3D"}]}' --project-root "$t" --dry-run --json) &&
+        \\echo "$out" | grep -q '"preview_sections":\["\[node name=\\"Lamp\\" type=\\"OmniLight3D\\"' && cmp -s "$t/main.tscn" "$t/pre.tscn" &&
+        \\./zig-out/bin/godot-cli scene apply "$t/main.tscn" --patch-json '{"ops":[{"op":"node_add","parent":"/root/Main","name":"Lamp","type":"OmniLight3D"}]}' --auto-snapshot --project-root "$t" --json | grep -q 'godot-cli/snapshots/main.tscn' &&
+        \\cmp -s "$t/pre.tscn" "$t/.godot/godot-cli/snapshots/main.tscn" &&
+        \\rm -rf "$t"
+    });
+    backlog_smoke.setCwd(b.path("."));
+    backlog_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&backlog_smoke.step);
 
     // Regression: stdout must respect the shell-owned file offset. With a
     // positional-mode writer every invocation pwrites at offset 0 and clobbers

@@ -4,6 +4,7 @@ const std = @import("std");
 const document = @import("text_format/document.zig");
 const property_line = @import("variant/property_line.zig");
 const parse = @import("variant/parse.zig");
+const Value = @import("variant/value.zig").Value;
 
 const rich_variants_path = "test_fixtures/project/rich_variants.tscn";
 const sample_material_path = "test_fixtures/project/sample_material.tres";
@@ -30,7 +31,7 @@ fn parsePropertyNamed(
     allocator: std.mem.Allocator,
     section: *const document.Section,
     property_name: []const u8,
-) !parse.Value {
+) !Value {
     const prop = findProperty(section, property_name) orelse return error.TestExpectedEqual;
     const split = property_line.splitPropertyLine(prop.raw) orelse return error.TestExpectedEqual;
     return try parse.parsePropertyValue(allocator, split.value_text);
@@ -126,4 +127,34 @@ test "rich variants sub_resource gradient has packed arrays" {
     defer colors.deinit(allocator);
     try std.testing.expect(colors.kind == .packed_array);
     try std.testing.expectEqualStrings("PackedColorArray", colors.packed_name);
+}
+
+test "every Godot-saved fixture survives parse and write byte for byte" {
+    // The claim godot-cli is built on. It was only ever checked against a
+    // one-ext_resource file, so a blank line the writer put between two
+    // ext_resources went unnoticed; multi_ext_godot_saved.tscn has three.
+    const allocator = std.testing.allocator;
+    const writer = @import("text_format/writer.zig");
+    const paths = [_][]const u8{
+        "test_fixtures/project/multi_ext_godot_saved.tscn",
+        "test_fixtures/project/sample_godot_saved.tscn",
+        "test_fixtures/project/rich_variants_godot_saved.tscn",
+        "test_fixtures/project/instanced_child_godot_saved.tscn",
+        "test_fixtures/project/sample_material_godot_saved.tres",
+        "test_fixtures/project/resources/mat_godot_saved.tres",
+        "test_fixtures/project/resources/shape_godot_saved.tres",
+        "test_fixtures/project/resources/theme_godot_saved.tres",
+    };
+    for (paths) |path| {
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, allocator, .unlimited);
+        defer allocator.free(bytes);
+        var doc = try document.parseBytes(allocator, bytes);
+        defer doc.deinit(allocator);
+        const written = try writer.writeDocument(allocator, &doc);
+        defer allocator.free(written);
+        std.testing.expectEqualStrings(bytes, written) catch |err| {
+            std.debug.print("not byte-identical after a round trip: {s}\n", .{path});
+            return err;
+        };
+    }
 }

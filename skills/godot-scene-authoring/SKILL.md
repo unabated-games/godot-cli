@@ -39,7 +39,7 @@ Work from the Godot project root (`project.godot`). Pass `--json` on every comma
 
 1. Structure lives in the scene file, as the editor writes it. No hand-edited `.tscn`, no `load().instantiate()` in `_ready()` for static UI or levels.
 2. Discover before editing: `scene describe` for the whole scene in one call, `catalog list` for what the project already has (its `when_to_use` / `when_not_to_use` prose says which to pick).
-3. Project catalog ids are instanced with `--catalog-id`; `godot/...` builtins are plain nodes.
+3. Project catalog ids are instanced with `--catalog-id`, and a scene with no catalog entry by its path with `--scene res://...`; `godot/...` builtins are plain nodes.
 4. Presentation on nodes, signals as `[connection]` sections (`scene connection add`), resources as `.tres` (`resource new`).
 5. Values are Variant text; strings carry their own quotes (`"\"Paused\""`).
 6. Files move with `project move`, never `mv`.

@@ -30,7 +30,7 @@ scene validate main.tscn --project-root .
 scene node list main.tscn --json     # confirm result
 ```
 
-Always pass `--project-root` when resolving `res://` paths, catalog ids, UID cache checks, or saving scenes. It is optional (and ignored) on file-only reads: `scene node list`, `scene node get`, `scene diff`.
+Always pass `--project-root` when resolving `res://` paths, catalog ids, UID cache checks, or saving scenes. It is optional on file-only reads (`scene node list`, `scene node get`, `scene diff`): the file is read either way, and with it `scene node list` and `scene diff` resolve an instanced node to its scene's root class.
 
 ---
 
@@ -651,6 +651,8 @@ Every `properties` value, `node_set` value, and `instance_override` value is God
 ```
 
 `scene validate` checks the value against the property's type on the node's class, so `visible = Vector2(1, 2)` or `text = 5` is an error (`property_type_mismatch`) rather than something Godot silently coerces and only the frame reveals. It checks connections the same way: a signal the emitter's class does not emit is `unknown_signal`. Both are conservative — a class or property the table does not carry (a `theme_override_*` entry, `metadata/*`, a script's exports) and a connection from a scripted node are left alone, so a correct scene is never flagged.
+
+Place a 3D node with `transform`: `"transform": "Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)"` puts it at (6, 0, 0), with the basis in the first nine numbers. A 3D node never saves `position`, `rotation` or `scale`: Godot loads them, then writes `transform` in their place on its next save, so `scene validate` warns `property_not_stored` for them. A `Node2D` is the other way round: it stores `position`, `rotation` and `scale`, and no `transform`.
 
 A missing required field fails the same way with `"kind": "missing_field"` and the op and field in `details`. The CLI commands (`set-property`, `node add --property`, `sub add --property`) apply the same check unless `--raw-value` is passed.
 

@@ -246,7 +246,7 @@ fn retargetMovedExtResources(
         section.header.setStringField(allocator, "path", candidate) catch return error.OutOfMemory;
         if (resource_uid_lookup.resolveExtResourceUid(allocator, io, project_root, candidate) catch null) |uid| {
             defer allocator.free(uid);
-            section.header.setStringField(allocator, "uid", uid) catch return error.OutOfMemory;
+            section.header.setUidField(allocator, uid) catch return error.OutOfMemory;
         }
         changed = true;
     }

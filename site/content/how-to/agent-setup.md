@@ -33,6 +33,9 @@ hand-edit scene text.
 
 Work from the project root and pass --json. Pass --project-root . for writes,
 catalog lookups, validation, and apply.
+Over MCP each command is a tool of the same name: its options are fields
+without the dashes, output is always JSON, and the server supplies the project
+root, so there is no --json or --project-root to pass.
 
 Before changing a scene, read it in one call:
   godot-cli scene describe <scene> --project-root . --json
@@ -44,6 +47,9 @@ Before adding UI or level structure, check what already exists:
 Reuse a project component by instancing it:
   godot-cli scene instance add <scene> --parent <path> --name <Name> \
     --catalog-id <id> --project-root .
+A scene with no catalog entry is instanced by its path instead:
+  godot-cli scene instance add <scene> --parent <path> --name <Name> \
+    --scene res://<path/to/scene.tscn> --project-root .
 
 Static structure lives in the scene file. add_child(load(...).instantiate())
 in _ready() is only for objects the game spawns during play, such as
@@ -60,6 +66,13 @@ Connect signals in the scene, not in _ready():
 Finish every change with:
   godot-cli scene validate <scene> --project-root . --json
   godot-cli project run --project-root . --json
+
+For a screen that does not move, --frames 5 is enough; the default, 60, is one
+second, which leaves room for movement and clicks. The run imports first, which
+writes a .import file beside each asset and a .uid file beside each script.
+Those belong in version control; .godot/ does not. A 3D scene needs a Camera3D
+for the frame to show anything: without one the frame is plain grey, and the
+run proves only that the scene loads.
 
 Validation checks property values against the node's class and connections
 against the signals that class emits, so a wrong type or a misspelled signal

@@ -353,7 +353,7 @@ fn applyOneOp(
             const section = &doc.sections.items[section_index];
             const existing_id = section.header.getString("id") orelse return error.InvalidResourceKind;
             if (scene_uid) |uid| {
-                try section.header.setStringField(allocator, "uid", uid);
+                try section.header.setUidField(allocator, uid);
             }
             return std.fmt.allocPrint(allocator, "reused ext_resource {s} ({s})", .{ existing_id, path });
         }

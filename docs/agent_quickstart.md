@@ -33,7 +33,7 @@ Through the MCP server there is no `project-root` argument. A server started wit
 
 1. Scenes are authored in the scene file, the way the editor writes them. Never hand-edit `.tscn`, `.tres`, or `project.godot` text, and never build static UI or level structure in `_ready()` with `load().instantiate()`; that is for things the game spawns while playing.
 2. Discover before editing: `scene node list` for viewport paths (`/root/<Root>/...`), `catalog list` and `catalog show <id>` for components the project already has.
-3. A project catalog id is instanced (`scene instance add --catalog-id`); a `godot/...` builtin is a plain node (`scene node add --type`), never instanced.
+3. A project catalog id is instanced (`scene instance add --catalog-id`), and a scene with no catalog entry by its path (`--scene res://...`); a `godot/...` builtin is a plain node (`scene node add --type`), never instanced.
 4. Presentation lives on nodes (`anchor_*`, `grow_*`, `theme_override_*`, `custom_minimum_size`), signals in `[connection]` sections (`scene connection add`), resources in `.tres` files (`resource new`). None of them in `_ready()`.
 5. Values are Godot Variant text: `Vector2(1, 2)`, `1.5`, `true`, and a string carries its own quotes, `"\"Paused\""`. A bare word is rejected before anything is written, and so is a field the op or recipe does not take (`id` is not `id_hint`); the failure names the fields it accepts.
 6. Move files with `project move`, never `mv`; a plain move leaves every `res://` reference stale.

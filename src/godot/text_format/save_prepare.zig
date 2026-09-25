@@ -456,7 +456,7 @@ fn assignNodeUniqueIds(allocator: std.mem.Allocator, doc: *document.Document, se
     for (needs_assign.items) |index| {
         const new_id = try node_id.generateNodeUniqueId(&used);
         try used.put(new_id, {});
-        try doc.sections.items[index].header.setIntegerField(allocator, "unique_id", new_id);
+        try doc.sections.items[index].header.setUniqueIdField(allocator, new_id);
     }
 }
 

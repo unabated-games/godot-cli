@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://sample.tscn" id="1_nenp8"]
+[ext_resource type="BoxMesh" path="res://resources/mesh_godot_saved.res" id="2_4tfjh"]
+[ext_resource type="SphereMesh" path="res://resources/mesh_compressed_godot_saved.res" id="3_bbvlu"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_kp62o"]
+
+[node name="Level" type="Node3D" unique_id=988672239]
+
+[node name="Sample" type="Node3D" parent="." unique_id=1290995245 instance=ExtResource("1_nenp8")]
+
+[node name="Crate" type="MeshInstance3D" parent="." unique_id=2022599635]
+mesh = ExtResource("2_4tfjh")
+
+[node name="Rock" type="MeshInstance3D" parent="." unique_id=377672649]
+mesh = ExtResource("3_bbvlu")
+
+[node name="Floor" type="StaticBody3D" parent="." unique_id=2012956400]
+
+[node name="Shape" type="CollisionShape3D" parent="Floor" unique_id=822390325]
+shape = SubResource("BoxShape3D_kp62o")

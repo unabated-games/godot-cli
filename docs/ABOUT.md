@@ -65,6 +65,7 @@ Roughly four layers:
 - Generate UIDs from file paths (same algorithm as Godot)
 - Generate scene-local ext/sub-resource IDs and node `unique_id`s
 - Read `.godot/uid_cache.bin`
+- Read the UID a file records itself (`uid read`): a scene or resource header, binary or text, a `.uid` sidecar, or a `.import` file
 - Import ID sessions from a Godot-saved reference file (so CLI saves can match Godot’s ext_resource IDs)
 
 This is the compatibility core — verified against Godot 4.7.
@@ -104,7 +105,7 @@ This is the compatibility core — verified against Godot 4.7.
 **Not (yet) meant for:**
 
 - Running gameplay, physics, or scripts
-- Binary `.scn` / `.res` files
+- Binary `.scn` / `.res` files, beyond reading the class and UID from their header
 - Replacing the Godot editor for creative work
 - Runtime scene composition in GDScript when the structure should live in `.tscn` (see [north star](#north-star-editor-like-scene-authoring))
 

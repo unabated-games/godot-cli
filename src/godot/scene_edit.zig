@@ -123,7 +123,7 @@ pub fn addNodeWithOptions(
 
     var header = try makeNodeHeader(allocator, name, node_type, parent_attr);
     errdefer header.deinit(allocator);
-    if (options.unique_id) |id| try header.setIntegerField(allocator, "unique_id", id);
+    if (options.unique_id) |id| try header.setUniqueIdField(allocator, id);
 
     const insert_at = if (options.index) |wanted|
         try insertIndexForChildPosition(allocator, doc, parent.path, wanted)

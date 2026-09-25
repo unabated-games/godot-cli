@@ -7,6 +7,10 @@ const spec = @import("../cli/spec.zig");
 pub const file = [_]spec.PositionalSpec{
     .{ .name = "file", .kind = .path, .description = "Scene or resource file (.tscn or .tres)" },
 };
+
+pub const uid_file = [_]spec.PositionalSpec{
+    .{ .name = "file", .kind = .path, .description = "Project file: a scene or resource (.tscn, .tres, .scn, .res), a script, or an imported asset" },
+};
 pub const file_optional = [_]spec.PositionalSpec{
     .{ .name = "file", .kind = .path, .required = false, .description = "Scene file to dry-run the expanded patch against" },
 };

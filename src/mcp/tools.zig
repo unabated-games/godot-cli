@@ -125,7 +125,7 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
         } else {
             try prop.put(allocator, "type", .{ .string = "string" });
         }
-        try prop.put(allocator, "description", .{ .string = try describe(allocator, arg.description, arg.kind, pinned) });
+        try prop.put(allocator, "description", .{ .string = try describe(allocator, tool, arg.description, arg.kind, pinned) });
         try properties.put(allocator, arg.name, .{ .object = prop });
         if (arg.required) try required.append(.{ .string = arg.name });
     }
@@ -152,7 +152,7 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
                 .string, .path => "string",
             } });
         }
-        try prop.put(allocator, "description", .{ .string = try describe(allocator, opt.description, opt.kind, pinned) });
+        try prop.put(allocator, "description", .{ .string = try describe(allocator, tool, opt.description, opt.kind, pinned) });
         if (opt.default_value) |default_value| {
             if (opt.kind == .integer) {
                 if (std.fmt.parseInt(i64, default_value, 10)) |n| try prop.put(allocator, "default", .{ .integer = n }) else |_| try prop.put(allocator, "default", .{ .string = default_value });
@@ -178,7 +178,7 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
     var row: std.json.ObjectMap = .{};
     try row.put(allocator, "name", .{ .string = tool.name });
     try row.put(allocator, "title", .{ .string = try std.mem.join(allocator, " ", tool.path) });
-    try row.put(allocator, "description", .{ .string = try description(allocator, tool) });
+    try row.put(allocator, "description", .{ .string = try description(allocator, tool, pinned) });
     try row.put(allocator, "inputSchema", .{ .object = schema });
     try row.put(allocator, "annotations", .{ .object = annotations });
     return .{ .object = row };
@@ -191,19 +191,84 @@ pub fn acceptsJson(opt: spec.OptionSpec) bool {
     return std.mem.endsWith(u8, opt.long, "-json") or std.mem.eql(u8, opt.long, "json-body") or std.mem.eql(u8, opt.long, "properties");
 }
 
-fn describe(allocator: std.mem.Allocator, text: []const u8, kind: spec.ValueKind, pinned: bool) ![]const u8 {
-    if (kind != .path) return text;
+fn describe(allocator: std.mem.Allocator, tool: *const Tool, text: []const u8, kind: spec.ValueKind, pinned: bool) ![]const u8 {
+    const adapted = try mcpText(allocator, tool, text, pinned);
+    if (kind != .path) return adapted;
     return std.fmt.allocPrint(allocator, "{s}. A path, relative to {s}", .{
-        text,
+        adapted,
         if (pinned) "the project root" else "the server's working directory",
     });
 }
 
-fn description(allocator: std.mem.Allocator, tool: *const Tool) ![]const u8 {
-    if (tool.command.description) |long| {
-        return std.fmt.allocPrint(allocator, "{s}\n\n{s}", .{ tool.command.summary, long });
+fn description(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) ![]const u8 {
+    const text = if (tool.command.description) |long|
+        try std.fmt.allocPrint(allocator, "{s}\n\n{s}", .{ tool.command.summary, long })
+    else
+        tool.command.summary;
+    return mcpText(allocator, tool, text, pinned);
+}
+
+/// Command descriptions are written for the command line. Over MCP an option
+/// is a field named without its dashes, output is always JSON, and a pinned
+/// server owns the project root; trial 30 read "Requires --parent, --name,
+/// and --type" and had to work out that those were fields. So `--parent`
+/// becomes `parent` when it is one of this tool's fields. Any other `--word`
+/// is left as written: `project import` quotes Godot's own command line.
+fn mcpText(allocator: std.mem.Allocator, tool: *const Tool, text: []const u8, pinned: bool) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < text.len) {
+        if (std.mem.startsWith(u8, text[i..], " (with --json)")) {
+            i += " (with --json)".len;
+            continue;
+        }
+        const starts_flag = std.mem.startsWith(u8, text[i..], "--") and i + 2 < text.len and std.ascii.isLower(text[i + 2]) and
+            (i == 0 or !isFlagChar(text[i - 1]));
+        if (starts_flag) {
+            var end = i + 2;
+            while (end < text.len and isFlagChar(text[end])) end += 1;
+            while (end > i + 2 and text[end - 1] == '-') end -= 1;
+            const name = text[i + 2 .. end];
+            if (pinned and std.mem.eql(u8, name, "project-root")) {
+                try out.appendSlice(allocator, "the server's project root");
+                i = end;
+                continue;
+            }
+            if (isField(tool, name, pinned)) {
+                try out.append(allocator, '`');
+                try out.appendSlice(allocator, name);
+                try out.append(allocator, '`');
+                i = end;
+                continue;
+            }
+        }
+        try out.append(allocator, text[i]);
+        i += 1;
     }
-    return tool.command.summary;
+    return out.toOwnedSlice(allocator);
+}
+
+/// The refusal for a path outside a pinned project. The refusal is right,
+/// but on its own it left no way forward: trials 31 and 32 each kept a
+/// "before" copy of a scene to diff against, and 32 kept it in /tmp and went
+/// round the server through the shell.
+fn outsideRootMessage(allocator: std.mem.Allocator, name: []const u8, text: []const u8) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "argument \"{s}\" resolves outside the project root: {s}. This server reads and writes only inside the project. For a scratch copy, such as a \"before\" version of a scene to diff against, put it under .godot/ in the project: Godot imports nothing there, and .godot/ is normally gitignored", .{ name, text });
+}
+
+fn isFlagChar(c: u8) bool {
+    return std.ascii.isLower(c) or std.ascii.isDigit(c) or c == '-';
+}
+
+/// Whether `name` is a property of this tool's input schema.
+fn isField(tool: *const Tool, name: []const u8, pinned: bool) bool {
+    for (tool.command.positionals) |arg| if (std.mem.eql(u8, arg.name, name)) return true;
+    for (tool.command.options) |opt| {
+        if (!std.mem.eql(u8, opt.long, name)) continue;
+        if (pinned and std.mem.eql(u8, opt.long, "project-root")) return false;
+        return !opt.advanced or include_advanced;
+    }
+    return false;
 }
 
 pub const ArgvOutcome = union(enum) {
@@ -262,7 +327,7 @@ pub fn buildArgv(
                     else
                         scalarText(allocator, value) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a string", .{opt.long}) };
                     if (opt.kind == .path) {
-                        if (try outsideRoot(allocator, confinement, text)) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" resolves outside the project root: {s}", .{ opt.long, text }) };
+                        if (try outsideRoot(allocator, confinement, text)) return .{ .invalid = try outsideRootMessage(allocator, opt.long, text) };
                     }
                     try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}={s}", .{ opt.long, text }));
                 }
@@ -283,12 +348,12 @@ pub fn buildArgv(
             if (value != .array or value.array.items.len == 0) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a non-empty array of strings", .{arg.name}) };
             for (value.array.items) |item| {
                 const text = scalarText(allocator, item) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be an array of strings", .{arg.name}) };
-                if (arg.kind == .path and try outsideRoot(allocator, confinement, text)) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" resolves outside the project root: {s}", .{ arg.name, text }) };
+                if (arg.kind == .path and try outsideRoot(allocator, confinement, text)) return .{ .invalid = try outsideRootMessage(allocator, arg.name, text) };
                 try argv.append(allocator, text);
             }
         } else {
             const text = scalarText(allocator, value) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a string", .{arg.name}) };
-            if (arg.kind == .path and try outsideRoot(allocator, confinement, text)) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" resolves outside the project root: {s}", .{ arg.name, text }) };
+            if (arg.kind == .path and try outsideRoot(allocator, confinement, text)) return .{ .invalid = try outsideRootMessage(allocator, arg.name, text) };
             try argv.append(allocator, text);
         }
     }
@@ -556,4 +621,35 @@ test "the core toolset names tools that exist" {
     // Small enough to be worth having: a client loading every schema pays for
     // the full list instead.
     try std.testing.expect(core_tool_names.len * 4 < all.len);
+}
+
+test "tool descriptions name fields, not command-line flags" {
+    // Trial 30 read "Requires --parent, --name, and --type" and had to work
+    // out that those were fields; and a pinned server has no project-root
+    // field for "with --project-root" to mean.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const tools = try collect(arena, &commands.root);
+
+    const node_add = try toolJson(arena, find(tools, "scene_node_add").?, true);
+    const node_add_text = node_add.object.get("description").?.string;
+    try std.testing.expect(std.mem.indexOf(u8, node_add_text, "`parent`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, node_add_text, "--parent") == null);
+
+    const describe_tool = find(tools, "scene_describe").?;
+    const pinned = (try toolJson(arena, describe_tool, true)).object.get("description").?.string;
+    try std.testing.expect(std.mem.indexOf(u8, pinned, "--project-root") == null);
+    try std.testing.expect(std.mem.indexOf(u8, pinned, "the server's project root") != null);
+    const unpinned = (try toolJson(arena, describe_tool, false)).object.get("description").?.string;
+    try std.testing.expect(std.mem.indexOf(u8, unpinned, "`project-root`") != null);
+
+    // Godot's own command line is quoted, not this tool's fields.
+    const import_text = (try toolJson(arena, find(tools, "project_import").?, true)).object.get("description").?.string;
+    try std.testing.expect(std.mem.indexOf(u8, import_text, "godot --headless --path . --import --quit") != null);
+
+    // Argument descriptions get the same treatment.
+    const props = node_add.object.get("inputSchema").?.object.get("properties").?.object;
+    const properties_text = props.get("properties").?.object.get("description").?.string;
+    try std.testing.expect(std.mem.indexOf(u8, properties_text, "as well as `property`/`value`; where both set one property, this object wins.") != null);
 }

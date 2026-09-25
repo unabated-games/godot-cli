@@ -9,7 +9,7 @@ _godot_cli_children() {
             echo "help ping uid scene resource catalog batch project completions man reference mcp"
             ;;
         'uid')
-            echo "encode decode create-for-path scene-id cache session"
+            echo "encode decode create-for-path read scene-id cache session"
             ;;
         'uid scene-id')
             echo "generate"
@@ -98,7 +98,7 @@ _godot_cli_options() {
             echo "--referrer --from --id-session --project-root"
             ;;
         'scene new')
-            echo "--output --root-name --root-type --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--output --root-name --root-type --no-uid --project-root --resource-path --no-prepare-save --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene describe')
             echo "--project-root"
@@ -107,16 +107,16 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'scene ext add')
-            echo "--type --path --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--type --path --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene ext remove')
-            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene sub add')
-            echo "--type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene sub remove')
-            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene inspect')
             echo "--project-root --no-validate --parse-properties --no-parse-properties"
@@ -128,31 +128,31 @@ _godot_cli_options() {
             echo "--node-name --parent --project-root"
             ;;
         'scene node add')
-            echo "--parent --name --type --property --value --properties --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--parent --name --type --property --value --properties --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node remove')
-            echo "--recursive --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--recursive --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node rename')
-            echo "--name --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--name --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node reparent')
-            echo "--parent --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--parent --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene connection list')
             echo "--project-root"
             ;;
         'scene connection add')
-            echo "--from --signal --to --method --deferred --one-shot --binds --unbinds --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--from --signal --to --method --deferred --one-shot --binds --unbinds --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene connection remove')
-            echo "--from --signal --to --method --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--from --signal --to --method --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene extract')
-            echo "--editable --retarget-dropped-connections --tags --when-to-use --when-not-to-use --output --catalog-id --summary --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--editable --retarget-dropped-connections --tags --when-to-use --when-not-to-use --output --catalog-id --summary --no-uid --project-root --resource-path --no-prepare-save --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene instance add')
-            echo "--parent --name --scene --catalog-id --editable --unique-name --properties --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--parent --name --scene --catalog-id --editable --unique-name --properties --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene template list')
             echo "--templates-root --content --no-parse-properties"
@@ -167,7 +167,7 @@ _godot_cli_options() {
             echo "--intent --patch --intent-json --patch-json --write-patch --project-root"
             ;;
         'scene apply')
-            echo "--patch --intent-json --patch-json --intent --snapshot --auto-snapshot --record-undo --write-undo-patch --no-strict --preview-properties --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--patch --intent-json --patch-json --intent --auto-snapshot --record-undo --write-undo-patch --no-strict --preview-properties --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene diff')
             echo "--properties --project-root"
@@ -182,10 +182,10 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'scene set-property')
-            echo "--property --value --properties --raw-value --node --node-name --section-id --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--property --value --properties --raw-value --node --node-name --section-id --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene normalize')
-            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene retarget-ext')
             echo "--from --to --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -197,19 +197,19 @@ _godot_cli_options() {
             echo "--reference"
             ;;
         'resource new')
-            echo "--output --type --property --value --properties --raw-value --no-uid --project-root --resource-path --no-prepare-save --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--output --type --property --value --properties --raw-value --no-uid --project-root --resource-path --no-prepare-save --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource sub add')
-            echo "--type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--type --property --value --properties --raw-value --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource sub remove')
-            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource ext add')
-            echo "--type --path --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--type --path --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource ext remove')
-            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource inspect')
             echo "--project-root --no-validate --parse-properties --no-parse-properties"
@@ -221,10 +221,10 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'resource set-property')
-            echo "--property --value --raw-value --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--property --value --raw-value --section-line --section --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource normalize')
-            echo "--project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'resource retarget-ext')
             echo "--from --to --project-root --resource-path --no-prepare-save --output --dry-run --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -373,6 +373,7 @@ _godot_cli_takes_args() {
         'uid encode') return 0 ;;
         'uid decode') return 0 ;;
         'uid create-for-path') return 0 ;;
+        'uid read') return 0 ;;
         'uid scene-id generate') return 0 ;;
         'uid cache list') return 0 ;;
         'uid cache lookup') return 0 ;;

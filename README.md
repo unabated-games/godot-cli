@@ -75,7 +75,7 @@ agent setup, and a first-scene walkthrough.
 
 | Layer | Commands |
 |-------|----------|
-| **Godot ID primitives** | `uid encode`/`decode`, `uid create-for-path`, scene-local ids, `.godot/uid_cache.bin` reads, id sessions |
+| **Godot ID primitives** | `uid encode`/`decode`, `uid create-for-path`, `uid read` (a file's recorded UID, binary resources included), scene-local ids, `.godot/uid_cache.bin` reads, id sessions |
 | **Read** | `scene inspect`, `resource inspect`, `scene node list`/`get`, parsed Variant values with types |
 | **Validate** | `scene validate`, `validate-batch`, `compare-godot`, `round-trip` |
 | **Edit and author** | `scene new`, `node add`/`remove`/`rename`/`reparent`, `ext add`, `sub add`, `instance add`, `set-property`, `normalize`, `retarget-ext` |

@@ -117,6 +117,49 @@ fn withoutOption(comptime options: []const spec.OptionSpec, comptime long: []con
     }
 }
 
+/// `--snapshot` on every write: copy the file as it is before the write, so
+/// `scene diff` and `scene restore` have a "before". Trials 31 to 33 each kept
+/// one by hand. The same name on `scene restore` means "restore from here",
+/// so the pre-write copy is taken only for this exact option.
+pub const write_snapshot_opt = spec.OptionSpec{
+    .long = "snapshot",
+    .kind = .path,
+    .description = "Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored",
+};
+
+/// Where a write's "before" copy goes: --snapshot, or with --auto-snapshot
+/// .godot/godot-cli/snapshots/<the scene's res:// path> under the project
+/// root, and <scene>.godot-cli-snapshot beside the scene without one.
+fn snapshotPath(cli: *const app_mod.App, inv: *const spec.Invocation) !?[]const u8 {
+    if (inv.positionals.len == 0) return null;
+    if (inv.getOption("snapshot")) |path| return path;
+    if (!inv.flag("auto-snapshot")) return null;
+    const source = inv.positionals[0];
+    if (projectRootFrom(inv)) |root| {
+        if (try project_config.filesystemToResPath(cli.allocator, root, source)) |res| {
+            return try std.fs.path.join(cli.allocator, &.{ root, ".godot", "godot-cli", "snapshots", res["res://".len..] });
+        }
+    }
+    return try scene_undo.defaultSnapshotPath(cli.allocator, source);
+}
+
+/// Run once per invocation, before the handler, so a command that writes the
+/// same file twice (or a batch of them) cannot snapshot its own output. The
+/// file is the one the command reads, its first positional. A dry run writes
+/// nothing, the copy included.
+pub fn snapshotBeforeWrite(cli: *const app_mod.App, command: *const spec.CommandSpec, inv: *const spec.Invocation) !void {
+    var declared = false;
+    for (command.options) |opt| {
+        if (std.mem.eql(u8, opt.long, write_snapshot_opt.long) and std.mem.eql(u8, opt.description, write_snapshot_opt.description)) declared = true;
+    }
+    if (!declared or inv.flag("dry-run")) return;
+    const dest = (try snapshotPath(cli, inv)) orelse return;
+    scene_undo.writeSnapshot(cli.io, inv.positionals[0], dest) catch |err| {
+        error_details.record(.{ .field = "snapshot", .value = dest, .hint = "the file could not be copied there, so nothing was changed" });
+        return err;
+    };
+}
+
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
 }
@@ -355,20 +398,7 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         if (inv.getOption("node")) |node_path| {
             var list = try node_tree.collectNodes(cli.allocator, &doc);
             defer list.deinit(cli.allocator);
-            const info = node_tree.findByPath(&list, node_path) orelse {
-                // A path under an instanced node names something inside the
-                // PackedScene, which this file does not contain.
-                for (list.nodes) |*node| {
-                    if (node.instance == null) continue;
-                    if (node_path.len > node.path.len and std.mem.startsWith(u8, node_path, node.path) and node_path[node.path.len] == '/') {
-                        const hint = try std.fmt.allocPrint(cli.allocator, "{s} is inside the instanced scene {s}; override it with the instance_override patch op (path {s}, child {s}), which marks the instance editable", .{ node_path, node.instance_path orelse node.instance.?, node.path, node_path[node.path.len + 1 ..] });
-                        error_details.record(.{ .field = "node", .value = node_path, .hint = hint });
-                        return error.NodeNotFound;
-                    }
-                }
-                error_details.record(.{ .field = "node", .value = node_path, .hint = "no node at this viewport path; scene node list shows the paths" });
-                return error.NodeNotFound;
-            };
+            const info = node_tree.findByPath(&list, node_path) orelse return missingNode(cli, &list, "node", node_path);
             break :blk info.section_index;
         }
         if (inv.getOption("section-id")) |section_id| {
@@ -454,10 +484,23 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
 fn loadCacheOrExplain(cli: *const app_mod.App, root: []const u8) !uid_cache.Cache {
     const cache_path = try uid_cache.defaultCachePath(cli.allocator, root);
     defer cli.allocator.free(cache_path);
+    // Missing is the normal state of a fresh clone, not a file fault, and
+    // reporting it as `io` read as one.
+    std.Io.Dir.cwd().access(cli.io, cache_path, .{}) catch |err| switch (err) {
+        error.FileNotFound => {
+            error_details.record(.{
+                .field = "uid_cache",
+                .value = try cli.allocator.dupe(u8, cache_path),
+                .hint = "Godot writes it when it imports the project: run godot-cli project import, or open the project in the editor. To read one file's UID without it, use uid read. scene validate works without it, checking uid:// references against the files themselves",
+            });
+            return error.UidCacheMissing;
+        },
+        else => {},
+    };
     return uid_cache.loadFromFile(cli.allocator, cli.io, cache_path) catch |err| {
         const hint = try std.fmt.allocPrint(
             cli.allocator,
-            "Godot writes this file; delete it and run the project once, or open the project in the editor, to rebuild it. Other commands do not need it: scene validate skips only its uid:// check and says so",
+            "Godot writes this file; delete it and run the project once, or open the project in the editor, to rebuild it. Other commands do not need it: scene validate skips only its checks against the cache, and says so",
             .{},
         );
         error_details.record(.{
@@ -478,7 +521,9 @@ fn uidCacheListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     for (cache.entries.items) |entry| {
         const uid_text = try resource_uid.idToText(cli.allocator, entry.id);
         var row: std.json.ObjectMap = .{};
-        try row.put(cli.allocator, "id", .{ .integer = entry.id });
+        // Decimal text: a 64-bit number is rounded by any JSON parser that
+        // reads numbers as doubles.
+        try row.put(cli.allocator, "id", .{ .string = try @import("uid.zig").idNumberText(cli.allocator, entry.id) });
         try row.put(cli.allocator, "uid", .{ .string = uid_text });
         try row.put(cli.allocator, "path", .{ .string = entry.path });
         try arr.append(.{ .object = row });
@@ -717,6 +762,34 @@ fn sceneNodeListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
     };
 }
 
+/// Record why `node_path` names no node and return NodeNotFound. A path under
+/// an instanced node names something inside the PackedScene, which this file
+/// does not contain, and saying so is the useful answer.
+fn missingNode(cli: *const app_mod.App, list: *const node_tree.NodeList, field: []const u8, node_path: []const u8) anyerror {
+    for (list.nodes) |*node| {
+        if (node.instance == null) continue;
+        if (node_path.len > node.path.len and std.mem.startsWith(u8, node_path, node.path) and node_path[node.path.len] == '/') {
+            const hint = try std.fmt.allocPrint(cli.allocator, "{s} is inside the instanced scene {s}; override it with the instance_override patch op (path {s}, child {s}), which marks the instance editable", .{ node_path, node.instance_path orelse node.instance.?, node.path, node_path[node.path.len + 1 ..] });
+            error_details.record(.{ .field = field, .value = node_path, .hint = hint });
+            return error.NodeNotFound;
+        }
+    }
+    error_details.record(.{ .field = field, .value = node_path, .hint = "no node at this viewport path; scene node list shows the paths" });
+    return error.NodeNotFound;
+}
+
+/// The node section a write would put in the file, for a dry run to show.
+/// The dry-run document has been through the same preparation a write does,
+/// so `unique_id` and the property formatting are the ones a write produces.
+/// Trial 32 dry-ran a node add to see how a property would be written and
+/// got no text back.
+fn dryRunSectionText(cli: *const app_mod.App, doc: *const text_format.document.Document, node_path: []const u8) !?[]const u8 {
+    var list = try node_tree.collectNodes(cli.allocator, doc);
+    defer list.deinit(cli.allocator);
+    const node = node_tree.findByPath(&list, node_path) orelse return null;
+    return try text_format.writer.writeSection(cli.allocator, &doc.sections.items[node.section_index]);
+}
+
 fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (inv.positionals.len == 0) return error.Usage;
     const cli = appFrom(ctx);
@@ -729,11 +802,14 @@ fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     const node: *const node_tree.NodeInfo = blk: {
         if (inv.positionals.len >= 2) {
             const node_path = inv.positionals[1];
-            break :blk node_tree.findByPath(&list, node_path) orelse return error.Usage;
+            break :blk node_tree.findByPath(&list, node_path) orelse return missingNode(cli, &list, "node", node_path);
         }
         const node_name = inv.getOption("node-name") orelse return error.Usage;
         const parent = inv.getOption("parent");
-        break :blk (try node_tree.findByName(&list, node_name, parent)) orelse return error.Usage;
+        break :blk (try node_tree.findByName(&list, node_name, parent)) orelse {
+            error_details.record(.{ .field = "node-name", .value = node_name, .hint = "no node with this name (under --parent, when given); scene node list shows the names" });
+            return error.NodeNotFound;
+        };
     };
 
     var data: std.json.ObjectMap = .{};
@@ -818,7 +894,7 @@ fn stampHeaderUid(cli: *const app_mod.App, inv: *const spec.Invocation, doc: *te
     cli.io.random(&bytes);
     const id: i64 = @intCast((std.mem.readInt(u64, &bytes, .little) & 0x7FFF_FFFF_FFFF_FFFF) | 1);
     const text = try resource_uid.idToText(cli.allocator, id);
-    try doc.sections.items[0].header.setStringField(cli.allocator, "uid", text);
+    try doc.sections.items[0].header.setUidField(cli.allocator, text);
     return text;
 }
 
@@ -913,6 +989,9 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, node_type) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    if (inv.flag("dry-run")) {
+        if (try dryRunSectionText(cli, &doc, added.path)) |text| try data.put(cli.allocator, "section_text", .{ .string = text });
+    }
     const summary = try std.fmt.allocPrint(cli.allocator, "added {s} at {s}", .{ node_name, added.path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
@@ -1281,7 +1360,7 @@ fn sceneExtAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     var added = try scene_resources.addExtResource(cli.allocator, &doc, seed_path, res_type, res_path);
     defer added.deinit(cli.allocator);
     if (scene_uid) |uid| {
-        try doc.sections.items[added.section_index].header.setStringField(cli.allocator, "uid", uid);
+        try doc.sections.items[added.section_index].header.setUidField(cli.allocator, uid);
     }
 
     if (!inv.flag("dry-run")) {
@@ -1715,6 +1794,9 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     try data.put(cli.allocator, "ext_resource_id", .{ .string = try cli.allocator.dupe(u8, added.ext_resource_id) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
     try data.put(cli.allocator, "editable", .{ .bool = added.editable });
+    if (inv.flag("dry-run")) {
+        if (try dryRunSectionText(cli, &doc, added.path)) |text| try data.put(cli.allocator, "section_text", .{ .string = text });
+    }
     if (catalog_id) |id| {
         try data.put(cli.allocator, "catalog_id", .{ .string = try cli.allocator.dupe(u8, id) });
     }
@@ -2100,23 +2182,8 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     const patch_path_opt: ?[]const u8 = if (source.is_intent) null else source.label;
     const intent_path_opt: ?[]const u8 = if (source.is_intent) source.label else null;
 
-    var snapshot_path_owned: ?[]const u8 = null;
-    defer if (snapshot_path_owned) |path| cli.allocator.free(path);
-
-    const snapshot_path: ?[]const u8 = blk: {
-        if (inv.getOption("snapshot")) |path| break :blk path;
-        if (inv.flag("auto-snapshot")) {
-            snapshot_path_owned = try scene_undo.defaultSnapshotPath(cli.allocator, input_path);
-            break :blk snapshot_path_owned.?;
-        }
-        break :blk null;
-    };
-
-    if (snapshot_path) |path| {
-        if (!inv.flag("dry-run")) {
-            try scene_undo.writeSnapshot(cli.io, input_path, path);
-        }
-    }
+    // The dispatcher already copied the scene there (snapshotBeforeWrite).
+    const snapshot_path = try snapshotPath(cli, inv);
 
     var undo_recorder_storage: ?scene_undo.UndoRecorder = null;
     const record_undo = inv.flag("record-undo") or inv.getOption("write-undo-patch") != null;
@@ -2159,7 +2226,11 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
         .undo = if (undo_recorder_storage) |*recorder| recorder else null,
     }) catch |err| {
         // Nothing was written, so an automatic snapshot has nothing to restore.
-        if (snapshot_path_owned) |auto_path| std.Io.Dir.cwd().deleteFile(cli.io, auto_path) catch {};
+        // An explicit --snapshot is the caller's to keep, and a dry run took
+        // none: the file there is an earlier run's.
+        if (inv.getOption("snapshot") == null and !inv.flag("dry-run")) {
+            if (snapshot_path) |auto_path| std.Io.Dir.cwd().deleteFile(cli.io, auto_path) catch {};
+        }
         return err;
     };
     defer applied.deinit(cli.allocator);
@@ -2167,12 +2238,46 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
     } else {
+        // Everything a write would do to the document, so the preview is the
+        // text a write produces: the uid refresh writeWithPrepare runs first,
+        // then the save preparation.
+        if (!inv.flag("no-prepare-save")) {
+            if (projectRootFrom(inv)) |root| {
+                _ = resource_uid_lookup.refreshExtResourceUids(cli.allocator, cli.io, root, &doc) catch 0;
+                _ = resource_uid_lookup.refreshExtResourceUids(cli.allocator, cli.io, root, &doc_before) catch 0;
+            }
+        }
         var prepare = try prepareSaveOptions(cli, inv, output_path);
         defer prepare.deinit(cli.allocator);
         if (prepare.options) |options| {
             try text_format.save_prepare.prepareDocument(cli.allocator, &doc, options);
             try text_format.save_prepare.prepareDocument(cli.allocator, &doc_before, options);
         }
+    }
+
+    // The exact text of each section a write would add or change: every
+    // section of the result whose text the file does not already hold. Trial
+    // 33 needed a patch's text before writing it, and only node add showed it.
+    var preview_sections: ?std.json.Array = null;
+    if (inv.flag("dry-run")) {
+        var before_texts: std.StringHashMapUnmanaged(usize) = .empty;
+        for (doc_before.sections.items) |*section| {
+            const text = try text_format.writer.writeSection(cli.allocator, section);
+            const gop = try before_texts.getOrPut(cli.allocator, text);
+            gop.value_ptr.* = if (gop.found_existing) gop.value_ptr.* + 1 else 1;
+        }
+        var sections = std.json.Array.init(cli.allocator);
+        for (doc.sections.items) |*section| {
+            const text = try text_format.writer.writeSection(cli.allocator, section);
+            if (before_texts.getPtr(text)) |count| {
+                if (count.* > 0) {
+                    count.* -= 1;
+                    continue;
+                }
+            }
+            try sections.append(.{ .string = text });
+        }
+        preview_sections = sections;
     }
 
     var preview_diff: ?std.json.ObjectMap = null;
@@ -2220,6 +2325,7 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
     if (preview_diff) |diff_map| {
         try data.put(cli.allocator, "preview_diff", .{ .object = diff_map });
     }
+    if (preview_sections) |sections| try data.put(cli.allocator, "preview_sections", .{ .array = sections });
     const summary = try std.fmt.allocPrint(cli.allocator, "applied {d} patch op(s) to {s}", .{ applied.applied_count, output_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
@@ -2244,10 +2350,24 @@ fn sceneDiffHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     defer diff.deinit(cli.allocator);
 
     var data = try scene_diff.diffToObjectMap(cli.allocator, &diff);
+    // An instanced node's class is its scene's root, as in `scene node list`
+    // and `scene describe`; trial 31 got an empty type for an added HUD.
+    if (projectRootFrom(inv)) |root| {
+        if (data.get("nodes")) |nodes| for (nodes.array.items) |*row| {
+            inline for (.{ .{ "instance_path_a", "type_a" }, .{ "instance_path_b", "type_b" } }) |side| {
+                if (row.object.get(side[0])) |instance| {
+                    if (instanceRootType(cli, root, instance.string)) |resolved| {
+                        try row.object.put(cli.allocator, side[1], .{ .string = resolved });
+                        try row.object.put(cli.allocator, "instance_of", .{ .string = "PackedScene" });
+                    }
+                }
+            }
+        };
+    }
     try data.put(cli.allocator, "scene_a", .{ .string = try cli.allocator.dupe(u8, path_a) });
     try data.put(cli.allocator, "scene_b", .{ .string = try cli.allocator.dupe(u8, path_b) });
 
-    const total_diffs = diff.nodes.len + diff.properties.len;
+    const total_diffs = diff.nodes.len + diff.properties.len + diff.connections.len + diff.resources.len;
     const summary = if (diff.identical)
         try std.fmt.allocPrint(cli.allocator, "{s} and {s} are identical", .{ path_a, path_b })
     else
@@ -2434,11 +2554,12 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)", .advanced = true },
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
+        write_snapshot_opt,
     } ++ id_session_options;
     const set_property_options = [_]spec.OptionSpec{
         .{ .long = "property", .kind = .string, .description = "Property name to set; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (normalized unless --raw-value), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a constructor is its text with no extra quotes (\"position\": \"Vector2(3, 0)\", \"mesh\": \"ExtResource(\\\"2_rock\\\")\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write value verbatim without Variant normalization" },
         .{ .long = "node", .kind = .string, .description = "Target node by viewport path (e.g. /root/Main/Player)" },
         .{ .long = "node-name", .kind = .string, .description = "Target node section by name attribute" },
@@ -2470,6 +2591,12 @@ pub fn sceneCommands() spec.CommandSpec {
         .kind = .path,
         .description = "Godot project root (optional; ignored for file-only reads)",
     };
+    // node list and diff read the file either way, but use the root.
+    const instance_class_root_opt = spec.OptionSpec{
+        .long = "project-root",
+        .kind = .path,
+        .description = "Godot project root (optional): resolves an instanced node to its scene's root class; the file is read either way",
+    };
     const inspect_options = [_]spec.OptionSpec{
         project_root_opt,
         .{ .long = "no-validate", .kind = .flag, .description = "Skip ID validation" },
@@ -2477,7 +2604,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "no-parse-properties", .kind = .flag, .description = "Omit parsed properties (faster for large files)" },
     };
     const node_list_options = [_]spec.OptionSpec{
-        optional_project_root_opt,
+        instance_class_root_opt,
     };
     const node_get_options = [_]spec.OptionSpec{
         .{ .long = "node-name", .kind = .string, .description = "Node name to look up (alternative to node path positional)" },
@@ -2490,7 +2617,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot node class name (e.g. CharacterBody2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new node; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a constructor is its text with no extra quotes (\"position\": \"Vector2(3, 0)\", \"mesh\": \"ExtResource(\\\"2_rock\\\")\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
     } ++ save_options;
@@ -2516,8 +2643,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "intent-json", .kind = .string, .description = "The intent itself, instead of a file: {\"steps\": [{\"recipe\": \"player_2d\", \"parent\": \"/root/Main\", \"name\": \"Player\"}]}; recipe fields: scene recipes" },
         .{ .long = "patch-json", .kind = .string, .description = "The patch itself, instead of a file: {\"ops\": [{\"op\": \"node_add\", \"parent\": \"/root/Main\", \"name\": \"HUD\", \"type\": \"CanvasLayer\"}]}" },
         .{ .long = "intent", .kind = .path, .description = "Intent JSON (expands to patch ops via scene plan)" },
-        .{ .long = "snapshot", .kind = .path, .description = "Copy scene to this path before applying" },
-        .{ .long = "auto-snapshot", .kind = .flag, .description = "Save snapshot to <scene>.godot-cli-snapshot before apply" },
+        .{ .long = "auto-snapshot", .kind = .flag, .description = "Snapshot the scene before applying, to .godot/godot-cli/snapshots/<its res:// path> under --project-root (beside the scene without one); the result names it" },
         .{ .long = "record-undo", .kind = .flag, .description = "Record undo patch ops in JSON output" },
         .{ .long = "write-undo-patch", .kind = .path, .description = "Write undo patch JSON to this path (implies --record-undo)" },
         .{ .long = "no-strict", .kind = .flag, .description = "Continue applying ops after a failure (default: stop on first error)" },
@@ -2544,7 +2670,7 @@ pub fn sceneCommands() spec.CommandSpec {
     };
     const diff_options = [_]spec.OptionSpec{
         .{ .long = "properties", .kind = .flag, .description = "Include node property diffs (added/removed/changed)" },
-        optional_project_root_opt,
+        instance_class_root_opt,
     };
     const restore_options = [_]spec.OptionSpec{
         .{ .long = "from", .kind = .path, .description = "Snapshot file to restore from" },
@@ -2569,7 +2695,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "catalog-id", .kind = .string, .description = "Project catalog id (resolves the scene path; needs the project root)" },
         .{ .long = "editable", .kind = .flag, .description = "Mark the instance editable in the parent scene ([editable path=...])" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the instance root (%Name from owner scripts)" },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value to set on the instance root (anchors, offsets, overrides). Numbers and booleans are JSON; a string is Variant text and carries its own quotes" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value to set on the instance root (anchors, offsets, overrides). Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a constructor is its text with no extra quotes (\"position\": \"Vector2(3, 0)\", \"mesh\": \"ExtResource(\\\"2_rock\\\")\")" },
     } ++ save_options;
     // save_options carries an --output that defaults to overwriting the input,
     // which scene new redefines as required. Dropping it here keeps the option
@@ -2592,7 +2718,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. RectangleShape2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a constructor is its text with no extra quotes (\"position\": \"Vector2(3, 0)\", \"mesh\": \"ExtResource(\\\"2_rock\\\")\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
     } ++ save_options;
     const resource_remove_options = save_options;
@@ -2714,7 +2840,7 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "add",
                         .summary = "Add a child node under a parent path",
-                        .description = "Requires --parent, --name, and --type. Assigns unique_id on save via save preparation.",
+                        .description = "Requires --parent, --name, and --type. Assigns unique_id on save via save preparation. With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.",
                         .options = &node_edit_options,
                         .handler = sceneNodeAddHandler,
                         .positionals = &pos.scene_file,
@@ -2791,7 +2917,7 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "add",
                         .summary = "Instance a PackedScene under a parent node",
-                        .description = "Adds ext_resource type=PackedScene and a node with instance=ExtResource(...). Use --scene or --catalog-id (project entries only).",
+                        .description = "Adds ext_resource type=PackedScene and a node with instance=ExtResource(...). Use --scene or --catalog-id (project entries only). With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.",
                         .options = &instance_add_options,
                         .handler = sceneInstanceAddHandler,
                         .positionals = &pos.scene_file,
@@ -2850,7 +2976,7 @@ pub fn sceneCommands() spec.CommandSpec {
                 .name = "apply",
                 .summary = "Apply a declarative JSON patch to a scene",
                 .description =
-                \\Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run.
+                \\Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run, whose preview_sections holds the exact text of every section a write would add or change, in file order and with the unique_ids a write assigns, and preview_diff the change node by node.
                 \\
                 \\An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
                 ,
@@ -2861,7 +2987,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "diff",
                 .summary = "Compare node trees between two scenes",
-                .description = "Reports added, removed, and type-changed nodes. Use --properties for property-level diff.",
+                .description = "Reports added, removed, type-changed and unique_id-changed nodes; connections; and ext_resources (keyed by path) and sub_resources (keyed by id) that were added, removed, or changed type or uid. Use --properties for property-level diff: changed properties on nodes in both scenes, every property of a node that was added or removed, and changed properties of a sub_resource, addressed as SubResource(\"id\"). An instanced node's type is its scene's root class when --project-root says where that scene lives, and instance_of then reads PackedScene; without a root its type reads PackedScene. instance_path_a or instance_path_b names the scene.",
                 .options = &diff_options,
                 .handler = sceneDiffHandler,
                 .positionals = &pos.two_files,
@@ -2948,6 +3074,7 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "no-prepare-save", .kind = .flag, .description = "Skip Godot save preparation (ID repair/sort)", .advanced = true },
         .{ .long = "output", .kind = .path, .description = "Output path (default: overwrite input)" },
         .{ .long = "dry-run", .kind = .flag, .description = "Parse and validate edit without writing" },
+        write_snapshot_opt,
     } ++ id_session_options;
     const set_property_options = [_]spec.OptionSpec{
         .{ .long = "property", .kind = .string, .description = "Property name to set" },
@@ -2961,7 +3088,7 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a constructor is its text with no extra quotes (\"position\": \"Vector2(3, 0)\", \"mesh\": \"ExtResource(\\\"2_rock\\\")\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
         .{ .long = "no-uid", .kind = .flag, .description = "Do not stamp a uid=\"uid://...\" on the header" },
     } ++ withoutOption(&save_options, "output");
@@ -2969,7 +3096,7 @@ pub fn resourceCommands() spec.CommandSpec {
         .{ .long = "type", .kind = .string, .description = "Godot resource class (e.g. StyleBoxFlat)", .required = true },
         .{ .long = "property", .kind = .string, .description = "Property to set on the new sub-resource; repeat with --value for several", .repeatable = true },
         .{ .long = "value", .kind = .string, .description = "Property value (Variant text), one per --property", .repeatable = true },
-        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\")" },
+        .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a constructor is its text with no extra quotes (\"position\": \"Vector2(3, 0)\", \"mesh\": \"ExtResource(\\\"2_rock\\\")\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property values verbatim" },
     } ++ save_options;
     const resource_ext_add_options = [_]spec.OptionSpec{

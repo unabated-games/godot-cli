@@ -147,15 +147,16 @@ fn applyOptionsToArgv(
 
 test "json request command form" {
     const commands = @import("../commands.zig");
-    const allocator = std.testing.allocator;
+    // A request is owned by the CLI's arena and has no deinit, so the test
+    // allocates the same way; the testing allocator alone reports it leaked.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
 
-    var request = try parseJsonSlice(allocator,
+    const request = try parseJsonSlice(allocator,
         \\{"command":["ping"],"options":{"json":true}}
     );
-    defer request.options.deinit(allocator);
-
-    var inv = try invocationFromRequest(allocator, &commands.root, request);
-    defer inv.deinit(allocator);
+    const inv = try invocationFromRequest(allocator, &commands.root, request);
 
     try std.testing.expect(inv.global.json_output);
     try std.testing.expectEqualStrings("ping", inv.path[0]);

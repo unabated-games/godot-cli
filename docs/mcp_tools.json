@@ -91,6 +91,22 @@
       }
     },
     {
+      "name": "uid_read",
+      "argv": [
+        "uid",
+        "read",
+        "<file>"
+      ],
+      "json_request": {
+        "argv": [
+          "uid",
+          "read",
+          "meshes/rock.res",
+          "--json"
+        ]
+      }
+    },
+    {
       "name": "uid_scene_id_generate",
       "argv": [
         "uid",

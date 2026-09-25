@@ -11,6 +11,7 @@ const gdscript_scan = @import("gdscript_scan.zig");
 const node_section_order = @import("node_section_order.zig");
 const scene_connections = @import("scene_connections.zig");
 const resource_uid_lookup = @import("resource_uid_lookup.zig");
+const binary_resource = @import("binary_resource.zig");
 
 pub const ValidateContext = struct {
     cache: ?*const uid_cache.Cache = null,
@@ -213,9 +214,16 @@ fn checkExtResourceStaleUid(
 
     // A scene or resource carries its uid in its own header; that is the
     // value to compare, never a hash of the file. `scene new` stamps a random
-    // one, as the editor does, so a hash would always disagree.
-    if (std.mem.endsWith(u8, res_path, ".tscn") or std.mem.endsWith(u8, res_path, ".tres")) {
-        const header_uid = (resource_uid_lookup.readSceneUidFromResPath(allocator, io, project_root, res_path) catch null) orelse return;
+    // one, as the editor does, so a hash would always disagree. A binary one
+    // (`.res`, `.scn`) is no different: the uid is in its binary header, and
+    // since the file's bytes contain it, a hash of them can never match.
+    const text_resource = std.mem.endsWith(u8, res_path, ".tscn") or std.mem.endsWith(u8, res_path, ".tres");
+    if (text_resource or binary_resource.isBinaryResourceFile(io, fs_path_owned)) {
+        const recorded = if (text_resource)
+            resource_uid_lookup.readSceneUidFromResPath(allocator, io, project_root, res_path) catch null
+        else
+            try resource_uid_lookup.readBinaryUid(allocator, io, fs_path_owned);
+        const header_uid = recorded orelse return;
         defer allocator.free(header_uid);
         if (declared != resource_uid.textToId(header_uid)) {
             try report.add(
@@ -240,6 +248,23 @@ fn checkExtResourceStaleUid(
                 .warning,
                 "stale_uid_for_path",
                 "ext_resource uid does not match the .uid sidecar Godot assigned to the referenced file",
+                line,
+            );
+        }
+        return;
+    }
+
+    // An imported asset keeps its UID in its `.import` file. It was derived
+    // from the bytes on first import and survives the asset being edited and
+    // reimported, after which the bytes no longer hash to it.
+    if (resource_uid_lookup.readImportFileUid(allocator, io, fs_path_owned)) |imported| {
+        defer allocator.free(imported);
+        if (declared != resource_uid.textToId(imported)) {
+            try report.add(
+                allocator,
+                .warning,
+                "stale_uid_for_path",
+                "ext_resource uid does not match the uid in the referenced file's .import file",
                 line,
             );
         }
@@ -694,6 +719,17 @@ fn sectionHasScript(section: anytype) bool {
     return false;
 }
 
+/// Node3D placement properties Godot never writes. `node_3d.cpp` gives
+/// position, rotation, quaternion, basis and scale PROPERTY_USAGE_EDITOR and
+/// the rest PROPERTY_USAGE_NONE; only `transform` has storage, and
+/// `_validate_property` only ever narrows these. No Node3D subclass in the
+/// class table declares its own property by any of these names.
+fn isUnstoredPlacement(name: []const u8) bool {
+    const names = [_][]const u8{ "position", "rotation", "rotation_degrees", "quaternion", "basis", "scale", "global_transform", "global_position", "global_basis", "global_rotation", "global_rotation_degrees" };
+    for (names) |candidate| if (std.mem.eql(u8, name, candidate)) return true;
+    return false;
+}
+
 fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Document, report: *Report) !void {
     const variant_parse = @import("variant/parse.zig");
     for (doc.sections.items) |*section| {
@@ -736,6 +772,16 @@ fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Documen
                 try report.add(allocator, .warning, "unknown_property", msg, section.line);
                 continue;
             };
+            if (is_node and isUnstoredPlacement(name) and class_info.descendsFrom(node_type, "Node3D")) {
+                const msg = try std.fmt.allocPrint(
+                    allocator,
+                    "{s}.{s} is never saved: a 3D node stores its placement as transform, so Godot loads this line and then writes transform in its place on the next save. Set transform as the editor does; Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, x, y, z) places the node at (x, y, z)",
+                    .{ node_type, name },
+                );
+                defer allocator.free(msg);
+                try report.add(allocator, .warning, "property_not_stored", msg, section.line);
+                continue;
+            }
             if (property.kinds.len == 0) continue;
 
             var value = variant_parse.parsePropertyValue(allocator, value_text) catch continue;
@@ -797,6 +843,85 @@ test "an edited scene keeps its uid: no stale warning without a cache entry" {
     for (report.issues.items) |issue| {
         try std.testing.expect(!std.mem.eql(u8, issue.kind, "stale_uid_for_path"));
     }
+}
+
+test "a binary resource reference is checked against its header, not a hash" {
+    // A `.res` keeps its UID inside the file, so a hash of the file can never
+    // equal it; comparing against one called every correct reference stale.
+    const allocator = std.testing.allocator;
+    const ctx: ValidateContext = .{
+        .project_name = "TestProject",
+        .project_root = "test_fixtures/project",
+        .io = std.testing.io,
+    };
+    const cases = [_]struct { uid: []const u8, path: []const u8, stale: bool }{
+        .{ .uid = "uid://bc628hhe4x5yp", .path = "res://resources/mesh_godot_saved.res", .stale = false },
+        .{ .uid = "uid://ci8fbl838ce7m", .path = "res://resources/mesh_compressed_godot_saved.res", .stale = false },
+        .{ .uid = "uid://byggqned6p7ih", .path = "res://resources/mesh_godot_saved.res", .stale = true },
+        // The header records none, so there is nothing to call it stale against.
+        .{ .uid = "uid://byggqned6p7ih", .path = "res://resources/mesh_no_uid_godot_saved.res", .stale = false },
+    };
+    for (cases) |case| {
+        const source = try std.fmt.allocPrint(allocator,
+            \\[gd_scene format=3]
+            \\
+            \\[ext_resource type="Mesh" uid="{s}" path="{s}" id="1_mesh"]
+            \\
+            \\[node name="Root" type="MeshInstance3D"]
+            \\mesh = ExtResource("1_mesh")
+            \\
+        , .{ case.uid, case.path });
+        defer allocator.free(source);
+        var doc = try document.parseBytes(allocator, source);
+        defer doc.deinit(allocator);
+        var report = try validateDocument(allocator, &doc, ctx);
+        defer report.deinit(allocator);
+
+        var stale = false;
+        for (report.issues.items) |issue| {
+            if (std.mem.eql(u8, issue.kind, "stale_uid_for_path")) stale = true;
+        }
+        try std.testing.expectEqual(case.stale, stale);
+    }
+}
+
+test "a 3D node's position is flagged as never stored; transform and 2D position are not" {
+    // Godot 4.8 saved 111 moved, rotated and scaled Node3D classes as
+    // transform alone, and 47 Node2D classes with position, rotation and
+    // scale: the check found nothing in either before it shipped.
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Root" type="Node3D"]
+        \\position = Vector3(1, 2, 3)
+        \\
+        \\[node name="Mesh" type="MeshInstance3D" parent="."]
+        \\rotation = Vector3(0, 1, 0)
+        \\
+        \\[node name="Placed" type="Node3D" parent="."]
+        \\transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
+        \\
+        \\[node name="Flat" type="Node2D" parent="."]
+        \\position = Vector2(4, 5)
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var report = try validateDocument(allocator, &doc, .{});
+    defer report.deinit(allocator);
+
+    var lines: [2]usize = undefined;
+    var found: usize = 0;
+    for (report.issues.items) |issue| {
+        if (!std.mem.eql(u8, issue.kind, "property_not_stored")) continue;
+        try std.testing.expect(found < 2);
+        lines[found] = issue.line.?;
+        found += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 2), found);
+    try std.testing.expectEqual(@as(usize, 3), lines[0]);
+    try std.testing.expectEqual(@as(usize, 6), lines[1]);
 }
 
 test "detect duplicate node unique_id" {

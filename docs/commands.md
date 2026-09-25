@@ -34,7 +34,8 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli uid`](#godot-cli-uid) | Godot-compatible resource and scene ID helpers |
 | [`godot-cli uid encode`](#godot-cli-uid-encode) | Encode a numeric Resource UID to uid:// text |
 | [`godot-cli uid decode`](#godot-cli-uid-decode) | Decode uid:// text to a numeric Resource UID |
-| [`godot-cli uid create-for-path`](#godot-cli-uid-create-for-path) | Deterministic Resource UID for a project path and file |
+| [`godot-cli uid create-for-path`](#godot-cli-uid-create-for-path) | The UID Godot would assign a new file (to read a file's existing UID, use uid read) |
+| [`godot-cli uid read`](#godot-cli-uid-read) | Read the UID a file records, from the file itself |
 | [`godot-cli uid scene-id`](#godot-cli-uid-scene-id) | Scene-local 5-character unique id helpers |
 | [`godot-cli uid scene-id generate`](#godot-cli-uid-scene-id-generate) | Generate scene unique ids with a deterministic seed |
 | [`godot-cli uid cache`](#godot-cli-uid-cache) | Inspect project uid_cache.bin |
@@ -183,7 +184,8 @@ godot-cli uid [options]
 |------------|---------|
 | [`encode`](#godot-cli-uid-encode) | Encode a numeric Resource UID to uid:// text |
 | [`decode`](#godot-cli-uid-decode) | Decode uid:// text to a numeric Resource UID |
-| [`create-for-path`](#godot-cli-uid-create-for-path) | Deterministic Resource UID for a project path and file |
+| [`create-for-path`](#godot-cli-uid-create-for-path) | The UID Godot would assign a new file (to read a file's existing UID, use uid read) |
+| [`read`](#godot-cli-uid-read) | Read the UID a file records, from the file itself |
 | [`scene-id`](#godot-cli-uid-scene-id) | Scene-local 5-character unique id helpers |
 | [`cache`](#godot-cli-uid-cache) | Inspect project uid_cache.bin |
 | [`session`](#godot-cli-uid-session) | Persistent ext_resource id session cache |
@@ -208,6 +210,8 @@ godot-cli uid encode <id>
 
 Decode uid:// text to a numeric Resource UID
 
+The number comes back as a decimal string, not a JSON number: a UID is 63 bits, far past the 53 a JSON parser that reads numbers as doubles can hold, JavaScript's included, so such a parser would round it. Store it as a signed 64-bit integer or as text.
+
 ```
 godot-cli uid decode <uid>
 ```
@@ -220,9 +224,9 @@ godot-cli uid decode <uid>
 
 ### `godot-cli uid create-for-path`
 
-Deterministic Resource UID for a project path and file
+The UID Godot would assign a new file (to read a file's existing UID, use uid read)
 
-Matches ResourceUID.create_id_for_path using project name, Godot resource path, and file bytes.
+Matches ResourceUID.create_id_for_path using project name, Godot resource path, and file bytes: the UID Godot would assign a file that has none. To find the UID a file already has, use uid read; a binary resource's never equals this. Result data: uid, and id as a decimal string, since a 63-bit number does not survive a JSON parser that reads numbers as doubles.
 
 ```
 godot-cli uid create-for-path [options] <file>
@@ -240,6 +244,22 @@ godot-cli uid create-for-path [options] <file>
 |--------|-------|-------------|---------|
 | `--project-name` | `<value>` | Project application/config/name | — |
 | `--resource-path` | `<value>` | Godot path e.g. res://main.tscn | — |
+
+### `godot-cli uid read`
+
+Read the UID a file records, from the file itself
+
+Needs no uid_cache.bin, so it works on a fresh clone. A scene or resource keeps its UID in its own header, binary (.res, .scn) or text (.tscn, .tres); a script keeps it in a .uid sidecar and an imported asset in its .import file. Fails with no_uid_recorded when the file records none. Result data: path, uid, source (text_header, binary_header, uid_sidecar or import_file), and for a binary resource its class, compressed, godot_version and format_version.
+
+```
+godot-cli uid read <file>
+```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Project file: a scene or resource (.tscn, .tres, .scn, .res), a script, or an imported asset |
 
 ### `godot-cli uid scene-id`
 
@@ -416,6 +436,7 @@ godot-cli scene new [options]
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -441,7 +462,7 @@ godot-cli scene describe [options] <file>
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
-| `--project-root` | `<path>` | Godot project root (optional; ignored for file-only reads) | — |
+| `--project-root` | `<path>` | Godot project root (optional): resolves an instanced node to its scene's root class; the file is read either way | — |
 
 ### `godot-cli scene refs`
 
@@ -507,6 +528,7 @@ godot-cli scene ext add [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -538,6 +560,7 @@ godot-cli scene ext remove [options] <file> <id>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -581,13 +604,14 @@ godot-cli scene sub add [options] <file>
 | `--type` | `<value>` | Godot resource class (e.g. RectangleShape2D) (required) | — |
 | `--property` | `<value>` | Property to set on the new resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\""), and a constructor is its text with no extra quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\"2_rock\")") | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -619,6 +643,7 @@ godot-cli scene sub remove [options] <file> <id>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -686,7 +711,7 @@ godot-cli scene node list [options] <file>
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
-| `--project-root` | `<path>` | Godot project root (optional; ignored for file-only reads) | — |
+| `--project-root` | `<path>` | Godot project root (optional): resolves an instanced node to its scene's root class; the file is read either way | — |
 
 ### `godot-cli scene node get`
 
@@ -717,7 +742,7 @@ godot-cli scene node get [options] <file> [node]
 
 Add a child node under a parent path
 
-Requires --parent, --name, and --type. Assigns unique_id on save via save preparation.
+Requires --parent, --name, and --type. Assigns unique_id on save via save preparation. With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.
 
 ```
 godot-cli scene node add [options] <file>
@@ -738,7 +763,7 @@ godot-cli scene node add [options] <file>
 | `--type` | `<value>` | Godot node class name (e.g. CharacterBody2D) (required) | — |
 | `--property` | `<value>` | Property to set on the new node; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\""), and a constructor is its text with no extra quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\"2_rock\")") | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
@@ -746,6 +771,7 @@ godot-cli scene node add [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -778,6 +804,7 @@ godot-cli scene node remove [options] <file> <node>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -810,6 +837,7 @@ godot-cli scene node rename [options] <file> <node>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -842,6 +870,7 @@ godot-cli scene node reparent [options] <file> <node>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -883,7 +912,7 @@ godot-cli scene connection list [options] <file>
 
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
-| `--project-root` | `<path>` | Godot project root (optional; ignored for file-only reads) | — |
+| `--project-root` | `<path>` | Godot project root (optional): resolves an instanced node to its scene's root class; the file is read either way | — |
 
 ### `godot-cli scene connection add`
 
@@ -918,6 +947,7 @@ godot-cli scene connection add [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -950,6 +980,7 @@ godot-cli scene connection remove [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -989,6 +1020,7 @@ godot-cli scene extract [options] <file> <node>
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1012,7 +1044,7 @@ godot-cli scene instance [options]
 
 Instance a PackedScene under a parent node
 
-Adds ext_resource type=PackedScene and a node with instance=ExtResource(...). Use --scene or --catalog-id (project entries only).
+Adds ext_resource type=PackedScene and a node with instance=ExtResource(...). Use --scene or --catalog-id (project entries only). With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.
 
 ```
 godot-cli scene instance add [options] <file>
@@ -1034,12 +1066,13 @@ godot-cli scene instance add [options] <file>
 | `--catalog-id` | `<value>` | Project catalog id (resolves the scene path; needs the project root) | — |
 | `--editable` | — | Mark the instance editable in the parent scene ([editable path=...]) | — |
 | `--unique-name` | — | Set unique_name_in_owner on the instance root (%Name from owner scripts) | — |
-| `--properties` | `<value>` | JSON object of property name to value to set on the instance root (anchors, offsets, overrides). Numbers and booleans are JSON; a string is Variant text and carries its own quotes | — |
+| `--properties` | `<value>` | JSON object of property name to value to set on the instance root (anchors, offsets, overrides). Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\""), and a constructor is its text with no extra quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\"2_rock\")") | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1179,7 +1212,7 @@ godot-cli scene plan [options] [file]
 
 Apply a declarative JSON patch to a scene
 
-Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run.
+Applies a patch, or an intent expanded to one, as a single write; if any op fails the file is untouched. Give the document as a file (--intent, --patch) or inline (--intent-json, --patch-json); preview first with --dry-run, whose preview_sections holds the exact text of every section a write would add or change, in file order and with the unique_ids a write assigns, and preview_diff the change node by node.
 
 An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}. Recipes: add_node, node_set, assign_ext, connect, instance_catalog, instance_scene, instance_override, catalog_button, player_2d, static_body_2d, camera_2d, ui_panel, tilemap_layer, audio_player; their fields: scene recipes (MCP resource godot-cli://docs/recipes). A patch is {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer", "properties": {"visible": false}}]}. In a properties object a string carries its own quotes: "text": "\"Score\"". Full reference: agent_scene_authoring.md, served over MCP as godot-cli://docs/scene-authoring.
 
@@ -1201,8 +1234,7 @@ godot-cli scene apply [options] <file>
 | `--intent-json` | `<value>` | The intent itself, instead of a file: {"steps": [{"recipe": "player_2d", "parent": "/root/Main", "name": "Player"}]}; recipe fields: scene recipes | — |
 | `--patch-json` | `<value>` | The patch itself, instead of a file: {"ops": [{"op": "node_add", "parent": "/root/Main", "name": "HUD", "type": "CanvasLayer"}]} | — |
 | `--intent` | `<path>` | Intent JSON (expands to patch ops via scene plan) | — |
-| `--snapshot` | `<path>` | Copy scene to this path before applying | — |
-| `--auto-snapshot` | — | Save snapshot to &lt;scene&gt;.godot-cli-snapshot before apply | — |
+| `--auto-snapshot` | — | Snapshot the scene before applying, to .godot/godot-cli/snapshots/&lt;its res:// path&gt; under --project-root (beside the scene without one); the result names it | — |
 | `--record-undo` | — | Record undo patch ops in JSON output | — |
 | `--write-undo-patch` | `<path>` | Write undo patch JSON to this path (implies --record-undo) | — |
 | `--no-strict` | — | Continue applying ops after a failure (default: stop on first error) | — |
@@ -1212,6 +1244,7 @@ godot-cli scene apply [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1221,7 +1254,7 @@ godot-cli scene apply [options] <file>
 
 Compare node trees between two scenes
 
-Reports added, removed, and type-changed nodes. Use --properties for property-level diff.
+Reports added, removed, type-changed and unique_id-changed nodes; connections; and ext_resources (keyed by path) and sub_resources (keyed by id) that were added, removed, or changed type or uid. Use --properties for property-level diff: changed properties on nodes in both scenes, every property of a node that was added or removed, and changed properties of a sub_resource, addressed as SubResource("id"). An instanced node's type is its scene's root class when --project-root says where that scene lives, and instance_of then reads PackedScene; without a root its type reads PackedScene. instance_path_a or instance_path_b names the scene.
 
 ```
 godot-cli scene diff [options] <a> <b>
@@ -1239,7 +1272,7 @@ godot-cli scene diff [options] <a> <b>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--properties` | — | Include node property diffs (added/removed/changed) | — |
-| `--project-root` | `<path>` | Godot project root (optional; ignored for file-only reads) | — |
+| `--project-root` | `<path>` | Godot project root (optional): resolves an instanced node to its scene's root class; the file is read either way | — |
 
 ### `godot-cli scene restore`
 
@@ -1327,7 +1360,7 @@ godot-cli scene set-property [options] <file>
 |--------|-------|-------------|---------|
 | `--property` | `<value>` | Property name to set; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (normalized unless --raw-value), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\""), and a constructor is its text with no extra quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\"2_rock\")") | — |
 | `--raw-value` | — | Write value verbatim without Variant normalization | — |
 | `--node` | `<value>` | Target node by viewport path (e.g. /root/Main/Player) | — |
 | `--node-name` | `<value>` | Target node section by name attribute | — |
@@ -1339,6 +1372,7 @@ godot-cli scene set-property [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1369,6 +1403,7 @@ godot-cli scene normalize [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1490,13 +1525,14 @@ godot-cli resource new [options]
 | `--type` | `<value>` | Resource class (e.g. StandardMaterial3D, Theme, RectangleShape2D) (required) | — |
 | `--property` | `<value>` | Property to set on the resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\""), and a constructor is its text with no extra quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\"2_rock\")") | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--no-uid` | — | Do not stamp a uid="uid://..." on the header | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1538,13 +1574,14 @@ godot-cli resource sub add [options] <file>
 | `--type` | `<value>` | Godot resource class (e.g. StyleBoxFlat) (required) | — |
 | `--property` | `<value>` | Property to set on the new sub-resource; repeat with --value for several | — |
 | `--value` | `<value>` | Property value (Variant text), one per --property | — |
-| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\"") | — |
+| `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\""), and a constructor is its text with no extra quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\"2_rock\")") | — |
 | `--raw-value` | — | Write property values verbatim | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1576,6 +1613,7 @@ godot-cli resource sub remove [options] <file> <id>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1621,6 +1659,7 @@ godot-cli resource ext add [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1652,6 +1691,7 @@ godot-cli resource ext remove [options] <file> <id>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1750,6 +1790,7 @@ godot-cli resource set-property [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -1778,6 +1819,7 @@ godot-cli resource normalize [options] <file>
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
 | `--output` | `<path>` | Output path (default: overwrite input) | — |
 | `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
 | `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
 | `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
 | `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
@@ -2114,7 +2156,7 @@ godot-cli project new [options]
 
 Run Godot's headless import so new files get UIDs and .import data
 
-godot --headless --path . --import --quit, from the project root. Run it once after adding scenes, scripts, or textures, before running the game or filling catalog scene_uid fields.
+godot --headless --path . --import --quit, from the project root. Run it once after adding scenes, scripts, or textures, before running the game or filling catalog scene_uid fields. Godot writes into the project as it imports: a .import file beside each asset, a .uid file beside each script, and the .godot/ folder, which holds the uid cache. Commit the .import and .uid files: a UID is assigned once and kept there, and if the file changes later, a checkout without them would be assigned a different one.
 
 ```
 godot-cli project import [options]
@@ -2131,7 +2173,7 @@ godot-cli project import [options]
 
 Run the game for a few frames and capture the last frame and the log
 
-Imports (unless --no-import), then runs the main scene or --scene with --write-movie into capture/, quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. The cursor moves off the node after a click, so the last frame shows its normal style; --keep-cursor leaves it there for the hover style. Only the game's own cursor moves, never the desktop pointer. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+Imports (unless --no-import; the import writes .import and .uid files into the project, as project import says), then runs the main scene or --scene with --write-movie into the capture folder (--capture-dir, under .godot/ by default, which Godot never imports), quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. The cursor moves off the node after a click, so the last frame shows its normal style; --keep-cursor leaves it there for the hover style. Only the game's own cursor moves, never the desktop pointer. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
 
 ```
 godot-cli project run [options]

@@ -129,7 +129,7 @@ pub const App = struct {
         };
 
         const ctx: *anyopaque = @ptrCast(@constCast(self));
-        const result = handler(ctx, &inv) catch |err| {
+        const result = runHandler(self, command, handler, ctx, &inv) catch |err| {
             const failure = failureFromHandlerError(self.allocator, err);
             emit.emitFailure(self.allocator, self.io, &stdout_buffer, &stderr_buffer, inv.global.json_output, inv.path, failure) catch {};
             return .failure;
@@ -152,7 +152,14 @@ pub const App = struct {
         const handler = command.handler orelse return error.Usage;
 
         const ctx: *anyopaque = @ptrCast(@constCast(self));
-        return handler(ctx, &invocation);
+        return runHandler(self, command, handler, ctx, &invocation);
+    }
+
+    /// Every handler call, from the command line, a batch step, or MCP: a
+    /// write given --snapshot copies its file first, exactly once.
+    fn runHandler(self: *const App, command: *const spec.CommandSpec, handler: spec.CommandHandler, ctx: *anyopaque, inv: *const spec.Invocation) anyerror!spec.Result {
+        try @import("../commands/scene.zig").snapshotBeforeWrite(self, command, inv);
+        return handler(ctx, inv);
     }
 
     fn loadInvocation(self: *const App, args: []const []const u8) spec.CliError!spec.Invocation {
@@ -253,6 +260,9 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
         .{ .err = "HeaderAttribute", .kind = "header_attribute", .message = "that name is a section header attribute, not a property" },
         .{ .err = "InvalidEvent", .kind = "invalid_event", .message = "no input event type with that name" },
         .{ .err = "UnknownKey", .kind = "unknown_key", .message = "no key with that name" },
+        .{ .err = "NoUidRecorded", .kind = "no_uid_recorded", .message = "the file records no UID" },
+        .{ .err = "UidCacheMissing", .kind = "uid_cache_missing", .message = "the project has no uid cache yet" },
+        .{ .err = "BinaryResourceUnreadable", .kind = "binary_resource_unreadable", .message = "the binary resource's header could not be read" },
     };
     for (mapped) |entry| if (std.mem.eql(u8, name, entry.err)) {
         failure.kind = entry.kind;

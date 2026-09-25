@@ -68,14 +68,25 @@ Converts a 63\-bit integer to Godot's uid:// representation.
 Numeric UID to encode
 .SS godot\-cli uid decode
 Decode uid:// text to a numeric Resource UID
+.PP
+The number comes back as a decimal string, not a JSON number:
+a UID is 63 bits, far past the 53 a JSON parser that reads
+numbers as doubles can hold, JavaScript's included, so such
+a parser would round it. Store it as a signed 64\-bit integer
+or as text.
 .TP
 \fIuid\fR
 uid:// text to decode
 .SS godot\-cli uid create\-for\-path
-Deterministic Resource UID for a project path and file
+The UID Godot would assign a new file (to read a file's existing
+UID, use uid read)
 .PP
 Matches ResourceUID.create_id_for_path using project name,
-Godot resource path, and file bytes.
+Godot resource path, and file bytes: the UID Godot would assign
+a file that has none. To find the UID a file already has, use
+uid read; a binary resource's never equals this. Result data:
+uid, and id as a decimal string, since a 63\-bit number does
+not survive a JSON parser that reads numbers as doubles.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -85,6 +96,21 @@ Project application/config/name
 .TP
 \fB\-\-resource\-path\fR \fIvalue\fR
 Godot path e.g. res://main.tscn
+.SS godot\-cli uid read
+Read the UID a file records, from the file itself
+.PP
+Needs no uid_cache.bin, so it works on a fresh clone. A scene
+or resource keeps its UID in its own header, binary (.res,
+\&.scn) or text (.tscn, .tres); a script keeps it in a .uid
+sidecar and an imported asset in its .import file. Fails with
+no_uid_recorded when the file records none. Result data: path,
+uid, source (text_header, binary_header, uid_sidecar or import_file),
+and for a binary resource its class, compressed, godot_version
+and format_version.
+.TP
+\fIfile\fR
+Project file: a scene or resource (.tscn, .tres, .scn, .res),
+a script, or an imported asset
 .SS godot\-cli uid scene\-id
 Scene\-local 5\-character unique id helpers
 .SS godot\-cli uid scene\-id generate
@@ -164,6 +190,14 @@ Skip Godot save preparation (ID repair/sort)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -192,7 +226,8 @@ it.
 Scene file (.tscn)
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
-Godot project root (optional; ignored for file\-only reads)
+Godot project root (optional): resolves an instanced node to
+its scene's root class; the file is read either way
 .SS godot\-cli scene refs
 List ext_resource references in a scene
 .PP
@@ -236,6 +271,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -276,6 +319,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -311,9 +362,11 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value. Numbers and booleans are JSON; a
-string is Variant text and carries its own quotes ("text":
-"\e"Score\e"")
+as \-\-property/\-\-value; where both set one property, this
+object wins. Numbers and booleans are JSON; a string is Variant
+text and carries its own quotes ("text": "\e"Score\e""), and
+a constructor is its text with no extra quotes ("position":
+"Vector2(3, 0)", "mesh": "ExtResource(\e"2_rock\e")")
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -332,6 +385,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -372,6 +433,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -415,7 +484,8 @@ List all nodes in a scene with paths and section lines
 Scene file (.tscn)
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
-Godot project root (optional; ignored for file\-only reads)
+Godot project root (optional): resolves an instanced node to
+its scene's root class; the file is read either way
 .SS godot\-cli scene node get
 Get one node by viewport path or by name
 .PP
@@ -441,7 +511,10 @@ Godot project root (optional; ignored for file\-only reads)
 Add a child node under a parent path
 .PP
 Requires \-\-parent, \-\-name, and \-\-type. Assigns unique_id
-on save via save preparation.
+on save via save preparation. With \-\-dry\-run, section_text
+is the exact section a write would add. The unique_id in it
+is the one the write assigns, because it is seeded from the
+scene's path, so a write straight after gives the same text.
 .TP
 \fIfile\fR
 Scene file (.tscn)
@@ -464,9 +537,11 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value. Numbers and booleans are JSON; a
-string is Variant text and carries its own quotes ("text":
-"\e"Score\e"")
+as \-\-property/\-\-value; where both set one property, this
+object wins. Numbers and booleans are JSON; a string is Variant
+text and carries its own quotes ("text": "\e"Score\e""), and
+a constructor is its text with no extra quotes ("position":
+"Vector2(3, 0)", "mesh": "ExtResource(\e"2_rock\e")")
 .TP
 \fB\-\-raw\-value\fR
 Write property value verbatim
@@ -489,6 +564,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -531,6 +614,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -575,6 +666,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -618,6 +717,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -644,7 +751,8 @@ List signal connections with from/to as viewport paths
 Scene file (.tscn)
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
-Godot project root (optional; ignored for file\-only reads)
+Godot project root (optional): resolves an instanced node to
+its scene's root class; the file is read either way
 .SS godot\-cli scene connection add
 Connect a signal from one node to a method on another
 .PP
@@ -693,6 +801,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -738,6 +854,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -815,6 +939,14 @@ Skip Godot save preparation (ID repair/sort)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -833,7 +965,11 @@ Add instanced PackedScene nodes
 Instance a PackedScene under a parent node
 .PP
 Adds ext_resource type=PackedScene and a node with instance=ExtResource(...).
-Use \-\-scene or \-\-catalog\-id (project entries only).
+Use \-\-scene or \-\-catalog\-id (project entries only). With
+\-\-dry\-run, section_text is the exact section a write would
+add. The unique_id in it is the one the write assigns, because
+it is seeded from the scene's path, so a write straight after
+gives the same text.
 .TP
 \fIfile\fR
 Scene file (.tscn)
@@ -861,7 +997,9 @@ scripts)
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value to set on the instance
 root (anchors, offsets, overrides). Numbers and booleans are
-JSON; a string is Variant text and carries its own quotes
+JSON; a string is Variant text and carries its own quotes ("text":
+"\e"Score\e""), and a constructor is its text with no extra
+quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\e"2_rock\e")")
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -877,6 +1015,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1028,7 +1174,10 @@ Apply a declarative JSON patch to a scene
 Applies a patch, or an intent expanded to one, as a single
 write; if any op fails the file is untouched. Give the document
 as a file (\-\-intent, \-\-patch) or inline (\-\-intent\-json,
-\-\-patch\-json); preview first with \-\-dry\-run.
+\-\-patch\-json); preview first with \-\-dry\-run, whose preview_sections
+holds the exact text of every section a write would add or
+change, in file order and with the unique_ids a write assigns,
+and preview_diff the change node by node.
 
 An intent is {"steps": [{"recipe": "player_2d", "parent": "/root/Main",
 "name": "Player"}]}. Recipes: add_node, node_set, assign_ext,
@@ -1060,11 +1209,10 @@ The patch itself, instead of a file: {"ops": [{"op": "node_add",
 \fB\-\-intent\fR \fIpath\fR
 Intent JSON (expands to patch ops via scene plan)
 .TP
-\fB\-\-snapshot\fR \fIpath\fR
-Copy scene to this path before applying
-.TP
 \fB\-\-auto\-snapshot\fR
-Save snapshot to <scene>.godot\-cli\-snapshot before apply
+Snapshot the scene before applying, to .godot/godot\-cli/snapshots/<its
+res:// path> under \-\-project\-root (beside the scene without
+one); the result names it
 .TP
 \fB\-\-record\-undo\fR
 Record undo patch ops in JSON output
@@ -1094,6 +1242,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -1109,8 +1265,17 @@ Rewrite property values through Variant parse/format
 .SS godot\-cli scene diff
 Compare node trees between two scenes
 .PP
-Reports added, removed, and type\-changed nodes. Use \-\-properties
-for property\-level diff.
+Reports added, removed, type\-changed and unique_id\-changed
+nodes; connections; and ext_resources (keyed by path) and sub_resources
+(keyed by id) that were added, removed, or changed type or
+uid. Use \-\-properties for property\-level diff: changed properties
+on nodes in both scenes, every property of a node that was
+added or removed, and changed properties of a sub_resource,
+addressed as SubResource("id"). An instanced node's type is
+its scene's root class when \-\-project\-root says where that
+scene lives, and instance_of then reads PackedScene; without
+a root its type reads PackedScene. instance_path_a or instance_path_b
+names the scene.
 .TP
 \fIa\fR
 First scene file
@@ -1122,7 +1287,8 @@ Second scene file
 Include node property diffs (added/removed/changed)
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
-Godot project root (optional; ignored for file\-only reads)
+Godot project root (optional): resolves an instanced node to
+its scene's root class; the file is read either way
 .SS godot\-cli scene restore
 Restore a scene from a snapshot file
 .PP
@@ -1175,9 +1341,11 @@ Property value (normalized unless \-\-raw\-value), one per
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value. Numbers and booleans are JSON; a
-string is Variant text and carries its own quotes ("text":
-"\e"Score\e"")
+as \-\-property/\-\-value; where both set one property, this
+object wins. Numbers and booleans are JSON; a string is Variant
+text and carries its own quotes ("text": "\e"Score\e""), and
+a constructor is its text with no extra quotes ("position":
+"Vector2(3, 0)", "mesh": "ExtResource(\e"2_rock\e")")
 .TP
 \fB\-\-raw\-value\fR
 Write value verbatim without Variant normalization
@@ -1211,6 +1379,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1247,6 +1423,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1349,9 +1533,11 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value. Numbers and booleans are JSON; a
-string is Variant text and carries its own quotes ("text":
-"\e"Score\e"")
+as \-\-property/\-\-value; where both set one property, this
+object wins. Numbers and booleans are JSON; a string is Variant
+text and carries its own quotes ("text": "\e"Score\e""), and
+a constructor is its text with no extra quotes ("position":
+"Vector2(3, 0)", "mesh": "ExtResource(\e"2_rock\e")")
 .TP
 \fB\-\-raw\-value\fR
 Write property values verbatim
@@ -1370,6 +1556,14 @@ Skip Godot save preparation (ID repair/sort)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1403,9 +1597,11 @@ Property value (Variant text), one per \-\-property
 .TP
 \fB\-\-properties\fR \fIvalue\fR
 JSON object of property name to value, instead of or as well
-as \-\-property/\-\-value. Numbers and booleans are JSON; a
-string is Variant text and carries its own quotes ("text":
-"\e"Score\e"")
+as \-\-property/\-\-value; where both set one property, this
+object wins. Numbers and booleans are JSON; a string is Variant
+text and carries its own quotes ("text": "\e"Score\e""), and
+a constructor is its text with no extra quotes ("position":
+"Vector2(3, 0)", "mesh": "ExtResource(\e"2_rock\e")")
 .TP
 \fB\-\-raw\-value\fR
 Write property values verbatim
@@ -1424,6 +1620,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1463,6 +1667,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1505,6 +1717,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -1543,6 +1763,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1629,6 +1857,14 @@ Output path (default: overwrite input)
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
 .TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
 .TP
@@ -1662,6 +1898,14 @@ Output path (default: overwrite input)
 .TP
 \fB\-\-dry\-run\fR
 Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1939,7 +2183,12 @@ data
 godot \-\-headless \-\-path . \-\-import \-\-quit, from the
 project root. Run it once after adding scenes, scripts, or
 textures, before running the game or filling catalog scene_uid
-fields.
+fields. Godot writes into the project as it imports: a .import
+file beside each asset, a .uid file beside each script, and
+the .godot/ folder, which holds the uid cache. Commit the .import
+and .uid files: a UID is assigned once and kept there, and
+if the file changes later, a checkout without them would be
+assigned a different one.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)
@@ -1951,15 +2200,18 @@ macOS app bundle
 Run the game for a few frames and capture the last frame and
 the log
 .PP
-Imports (unless \-\-no\-import), then runs the main scene or
-\-\-scene with \-\-write\-movie into capture/, quits after
-\-\-frames, and reads the log. The result names the last frame,
-the log and its last 40 lines, and every ERROR or SCRIPT ERROR
-line with its backtrace; it fails (exit 1) when Godot did not
-exit cleanly or the log holds an error, so the change is not
-done until this passes. A run can pass with a wrong layout,
-so read the frame as well as the log. \-\-press move_right@10..40
-holds an input action over a frame range and \-\-click /root/Main/HUD/PauseButton@20
+Imports (unless \-\-no\-import; the import writes .import and
+\&.uid files into the project, as project import says), then
+runs the main scene or \-\-scene with \-\-write\-movie into
+the capture folder (\-\-capture\-dir, under .godot/ by default,
+which Godot never imports), quits after \-\-frames, and reads
+the log. The result names the last frame, the log and its last
+40 lines, and every ERROR or SCRIPT ERROR line with its backtrace;
+it fails (exit 1) when Godot did not exit cleanly or the log
+holds an error, so the change is not done until this passes.
+A run can pass with a wrong layout, so read the frame as well
+as the log. \-\-press move_right@10..40 holds an input action
+over a frame range and \-\-click /root/Main/HUD/PauseButton@20
 clicks a node, so movement and buttons can be exercised; the
 frame then shows the result. The cursor moves off the node
 after a click, so the last frame shows its normal style; \-\-keep\-cursor
