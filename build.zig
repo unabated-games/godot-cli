@@ -808,6 +808,10 @@ pub fn build(b: *std.Build) void {
         \\echo "$out" | grep -q '"preview_sections":\["\[node name=\\"Lamp\\" type=\\"OmniLight3D\\"' && cmp -s "$t/main.tscn" "$t/pre.tscn" &&
         \\./zig-out/bin/godot-cli scene apply "$t/main.tscn" --patch-json '{"ops":[{"op":"node_add","parent":"/root/Main","name":"Lamp","type":"OmniLight3D"}]}' --auto-snapshot --project-root "$t" --json | grep -q 'godot-cli/snapshots/main.tscn' &&
         \\cmp -s "$t/pre.tscn" "$t/.godot/godot-cli/snapshots/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Bulb --type OmniLight3D --properties '{"light_energy":2.0,"omni_range":5}' --project-root "$t" --json >/dev/null &&
+        \\grep -q '^light_energy = 2.0$' "$t/main.tscn" && grep -q '^omni_range = 5.0$' "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Pic --type Sprite3D --properties '{"render_priority":2.0}' --project-root "$t" --json >/dev/null &&
+        \\grep -q '^render_priority = 2$' "$t/main.tscn" &&
         \\rm -rf "$t"
     });
     backlog_smoke.setCwd(b.path("."));

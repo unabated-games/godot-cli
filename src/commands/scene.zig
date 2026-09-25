@@ -382,8 +382,9 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     const input_path = inv.positionals[0];
     // --property/--value, or a --properties object, the way `node add` takes
     // them; one property at a time was the asymmetry agents kept tripping on.
-    const pairs = try collectPropertyPairs(cli, inv);
-    if (pairs.len == 0) {
+    // Collected again once the section, and so its class, is known.
+    const given = try collectPropertyPairs(cli, inv, null);
+    if (given.len == 0) {
         error_details.record(.{ .field = "property", .hint = "give --property with --value, or --properties with a JSON object" });
         return error.Usage;
     }
@@ -423,6 +424,8 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         }
         return error.Usage;
     };
+
+    const pairs = try collectPropertyPairs(cli, inv, doc.sections.items[section_index].header.getString("type"));
 
     // A section header's attributes are not properties: writing `path` as a
     // body line on an ext_resource leaves the header untouched, so Godot
@@ -859,7 +862,7 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     const uid_text = try stampHeaderUid(cli, inv, &doc);
     const resource_index = doc.sections.items.len - 1;
 
-    const property_pairs = try collectPropertyPairs(cli, inv);
+    const property_pairs = try collectPropertyPairs(cli, inv, resource_type);
     defer cli.allocator.free(property_pairs);
     for (property_pairs) |pair| {
         const property_name = pair.name;
@@ -956,7 +959,7 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     var added = try scene_edit.addNode(cli.allocator, &doc, parent_path, node_name, node_type);
     defer added.deinit(cli.allocator);
 
-    const property_pairs = try collectPropertyPairs(cli, inv);
+    const property_pairs = try collectPropertyPairs(cli, inv, node_type);
     defer cli.allocator.free(property_pairs);
     for (property_pairs) |pair| {
         const property_name = pair.name;
@@ -1445,7 +1448,7 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
         properties.deinit(cli.allocator);
     }
 
-    const property_pairs = try collectPropertyPairs(cli, inv);
+    const property_pairs = try collectPropertyPairs(cli, inv, res_type);
     defer cli.allocator.free(property_pairs);
     for (property_pairs) |pair| {
         const property_name = pair.name;
@@ -1767,7 +1770,7 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, "unique_name_in_owner", "true");
     }
 
-    const instance_pairs = try collectPropertyPairs(cli, inv);
+    const instance_pairs = try collectPropertyPairs(cli, inv, null);
     defer cli.allocator.free(instance_pairs);
     for (instance_pairs) |pair| {
         const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name);
@@ -1844,7 +1847,9 @@ const PropertyPair = struct { name: []const u8, value: []const u8 };
 /// Repeated --property/--value pairs, then the entries of a --properties JSON
 /// object. Strings are Variant text and carry their own quotes; numbers and
 /// booleans are formatted. Values are validated later by the caller.
-fn collectPropertyPairs(cli: *const app_mod.App, inv: *const spec.Invocation) ![]PropertyPair {
+/// `class_name` is the class the properties go on, when the caller knows it,
+/// so a JSON number is written the way Godot writes that property.
+fn collectPropertyPairs(cli: *const app_mod.App, inv: *const spec.Invocation, class_name: ?[]const u8) ![]PropertyPair {
     var out: std.ArrayList(PropertyPair) = .empty;
     errdefer out.deinit(cli.allocator);
 
@@ -1871,8 +1876,7 @@ fn collectPropertyPairs(cli: *const app_mod.App, inv: *const spec.Invocation) ![
         while (it.next()) |entry| {
             const value: []const u8 = switch (entry.value_ptr.*) {
                 .string => |s| s,
-                .integer => |i| if (scene_patch.isFloatProperty(entry.key_ptr.*)) try std.fmt.allocPrint(cli.allocator, "{d}.0", .{i}) else try std.fmt.allocPrint(cli.allocator, "{d}", .{i}),
-                .float => |f| try std.fmt.allocPrint(cli.allocator, "{d}", .{f}),
+                .integer, .float => (try scene_patch.numberText(cli.allocator, class_name, entry.key_ptr.*, entry.value_ptr.*)).?,
                 .number_string => |s| s,
                 .bool => |b| if (b) "true" else "false",
                 else => {

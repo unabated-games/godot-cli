@@ -937,8 +937,8 @@ fn scalarText(allocator: std.mem.Allocator, map: std.json.ObjectMap, key: []cons
     };
     return switch (value) {
         .string => |s| s,
-        .integer => |i| if (scene_patch.isFloatProperty(property)) try std.fmt.allocPrint(allocator, "{d}.0", .{i}) else try std.fmt.allocPrint(allocator, "{d}", .{i}),
-        .float => |f| try std.fmt.allocPrint(allocator, "{d}", .{f}),
+        // A recipe does not know the node's class here; the name list decides.
+        .integer, .float => (try scene_patch.numberText(allocator, null, property, value)).?,
         .bool => |b| if (b) "true" else "false",
         else => {
             error_details.record(.{ .field = key, .hint = "a string of Variant text (strings carry their own quotes), a number, or a boolean" });

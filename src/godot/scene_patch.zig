@@ -12,6 +12,9 @@ const resource_uid_lookup = @import("resource_uid_lookup.zig");
 const catalog_scan = @import("catalog_scan.zig");
 const catalog_builtins = @import("catalog_builtins.zig");
 const scene_undo = @import("scene_undo.zig");
+const class_info = @import("class_info.zig");
+const node_tree = @import("node_tree.zig");
+const variant_value = @import("variant/value.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -320,7 +323,7 @@ fn applyOneOp(
             return std.fmt.allocPrint(allocator, "set {d} {s} on {s}", .{ count, if (count == 1) "property" else "properties", path });
         }
         const property = try requiredString(op_value.object, "property");
-        const value = try requiredPropertyValue(allocator, op_value.object, "value");
+        const value = try requiredPropertyValue(allocator, nodeClass(allocator, doc, path), op_value.object, "value");
         defer allocator.free(value);
         if (options.undo) |recorder| {
             if (try scene_undo.readNodePropertyRaw(allocator, doc, path, property)) |old_value| {
@@ -457,7 +460,7 @@ fn applyOneOp(
             props_list.deinit(allocator);
         }
         if (op_value.object.get("properties")) |props| {
-            try collectPropertyInputs(allocator, props, &props_list);
+            try collectPropertyInputs(allocator, res_type, props, &props_list);
         }
 
         var added = scene_resources.addSubResourceWithId(allocator, doc, res_type, id, props_list.items) catch |err| {
@@ -521,7 +524,8 @@ fn applyOneOp(
     if (std.mem.eql(u8, op_name, "instance_override")) {
         const path = try requiredString(op_value.object, "path");
         const property = try requiredString(op_value.object, "property");
-        const value = try requiredPropertyValue(allocator, op_value.object, "value");
+        // A property on a node inside the instanced scene: its class is there.
+        const value = try requiredPropertyValue(allocator, null, op_value.object, "value");
         defer allocator.free(value);
         const ensure_editable = readBool(op_value.object.get("editable")) orelse true;
 
@@ -616,9 +620,10 @@ fn applyNodeProperties(
     props_value: std.json.Value,
 ) Error!void {
     if (props_value != .object) return error.InvalidPatch;
+    const class_name = nodeClass(allocator, doc, node_path);
     var it = props_value.object.iterator();
     while (it.next()) |entry| {
-        const value_text = try jsonValueToPropertyText(allocator, entry.key_ptr.*, entry.value_ptr.*);
+        const value_text = try jsonValueToPropertyText(allocator, class_name, entry.key_ptr.*, entry.value_ptr.*);
         defer allocator.free(value_text);
         try scene_edit.setNodeProperty(allocator, doc, node_path, entry.key_ptr.*, value_text);
     }
@@ -626,13 +631,14 @@ fn applyNodeProperties(
 
 fn collectPropertyInputs(
     allocator: std.mem.Allocator,
+    class_name: ?[]const u8,
     props_value: std.json.Value,
     out: *std.ArrayList(scene_resources.PropertyInput),
 ) Error!void {
     if (props_value != .object) return error.InvalidPatch;
     var it = props_value.object.iterator();
     while (it.next()) |entry| {
-        const value_text = try jsonValueToPropertyText(allocator, entry.key_ptr.*, entry.value_ptr.*);
+        const value_text = try jsonValueToPropertyText(allocator, class_name, entry.key_ptr.*, entry.value_ptr.*);
         errdefer allocator.free(value_text);
         const name_copy = try allocator.dupe(u8, entry.key_ptr.*);
         errdefer allocator.free(name_copy);
@@ -654,14 +660,49 @@ pub fn isFloatProperty(property: []const u8) bool {
     return false;
 }
 
-fn jsonValueToPropertyText(allocator: std.mem.Allocator, property: []const u8, value: std.json.Value) Error![]const u8 {
+/// A JSON number as the text Godot writes for `property` on `class_name`:
+/// a float keeps a fractional part (`light_energy = 2.0`), an int has none.
+/// The class table decides where it knows the class; otherwise a whole number
+/// falls back to the name list above, and a JSON float stays a float. Before,
+/// `{"light_energy": 2.0}` came out `light_energy = 2` both ways: the prefix
+/// `energy` never matched the name, and `{d}` prints 2.0 as `2`.
+pub fn numberText(allocator: std.mem.Allocator, class_name: ?[]const u8, property: []const u8, value: std.json.Value) Error!?[]const u8 {
+    const declared_float: ?bool = blk: {
+        const class = class_name orelse break :blk null;
+        const info = class_info.findProperty(class, property) orelse break :blk null;
+        if (std.mem.eql(u8, info.type_name, "float")) break :blk true;
+        if (std.mem.eql(u8, info.type_name, "int")) break :blk false;
+        break :blk null;
+    };
+    return switch (value) {
+        .integer => |i| if (declared_float orelse isFloatProperty(property))
+            try std.fmt.allocPrint(allocator, "{d}.0", .{i})
+        else
+            try std.fmt.allocPrint(allocator, "{d}", .{i}),
+        .float => |f| if (declared_float == false and @floor(f) == f and @abs(f) < 9.0e15)
+            try std.fmt.allocPrint(allocator, "{d}", .{@as(i64, @intFromFloat(f))})
+        else
+            variant_value.formatScalarFloat(allocator, f) catch return error.OutOfMemory,
+        else => null,
+    };
+}
+
+/// The class written on the node at `node_path`; null for an instance, whose
+/// class lives in the scene it instances.
+fn nodeClass(allocator: std.mem.Allocator, doc: *const document.Document, node_path: []const u8) ?[]const u8 {
+    var list = node_tree.collectNodes(allocator, doc) catch return null;
+    defer list.deinit(allocator);
+    const node = node_tree.findByPath(&list, node_path) orelse return null;
+    return doc.sections.items[node.section_index].header.getString("type");
+}
+
+fn jsonValueToPropertyText(allocator: std.mem.Allocator, class_name: ?[]const u8, property: []const u8, value: std.json.Value) Error![]const u8 {
+    if (try numberText(allocator, class_name, property, value)) |text| return text;
     return switch (value) {
         .string => |s| {
             try rejectRawVariantText(allocator, property, s);
             return try allocator.dupe(u8, s);
         },
-        .float => |f| std.fmt.allocPrint(allocator, "{d}", .{f}),
-        .integer => |i| if (isFloatProperty(property)) std.fmt.allocPrint(allocator, "{d}.0", .{i}) else std.fmt.allocPrint(allocator, "{d}", .{i}),
         .bool => |b| allocator.dupe(u8, if (b) "true" else "false"),
         else => error.InvalidPatch,
     };
@@ -719,13 +760,13 @@ fn requiredString(map: std.json.ObjectMap, key: []const u8) Error![]const u8 {
     return jsonString(value);
 }
 
-fn requiredPropertyValue(allocator: std.mem.Allocator, map: std.json.ObjectMap, key: []const u8) Error![]const u8 {
+fn requiredPropertyValue(allocator: std.mem.Allocator, class_name: ?[]const u8, map: std.json.ObjectMap, key: []const u8) Error![]const u8 {
     const value = map.get(key) orelse {
         error_details.record(.{ .field = key });
         return error.MissingPatchField;
     };
     const property = if (map.get("property")) |name| (jsonString(name) catch key) else key;
-    return jsonValueToPropertyText(allocator, property, value);
+    return jsonValueToPropertyText(allocator, class_name, property, value);
 }
 
 fn jsonString(value: std.json.Value) Error![]const u8 {
@@ -1112,4 +1153,29 @@ test "an undo restores a removed node in place, with the id it had" {
 
     const written = try @import("text_format/roundtrip.zig").writeDocumentPreserving(allocator, &doc);
     try std.testing.expectEqualStrings(source, written);
+}
+
+test "a JSON number is written the way Godot writes that property" {
+    // `{"light_energy": 2.0}` was written `light_energy = 2`: the name list
+    // matched `energy` only as a prefix, and `{d}` prints 2.0 as `2`.
+    const allocator = std.testing.allocator;
+    const cases = [_]struct { class: ?[]const u8, property: []const u8, value: std.json.Value, want: []const u8 }{
+        .{ .class = "OmniLight3D", .property = "light_energy", .value = .{ .float = 2.0 }, .want = "2.0" },
+        .{ .class = "OmniLight3D", .property = "light_energy", .value = .{ .integer = 2 }, .want = "2.0" },
+        .{ .class = "OmniLight3D", .property = "light_specular", .value = .{ .float = 0.5 }, .want = "0.5" },
+        // An int property stays an int, even given 2.0.
+        .{ .class = "Sprite3D", .property = "render_priority", .value = .{ .float = 2.0 }, .want = "2" },
+        .{ .class = "Sprite3D", .property = "frame", .value = .{ .integer = 3 }, .want = "3" },
+        // A class the table lacks: the name list decides a whole number, and
+        // a JSON float stays a float.
+        .{ .class = null, .property = "offset_left", .value = .{ .integer = 8 }, .want = "8.0" },
+        .{ .class = "MyScriptNode", .property = "count", .value = .{ .integer = 2 }, .want = "2" },
+        .{ .class = "MyScriptNode", .property = "speed", .value = .{ .float = 2.0 }, .want = "2.0" },
+    };
+    for (cases) |case| {
+        const text = (try numberText(allocator, case.class, case.property, case.value)).?;
+        defer allocator.free(text);
+        try std.testing.expectEqualStrings(case.want, text);
+    }
+    try std.testing.expectEqual(@as(?[]const u8, null), try numberText(allocator, "Node", "name", .{ .bool = true }));
 }

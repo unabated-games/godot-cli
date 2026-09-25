@@ -7,6 +7,11 @@
 //! the last frame, the log path, and the error lines pulled out of the log.
 
 const std = @import("std");
+const document = @import("text_format/document.zig");
+const node_tree = @import("node_tree.zig");
+const class_info = @import("class_info.zig");
+const uid_cache = @import("uid_cache.zig");
+const resource_uid = @import("resource_uid.zig");
 
 pub const Options = struct {
     project_root: []const u8,
@@ -882,4 +887,81 @@ test "the driver types with real keys, into an emptied field, after focusing it"
     // Empty before typing, so the result is the text asked for rather than
     // the text appended to a default.
     try std.testing.expect(clear < keys);
+}
+
+/// Whether `scene` is 3D with no camera: some node descends from Node3D, and
+/// no Camera3D (or subclass) is in it or in any scene it instances. Such a
+/// scene renders only the clear colour, and a run of it passes all the same;
+/// trials 31 to 34 each had to work out why their frame was grey. `scene` is
+/// a res:// path, a uid://, or a path relative to the project root. False when
+/// the scene cannot be read, since this only ever adds a note.
+pub fn isCameralessScene3D(allocator: std.mem.Allocator, io: std.Io, project_root: []const u8, scene: []const u8) bool {
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var cache: ?uid_cache.Cache = null;
+    if (std.mem.startsWith(u8, scene, "uid://")) {
+        const cache_path = uid_cache.defaultCachePath(arena, project_root) catch return false;
+        cache = uid_cache.loadFromFile(arena, io, cache_path) catch return false;
+    }
+    var found: SceneCameras = .{};
+    var visited: std.StringHashMapUnmanaged(void) = .empty;
+    walkSceneCameras(arena, io, project_root, if (cache) |*c| c else null, scene, &visited, &found, 0);
+    return found.readable and found.has_3d and !found.has_camera;
+}
+
+const SceneCameras = struct {
+    readable: bool = false,
+    has_3d: bool = false,
+    has_camera: bool = false,
+};
+
+fn walkSceneCameras(
+    arena: std.mem.Allocator,
+    io: std.Io,
+    project_root: []const u8,
+    cache: ?*const uid_cache.Cache,
+    scene: []const u8,
+    visited: *std.StringHashMapUnmanaged(void),
+    found: *SceneCameras,
+    depth: usize,
+) void {
+    if (depth > 16 or found.has_camera) return;
+    const res_path = if (std.mem.startsWith(u8, scene, "uid://"))
+        ((cache orelse return).pathForId(resource_uid.textToId(scene)) orelse return)
+    else
+        scene;
+    const relative = if (std.mem.startsWith(u8, res_path, "res://")) res_path["res://".len..] else res_path;
+    const fs_path = std.fs.path.join(arena, &.{ project_root, relative }) catch return;
+    if ((visited.getOrPut(arena, fs_path) catch return).found_existing) return;
+    const doc = document.parseFile(arena, io, fs_path) catch return;
+    if (depth == 0) found.readable = true;
+    const list = node_tree.collectNodes(arena, &doc) catch return;
+    for (list.nodes) |*node| {
+        if (node.node_type.len != 0) {
+            if (class_info.descendsFrom(node.node_type, "Camera3D")) found.has_camera = true;
+            if (class_info.descendsFrom(node.node_type, "Node3D")) found.has_3d = true;
+        }
+        if (node.instance_path) |instance| walkSceneCameras(arena, io, project_root, cache, instance, visited, found, depth + 1);
+    }
+}
+
+test "a 3D scene with no camera, in it or in what it instances, is flagged" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    // Godot-saved: a Node3D level instancing sample.tscn, with no camera anywhere.
+    try std.testing.expect(isCameralessScene3D(allocator, io, "test_fixtures/project", "res://multi_ext_godot_saved.tscn"));
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var root_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root = root_buf[0..try tmp.dir.realPath(io, &root_buf)];
+    // The camera lives in an instanced scene: not flagged.
+    try tmp.dir.writeFile(io, .{ .sub_path = "rig.tscn", .data = "[gd_scene format=3]\n\n[node name=\"Rig\" type=\"Node3D\"]\n\n[node name=\"Cam\" type=\"Camera3D\" parent=\".\"]\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "level.tscn", .data = "[gd_scene format=3]\n\n[ext_resource type=\"PackedScene\" path=\"res://rig.tscn\" id=\"1_rig\"]\n\n[node name=\"Level\" type=\"Node3D\"]\n\n[node name=\"Rig\" parent=\".\" instance=ExtResource(\"1_rig\")]\n" });
+    try std.testing.expect(!isCameralessScene3D(allocator, io, root, "res://level.tscn"));
+    // A 2D scene is never flagged, and neither is one that cannot be read.
+    try tmp.dir.writeFile(io, .{ .sub_path = "flat.tscn", .data = "[gd_scene format=3]\n\n[node name=\"Flat\" type=\"Node2D\"]\n" });
+    try std.testing.expect(!isCameralessScene3D(allocator, io, root, "flat.tscn"));
+    try std.testing.expect(!isCameralessScene3D(allocator, io, root, "res://missing.tscn"));
 }

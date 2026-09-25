@@ -233,6 +233,17 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         try messages.append(cli.allocator, "keep-cursor does nothing without --click: the cursor only moves when a click puts it somewhere");
     }
 
+    // The run passes on a grey frame when a 3D scene has no camera; say so,
+    // rather than leave the frame to be misread. A headless run has no frame.
+    if (!inv.flag("headless")) {
+        if (inv.getOption("scene") orelse main_scene) |scene| {
+            if (godot_run.isCameralessScene3D(cli.allocator, cli.io, root, scene)) {
+                try data.put(cli.allocator, "no_camera_3d", .{ .bool = true });
+                try messages.append(cli.allocator, "the scene has 3D nodes and no Camera3D, in its own file or in any scene it instances, so unless a script adds one the frame shows only the clear colour: this run shows the scene loads, not how it looks. Add a Camera3D (and a light) to see it");
+            }
+        }
+    }
+
     const clean_exit = run.exit != null and run.exit.? == 0;
     const ok = clean_exit and run.errors.len == 0;
     const summary = if (ok)
