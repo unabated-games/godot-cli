@@ -160,7 +160,7 @@ jobs:
             required: true
           # Newest prerelease of the next minor: reported, never blocking, so a
           # format change lands here first instead of in a user's diff.
-          - godot: 4.8-dev4
+          - godot: 4.8-dev7
             required: false
     continue-on-error: ${{ !matrix.required }}
     steps:

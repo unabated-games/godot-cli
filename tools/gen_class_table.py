@@ -69,6 +69,11 @@ SCALAR_KINDS = {
     "PackedVector3Array": ("packed_array",),
     "PackedVector4Array": ("packed_array",),
     "PackedColorArray": ("packed_array",),
+    # Any value at all. The engine's source docs include a Variant.xml page,
+    # so without this the type read as a class and JSON.data demanded a
+    # resource reference where `data = {...}` is right. A --doctool dump has
+    # no such page, which is how the drift check against a binary noticed.
+    "Variant": (),
 }
 
 # A property whose type is a class takes a resource reference or null.

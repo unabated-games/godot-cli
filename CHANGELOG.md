@@ -15,6 +15,16 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Fixed
+
+- **A whole number given as text for a float property was still written without `.0`.** `scene set-property --property light_energy --value 2` wrote `light_energy = 2`, where the editor writes `2.0`. So did `--property`/`--value` on `scene node add`, `scene sub add` and `resource new`. 0.26.0 fixed this for JSON numbers (`--properties`, patches and intents) and its notes said `set-property` was covered. Only its `--properties` form was. The text path now asks the class table the same way: a float property keeps its `.0` and an int property drops it. `--raw-value` still writes the text as given.
+- **`scene validate` called a correct `JSON.data` a type mismatch.** The class table typed it as a resource reference, where any value is right, such as `data = {...}`. The engine's source docs include a page for the Variant type itself, so the table generator read "Variant" as a class name. It now maps Variant to "any value". The class-table drift check found this: against a binary's own class reference it could never report clean.
+
+### Changed
+
+- **The class table is regenerated against Godot 4.8-dev7**: the new `OpenXRFoveatedInsetViewport` class, FileDialog's `drive_selector_enabled`, `filters_enabled` and `navigation_buttons_enabled`, and two editor settings. AcceptDialog, ConfirmationDialog and FileDialog no longer redeclare `title`, which they now inherit from `Window` with the same type. No class or property that validated before stops validating. The table was generated from the engine source at the dev7 commit, as `CONTRIBUTING.md` says. A `--doctool` dump from a non-Mono binary leaves out the Mono classes and redeclared members.
+- **CI's prerelease round-trip job runs Godot 4.8-dev7**, up from dev4, three prereleases behind. It exists so a format change shows up here before it shows up in a user's diff, and dev7 had been out a week. The round trip passes against dev7, and the drift check now reports the table as current.
+
 ## [0.26.0] — 2026-09-25
 
 ### Added

@@ -346,18 +346,30 @@ fn countErrors(report: *const id_validate.Report) usize {
     return total;
 }
 
+/// `class_name` is the class the property is on, when known: a bare number
+/// then follows the class table, as a JSON number does. Without it,
+/// `--value 2` for `light_energy` was written `2`, where the editor writes
+/// `2.0`; 0.26.0 fixed the JSON path only.
 fn formatPropertyValueForWrite(
     allocator: std.mem.Allocator,
     property_value: []const u8,
     raw: bool,
     property_name: []const u8,
+    class_name: ?[]const u8,
 ) ![]const u8 {
     if (raw) return try allocator.dupe(u8, property_value);
     try scene_patch.rejectRawVariantText(allocator, property_name, property_value);
     var parsed = try variant.parse.parsePropertyValue(allocator, property_value);
-    const formatted = try parsed.formatForWrite(allocator);
-    parsed.deinit(allocator);
-    return formatted;
+    defer parsed.deinit(allocator);
+    const number: ?std.json.Value = switch (parsed.kind) {
+        .integer => .{ .integer = parsed.integer },
+        .float => .{ .float = parsed.float_val },
+        else => null,
+    };
+    if (number) |value| {
+        if (try scene_patch.numberText(allocator, class_name, property_name, value)) |text| return text;
+    }
+    return try parsed.formatForWrite(allocator);
 }
 
 /// What to use instead of set-property for a header attribute.
@@ -440,7 +452,7 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     }
 
     for (pairs) |pair| {
-        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name, doc.sections.items[section_index].header.getString("type"));
         defer cli.allocator.free(written_value);
         try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, pair.name, written_value);
     }
@@ -928,7 +940,7 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, resource_type);
         defer cli.allocator.free(written_value);
         try text_format.document.setSectionProperty(&doc, cli.allocator, resource_index, property_name, written_value);
     }
@@ -1025,7 +1037,7 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, node_type);
         defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, property_name, written_value);
     }
@@ -1514,7 +1526,7 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, res_type);
         errdefer cli.allocator.free(written_value);
         try properties.append(cli.allocator, .{ .name = property_name, .value = written_value });
     }
@@ -1836,7 +1848,7 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     const instance_pairs = try collectPropertyPairs(cli, inv, null);
     defer cli.allocator.free(instance_pairs);
     for (instance_pairs) |pair| {
-        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name, null);
         defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, pair.name, written_value);
     }

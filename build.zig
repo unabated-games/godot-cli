@@ -812,6 +812,8 @@ pub fn build(b: *std.Build) void {
         \\grep -q '^light_energy = 2.0$' "$t/main.tscn" && grep -q '^omni_range = 5.0$' "$t/main.tscn" &&
         \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Pic --type Sprite3D --properties '{"render_priority":2.0}' --project-root "$t" --json >/dev/null &&
         \\grep -q '^render_priority = 2$' "$t/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene set-property "$t/main.tscn" --node /root/Main/Bulb --property light_specular --value 1 --project-root "$t" --json >/dev/null &&
+        \\grep -q '^light_specular = 1.0$' "$t/main.tscn" &&
         \\./zig-out/bin/godot-cli scene normalize "$t/main.tscn" --project-root "$t" --dry-run --json | grep -q '"changed":false' &&
         \\cp "$t/main.tscn" "$t/clean.tscn" && sed -i.bak 's/ unique_id=[0-9]*//' "$t/main.tscn" &&
         \\./zig-out/bin/godot-cli scene normalize "$t/main.tscn" --project-root "$t" --dry-run --json | grep -q '"changed":true' &&
