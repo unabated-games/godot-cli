@@ -1513,7 +1513,12 @@ whose default fields Godot drops. On a mismatch, difference
 names the first one. The Godot save is \-\-reference, or the
 second positional on the command line; over MCP it is the reference
 field (saved, its old name, still works). project resave makes
-one.
+one. A match proves Godot writes these properties this way,
+not that the editor would store these properties: resave loads
+and saves the scene without building it, so a line the editor
+would replace (position on a 3D node, saved as transform) survives
+into the copy and still matches. scene validate warns on those
+as property_not_stored; run both.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -2240,7 +2245,11 @@ the copy's ext_resource ids are renumbered and its uids left
 out, so compare\-godot leaves those out of the comparison,
 and scene validate checks uids against the files. A byte\-for\-byte
 check would need Godot to save over the file, which this never
-does. The driver script it runs is written to .godot/godot\-cli/resave.gd.
+does. Nor does Godot build the scene first, as the editor does
+before a save: a property the editor would store another way
+(position on a 3D node, kept as transform) comes back unchanged,
+and scene validate's property_not_stored warning is what catches
+it. The driver script it runs is written to .godot/godot\-cli/resave.gd.
 Result data: file, output, output_path, exit, summary.
 .TP
 \fIfile\fR

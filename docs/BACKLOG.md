@@ -1,8 +1,33 @@
 # Open asks
 
-**Nothing is outstanding.** Every ask from the agent trials has shipped,
-trial 36's included. The record is below, by release; the changelog carries
-the detail.
+Trial 37 (2026-10-07) added a light to a 3D level, diffed it and proved it
+against Godot's save, with no failed call and no hand edit. Its asks, ranked:
+
+1. **A `compare-godot` match does not cover the editor's choice of
+   properties** (M). `project resave` has Godot load the scene and save it
+   without building it, so a line the editor would replace survives into the
+   reference: `position = Vector3(...)` on a 3D node matched, where the editor
+   writes `transform`. `scene validate` warns on that case
+   (`property_not_stored`), and both descriptions now say so. The full fix
+   is a resave that builds the scene first, as the editor does. Tried: an
+   `instantiate(GEN_EDIT_STATE_MAIN)` then `pack()` in a headless script
+   writes `transform` correctly, but against the 11 fixture scenes it dropped
+   a script and an inline Gradient and rewrote a parent path with `#`. So it
+   needs a real look at what the editor does differently, not a swap.
+2. **Warn at write time, not only in validate** (S). `scene node add` with
+   `position` on a 3D node returned no message, so the trial switched to
+   `transform` on its own judgement. The `property_not_stored` check could
+   run on the section a write produces and come back in `messages`.
+3. **Say what `compare-godot` left out** (S). A match skips ext_resource ids
+   and uids by design, and the trial diffed the files by hand to be sure of
+   the rest. List the skipped differences in the result.
+4. **A "before" copy without asking for one** (M). `--snapshot` has to be
+   on the first write, or there is nothing to diff against outside git. A
+   per-scene snapshot taken on a session's first write would make
+   `scene diff` work after the fact.
+5. **A capture of a camera-less 3D scene shows nothing** (M). `project run`
+   says so (`no_camera_3d`). The trial suggested a temporary camera framing
+   the scene's bounds, added for the run and never written to the file.
 
 ## How this list is kept
 
@@ -38,4 +63,4 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.19.0: repeatable `--frame-at` and `--log-lines`; a headless click that cannot reach its target reported instead of passing silently; undo patches restoring child order and unique ids; a `properties` object on the `node_set` recipe.
 - 0.20.0: usage prose in `catalog list`; `manifest_res_path` under a relative project root (and with it the id seed); a stated minimum Godot version; a per-event input device; the `[input]` formatting question answered.
 - 0.26.0: trial 30's four asks. UID numbers are decimal strings in JSON; a missing uid cache is `uid_cache_missing`; MCP descriptions name fields, not flags, and `properties` has a constructor example; consecutive ext_resources stay adjacent, as Godot writes them. Clearing that last one turned up two more field-order gaps and five tests that had never run, all fixed. Then trial 31's three: `scene diff --properties` lists an added node's properties and resolves an instanced node's class; the agent rules give the `--scene res://...` fallback for a scene with no catalog entry; `project import` and `project run` say what the import writes into the project. Then trial 32's five, and a `scene node get` failure seen in passing: a pinned server's refusal of an outside path says where a scratch copy can go; `scene diff` reports resources and `unique_id` changes; a node or instance add dry run returns the section it would write; `scene validate` flags a 3D node's placement written as `position` and the like, swept against 218 classes Godot saved first; the agent rules cover MCP, the import's files, and camera-less 3D frames; and a missing node is `node_not_found`. Then trial 33's three: `--snapshot` on every write and `--auto-snapshot` under `.godot/`; `preview_sections` on `scene apply --dry-run`; the rules block's frame count. Then the last two: a whole-number float property keeps its `.0`, decided by the class table; and `project run` notes a 3D scene with no camera. Then trial 35's four: `compare-godot` compares uids and names the first difference; `project resave` makes the Godot save it compares against; `normalize` reports `changed`, with a preview on a dry run; and the `camera_3d` and `place_3d` recipes place and aim a 3D node.
-- Unreleased: trial 36's ask, `scene diff` taking `before`/`after` and `compare-godot` taking `file`/`reference`, with the old names still accepted over MCP.
+- Unreleased: trial 36's ask, `scene diff` taking `before`/`after` and `compare-godot` taking `file`/`reference`, with the old names still accepted over MCP. Trial 37's: `scene set-property` reports the text it wrote as `written`.

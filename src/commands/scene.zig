@@ -451,10 +451,14 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
         }
     }
 
-    for (pairs) |pair| {
+    // The text that went into the file, which is not always what was given:
+    // `--value 3` on a float lands as `3.0`. Trial 37 could only see that by
+    // diffing afterwards.
+    var first_written: []const u8 = "";
+    for (pairs, 0..) |pair, index| {
         const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name, doc.sections.items[section_index].header.getString("type"));
-        defer cli.allocator.free(written_value);
         try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, pair.name, written_value);
+        if (index == 0) first_written = written_value else cli.allocator.free(written_value);
     }
 
     const output_path = inv.getOption("output") orelse input_path;
@@ -480,6 +484,7 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     try data.put(cli.allocator, "path", .{ .string = output_path });
     try data.put(cli.allocator, "property", .{ .string = pairs[0].name });
     try data.put(cli.allocator, "value", .{ .string = pairs[0].value });
+    try data.put(cli.allocator, "written", .{ .string = first_written });
     try data.put(cli.allocator, "property_count", .{ .integer = @intCast(pairs.len) });
     try data.put(cli.allocator, "section_line", .{ .integer = @intCast(section.line) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
@@ -3094,7 +3099,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "compare-godot",
                 .summary = "Compare a scene to a Godot headless save (semantic match)",
-                .description = "Compares the node tree (order, headers, unique_id), each node's properties with ext_resource ids read as the paths they name, the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. Not compared: ext_resource ids, which Godot renumbers; load_steps; and sub_resources, whose default fields Godot drops. On a mismatch, difference names the first one. The Godot save is --reference, or the second positional on the command line; over MCP it is the reference field (saved, its old name, still works). project resave makes one.",
+                .description = "Compares the node tree (order, headers, unique_id), each node's properties with ext_resource ids read as the paths they name, the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. Not compared: ext_resource ids, which Godot renumbers; load_steps; and sub_resources, whose default fields Godot drops. On a mismatch, difference names the first one. The Godot save is --reference, or the second positional on the command line; over MCP it is the reference field (saved, its old name, still works). project resave makes one. A match proves Godot writes these properties this way, not that the editor would store these properties: resave loads and saves the scene without building it, so a line the editor would replace (position on a 3D node, saved as transform) survives into the copy and still matches. scene validate warns on those as property_not_stored; run both.",
                 .options = &compare_godot_options,
                 .handler = sceneCompareGodotHandler,
                 .positionals = &pos.file_and_reference,

@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Added
+
+- **`scene set-property` reports `written`: the text that went into the file.** `value` is still what was given. They differ when a float is given as a whole number: `--value 3` on `light_energy` is written `3.0`. Trial 37 only saw `3.0` by running a diff afterwards. With several properties, as with `value`, it is the first.
+
 ### Fixed
 
 - **A whole number given as text for a float property was still written without `.0`.** `scene set-property --property light_energy --value 2` wrote `light_energy = 2`, where the editor writes `2.0`. So did `--property`/`--value` on `scene node add`, `scene sub add` and `resource new`. 0.26.0 fixed this for JSON numbers (`--properties`, patches and intents) and its notes said `set-property` was covered. Only its `--properties` form was. The text path now asks the class table the same way: a float property keeps its `.0` and an int property drops it. `--raw-value` still writes the text as given.
@@ -24,6 +28,7 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 - **`scene diff` takes `before` and `after`, and `scene compare-godot` takes `file` and `reference`.** Over MCP, `scene_diff` took `a` and `b`, and `compare-godot` took `file`, `saved` and `reference`, where `saved` and `reference` were the same thing. Trials 35 and 36 both tripped on it. A single pair for both commands would have meant flipping `scene diff`'s argument order, and that would silently swap "added" and "removed" for every existing caller. So each command names its files for what they are, in the order it already took them. Over MCP the old names `a`, `b` and `saved` still work. On the command line nothing changes: the files are positional, `--reference` stays, and the diff result keeps its `_a`/`_b` keys (a is before).
 - **The class table is regenerated against Godot 4.8-dev7**: the new `OpenXRFoveatedInsetViewport` class, FileDialog's `drive_selector_enabled`, `filters_enabled` and `navigation_buttons_enabled`, and two editor settings. AcceptDialog, ConfirmationDialog and FileDialog no longer redeclare `title`, which they now inherit from `Window` with the same type. No class or property that validated before stops validating. The table was generated from the engine source at the dev7 commit, as `CONTRIBUTING.md` says. A `--doctool` dump from a non-Mono binary leaves out the Mono classes and redeclared members.
+- **`scene compare-godot` and `project resave` say what a match does not prove.** `project resave` has Godot load the scene and save it without building it, as the editor would before a save. So a line the editor would replace comes back unchanged, and the comparison matches. One such line is `position` on a 3D node, which the editor stores as `transform`. Trial 37 found it. Both descriptions now say so, and name `scene validate`'s `property_not_stored` warning as the check that catches it.
 - **CI's prerelease round-trip job runs Godot 4.8-dev7**, up from dev4, three prereleases behind. It exists so a format change shows up here before it shows up in a user's diff, and dev7 had been out a week. The round trip passes against dev7, and the drift check now reports the table as current.
 
 ## [0.26.0] — 2026-09-25
