@@ -1002,8 +1002,8 @@
       "argv": [
         "scene",
         "diff",
-        "<scene_a.tscn>",
-        "<scene_b.tscn>"
+        "<before.tscn>",
+        "<after.tscn>"
       ],
       "options": [
         "--properties",

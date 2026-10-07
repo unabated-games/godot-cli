@@ -1,8 +1,8 @@
 # Open asks
 
-One small ask is open, from trial 36 (2026-09-25), the pre-release trial for
-0.26.0, which passed everything it was set with no failed call and no
-workaround. Everything else has shipped, and the record is below, by release.
+**Nothing is outstanding.** Every ask from the agent trials has shipped,
+trial 36's included. The record is below, by release; the changelog carries
+the detail.
 
 ## How this list is kept
 
@@ -18,10 +18,6 @@ them was pointing at a real bug or a real gap rather than being careless: a
 generated id that collided, a connection that could not cross an instance
 boundary, a header attribute written as a property. That is the signal worth
 chasing first when the next one turns up.
-
-## Open
-
-1. **The two commands that compare two scenes name their files differently.** (S) `scene diff` takes `a` and `b`. `scene compare-godot` takes `file`, then `saved` or `--reference`, which are the same thing. Over MCP those are the argument names an agent has to learn. Trial 36 noticed. Settling on one pair is an interface change, so it belongs in a minor release with a note, and the old names should keep working for a while.
 
 ## Closed since 0.7.0
 
@@ -41,4 +37,5 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.18.0: `scene extract --retarget-dropped-connections`, `--editable` and the catalog prose options; `project move --import` and `--rename-ids`; `catalog add --signal-doc`; `scene set-property` refusing a header attribute.
 - 0.19.0: repeatable `--frame-at` and `--log-lines`; a headless click that cannot reach its target reported instead of passing silently; undo patches restoring child order and unique ids; a `properties` object on the `node_set` recipe.
 - 0.20.0: usage prose in `catalog list`; `manifest_res_path` under a relative project root (and with it the id seed); a stated minimum Godot version; a per-event input device; the `[input]` formatting question answered.
-- Unreleased: trial 30's four asks. UID numbers are decimal strings in JSON; a missing uid cache is `uid_cache_missing`; MCP descriptions name fields, not flags, and `properties` has a constructor example; consecutive ext_resources stay adjacent, as Godot writes them. Clearing that last one turned up two more field-order gaps and five tests that had never run, all fixed. Then trial 31's three: `scene diff --properties` lists an added node's properties and resolves an instanced node's class; the agent rules give the `--scene res://...` fallback for a scene with no catalog entry; `project import` and `project run` say what the import writes into the project. Then trial 32's five, and a `scene node get` failure seen in passing: a pinned server's refusal of an outside path says where a scratch copy can go; `scene diff` reports resources and `unique_id` changes; a node or instance add dry run returns the section it would write; `scene validate` flags a 3D node's placement written as `position` and the like, swept against 218 classes Godot saved first; the agent rules cover MCP, the import's files, and camera-less 3D frames; and a missing node is `node_not_found`. Then trial 33's three: `--snapshot` on every write and `--auto-snapshot` under `.godot/`; `preview_sections` on `scene apply --dry-run`; the rules block's frame count. Then the last two: a whole-number float property keeps its `.0`, decided by the class table; and `project run` notes a 3D scene with no camera. Then trial 35's four: `compare-godot` compares uids and names the first difference; `project resave` makes the Godot save it compares against; `normalize` reports `changed`, with a preview on a dry run; and the `camera_3d` and `place_3d` recipes place and aim a 3D node.
+- 0.26.0: trial 30's four asks. UID numbers are decimal strings in JSON; a missing uid cache is `uid_cache_missing`; MCP descriptions name fields, not flags, and `properties` has a constructor example; consecutive ext_resources stay adjacent, as Godot writes them. Clearing that last one turned up two more field-order gaps and five tests that had never run, all fixed. Then trial 31's three: `scene diff --properties` lists an added node's properties and resolves an instanced node's class; the agent rules give the `--scene res://...` fallback for a scene with no catalog entry; `project import` and `project run` say what the import writes into the project. Then trial 32's five, and a `scene node get` failure seen in passing: a pinned server's refusal of an outside path says where a scratch copy can go; `scene diff` reports resources and `unique_id` changes; a node or instance add dry run returns the section it would write; `scene validate` flags a 3D node's placement written as `position` and the like, swept against 218 classes Godot saved first; the agent rules cover MCP, the import's files, and camera-less 3D frames; and a missing node is `node_not_found`. Then trial 33's three: `--snapshot` on every write and `--auto-snapshot` under `.godot/`; `preview_sections` on `scene apply --dry-run`; the rules block's frame count. Then the last two: a whole-number float property keeps its `.0`, decided by the class table; and `project run` notes a 3D scene with no camera. Then trial 35's four: `compare-godot` compares uids and names the first difference; `project resave` makes the Godot save it compares against; `normalize` reports `changed`, with a preview on a dry run; and the `camera_3d` and `place_3d` recipes place and aim a 3D node.
+- Unreleased: trial 36's ask, `scene diff` taking `before`/`after` and `compare-godot` taking `file`/`reference`, with the old names still accepted over MCP.

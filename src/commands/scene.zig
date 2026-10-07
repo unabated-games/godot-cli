@@ -3034,7 +3034,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "diff",
                 .summary = "Compare node trees between two scenes",
-                .description = "Reports added, removed, type-changed and unique_id-changed nodes; connections; and ext_resources (keyed by path) and sub_resources (keyed by id) that were added, removed, or changed type or uid. Use --properties for property-level diff: changed properties on nodes in both scenes, every property of a node that was added or removed, and changed properties of a sub_resource, addressed as SubResource(\"id\"). An instanced node's type is its scene's root class when --project-root says where that scene lives, and instance_of then reads PackedScene; without a root its type reads PackedScene. instance_path_a or instance_path_b names the scene.",
+                .description = "Compares <before> with <after> (a and b, their old names, still work over MCP); added means in after and not before, and in the result _a is before and _b is after. Reports added, removed, type-changed and unique_id-changed nodes; connections; and ext_resources (keyed by path) and sub_resources (keyed by id) that were added, removed, or changed type or uid. Use --properties for property-level diff: changed properties on nodes in both scenes, every property of a node that was added or removed, and changed properties of a sub_resource, addressed as SubResource(\"id\"). An instanced node's type is its scene's root class when --project-root says where that scene lives, and instance_of then reads PackedScene; without a root its type reads PackedScene. instance_path_a or instance_path_b names the scene.",
                 .options = &diff_options,
                 .handler = sceneDiffHandler,
                 .positionals = &pos.two_files,
@@ -3094,7 +3094,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "compare-godot",
                 .summary = "Compare a scene to a Godot headless save (semantic match)",
-                .description = "Compares the node tree (order, headers, unique_id), each node's properties with ext_resource ids read as the paths they name, the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. Not compared: ext_resource ids, which Godot renumbers; load_steps; and sub_resources, whose default fields Godot drops. On a mismatch, difference names the first one. The Godot save is the second positional, or --reference, the same thing. project resave makes one.",
+                .description = "Compares the node tree (order, headers, unique_id), each node's properties with ext_resource ids read as the paths they name, the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. Not compared: ext_resource ids, which Godot renumbers; load_steps; and sub_resources, whose default fields Godot drops. On a mismatch, difference names the first one. The Godot save is --reference, or the second positional on the command line; over MCP it is the reference field (saved, its old name, still works). project resave makes one.",
                 .options = &compare_godot_options,
                 .handler = sceneCompareGodotHandler,
                 .positionals = &pos.file_and_reference,
@@ -3257,7 +3257,7 @@ pub fn resourceCommands() spec.CommandSpec {
             .{
                 .name = "compare-godot",
                 .summary = "Compare a resource to a Godot headless save (semantic match)",
-                .description = "A resource has no node tree, so this compares only its ext_resource paths and the uids both files carry; the [resource] and sub_resource sections are not compared. On a mismatch, difference names it. The Godot save is the second positional, or --reference, the same thing.",
+                .description = "A resource has no node tree, so this compares only its ext_resource paths and the uids both files carry; the [resource] and sub_resource sections are not compared. On a mismatch, difference names it. The Godot save is --reference, or the second positional on the command line; over MCP it is the reference field (saved, its old name, still works).",
                 .options = &compare_godot_options,
                 .handler = resourceCompareGodotHandler,
                 .positionals = &pos.file_and_reference,

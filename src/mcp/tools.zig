@@ -116,6 +116,7 @@ pub fn toolJson(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) !
     var required: std.json.Array = .init(allocator);
 
     for (tool.command.positionals) |arg| {
+        if (arg.mcp_hidden) continue;
         var prop: std.json.ObjectMap = .{};
         if (arg.variadic) {
             try prop.put(allocator, "type", .{ .string = "array" });
@@ -297,7 +298,7 @@ pub fn buildArgv(
 
     var it = args.iterator();
     while (it.next()) |entry| {
-        if (!isKnownArgument(tool, entry.key_ptr.*, pinned)) {
+        if (!isKnownArgument(tool, canonicalArgument(tool, entry.key_ptr.*), pinned)) {
             return .{ .invalid = try std.fmt.allocPrint(allocator, "unknown argument \"{s}\" for tool {s}", .{ entry.key_ptr.*, tool.name }) };
         }
     }
@@ -308,7 +309,7 @@ pub fn buildArgv(
     for (tool.command.options) |opt| {
         if (pinned and std.mem.eql(u8, opt.long, "project-root")) continue;
         if (opt.advanced and !include_advanced) continue;
-        const value = args.get(opt.long) orelse continue;
+        const value = optionValue(tool, args, opt.long) orelse continue;
         switch (opt.kind) {
             .flag => switch (value) {
                 .bool => |enabled| if (enabled) try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}", .{opt.long})),
@@ -340,7 +341,8 @@ pub fn buildArgv(
     }
 
     for (tool.command.positionals) |arg| {
-        const value = args.get(arg.name) orelse {
+        if (arg.mcp_hidden) continue;
+        const value = argumentValue(args, arg) orelse {
             if (arg.required) return .{ .invalid = try std.fmt.allocPrint(allocator, "missing required argument \"{s}\"", .{arg.name}) };
             continue;
         };
@@ -359,6 +361,34 @@ pub fn buildArgv(
     }
 
     return .{ .argv = try argv.toOwnedSlice(allocator) };
+}
+
+/// A field's current name: a positional's earlier name maps to the name it
+/// has now (scene diff's `a` is `before`, compare-godot's `saved` is
+/// `reference`), so a call written against the old names still works.
+fn canonicalArgument(tool: *const Tool, key: []const u8) []const u8 {
+    for (tool.command.positionals) |arg| {
+        for (arg.aliases) |alias| if (std.mem.eql(u8, alias, key)) return arg.name;
+    }
+    return key;
+}
+
+/// An option's value, or the value given under an earlier name of the hidden
+/// positional it stands in for over MCP (compare-godot's `saved`).
+fn optionValue(tool: *const Tool, args: std.json.ObjectMap, long: []const u8) ?std.json.Value {
+    if (args.get(long)) |value| return value;
+    for (tool.command.positionals) |arg| {
+        if (!arg.mcp_hidden or !std.mem.eql(u8, arg.name, long)) continue;
+        for (arg.aliases) |alias| if (args.get(alias)) |value| return value;
+    }
+    return null;
+}
+
+/// A positional's value under its name or any earlier one.
+fn argumentValue(args: std.json.ObjectMap, arg: spec.PositionalSpec) ?std.json.Value {
+    if (args.get(arg.name)) |value| return value;
+    for (arg.aliases) |alias| if (args.get(alias)) |value| return value;
+    return null;
 }
 
 fn isKnownArgument(tool: *const Tool, key: []const u8, pinned: bool) bool {
@@ -468,8 +498,11 @@ test "every runnable command outside the exclusion set is a tool with a valid na
         for (excluded) |name| try std.testing.expect(!std.mem.eql(u8, tool.name, name));
         for (tools[index + 1 ..]) |other| try std.testing.expect(!std.mem.eql(u8, tool.name, other.name));
 
-        // Positional and option names share one property namespace.
+        // Positional and option names share one property namespace. A
+        // positional hidden from MCP is the exception: its option is its
+        // MCP form.
         for (tool.command.positionals) |arg| {
+            if (arg.mcp_hidden) continue;
             for (tool.command.options) |opt| try std.testing.expect(!std.mem.eql(u8, arg.name, opt.long));
         }
 
@@ -478,7 +511,7 @@ test "every runnable command outside the exclusion set is a tool with a valid na
         try std.testing.expectEqualStrings("object", schema.get("type").?.string);
         const properties = schema.get("properties").?.object;
         for (tool.command.options) |opt| try std.testing.expect(properties.contains(opt.long) or opt.advanced);
-        for (tool.command.positionals) |arg| try std.testing.expect(properties.contains(arg.name));
+        for (tool.command.positionals) |arg| try std.testing.expect(properties.contains(arg.name) or arg.mcp_hidden);
     }
 }
 
@@ -652,4 +685,40 @@ test "tool descriptions name fields, not command-line flags" {
     const props = node_add.object.get("inputSchema").?.object.get("properties").?.object;
     const properties_text = props.get("properties").?.object.get("description").?.string;
     try std.testing.expect(std.mem.indexOf(u8, properties_text, "as well as `property`/`value`; where both set one property, this object wins.") != null);
+}
+
+test "the two comparing commands take their files by role, and the old names still work" {
+    // Trial 36 met scene_diff's a/b beside compare-godot's file, saved and
+    // reference, two of which were the same thing.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const tools = try collect(arena, &commands.root);
+
+    const diff = find(tools, "scene_diff").?;
+    const diff_props = (try toolJson(arena, diff, false)).object.get("inputSchema").?.object.get("properties").?.object;
+    try std.testing.expect(diff_props.contains("before") and diff_props.contains("after"));
+    try std.testing.expect(!diff_props.contains("a"));
+
+    const compare = find(tools, "scene_compare-godot").?;
+    const compare_props = (try toolJson(arena, compare, false)).object.get("inputSchema").?.object.get("properties").?.object;
+    try std.testing.expect(compare_props.contains("file") and compare_props.contains("reference"));
+    try std.testing.expect(!compare_props.contains("saved"));
+
+    var old_diff: std.json.ObjectMap = .{};
+    try old_diff.put(arena, "a", .{ .string = "before.tscn" });
+    try old_diff.put(arena, "b", .{ .string = "after.tscn" });
+    const diff_argv = (try buildArgv(arena, diff, old_diff, .{})).argv;
+    try std.testing.expectEqualStrings("before.tscn", diff_argv[diff_argv.len - 2]);
+    try std.testing.expectEqualStrings("after.tscn", diff_argv[diff_argv.len - 1]);
+
+    var old_compare: std.json.ObjectMap = .{};
+    try old_compare.put(arena, "file", .{ .string = "main.tscn" });
+    try old_compare.put(arena, "saved", .{ .string = "copy.tscn" });
+    const compare_argv = (try buildArgv(arena, compare, old_compare, .{})).argv;
+    var saw_reference = false;
+    for (compare_argv) |arg| if (std.mem.eql(u8, arg, "--reference=copy.tscn")) {
+        saw_reference = true;
+    };
+    try std.testing.expect(saw_reference);
 }

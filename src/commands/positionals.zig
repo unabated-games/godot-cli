@@ -29,13 +29,19 @@ pub const file_and_resource_id = [_]spec.PositionalSpec{
     file[0],
     .{ .name = "id", .description = "Resource id as written in the file, e.g. CapsuleShape2D_abc12" },
 };
+/// Named for what each file is: a diff runs from `before` to `after`, so
+/// "added" means in after and not in before. They were `a` and `b`, which MCP
+/// still accepts; the result keeps its `_a`/`_b` keys (a is before).
 pub const two_files = [_]spec.PositionalSpec{
-    .{ .name = "a", .kind = .path, .description = "First scene file" },
-    .{ .name = "b", .kind = .path, .description = "Second scene file" },
+    .{ .name = "before", .kind = .path, .description = "The scene as it was; an added node is one in after and not here", .aliases = &.{"a"} },
+    .{ .name = "after", .kind = .path, .description = "The scene as it is now", .aliases = &.{"b"} },
 };
+/// The reference is the second positional or --reference, the same thing;
+/// over MCP only the option appears, so there is one name for it. The
+/// positional was called `saved`, which MCP still accepts.
 pub const file_and_reference = [_]spec.PositionalSpec{
     file[0],
-    .{ .name = "saved", .kind = .path, .required = false, .description = "Godot-saved file to compare against; or pass --reference" },
+    .{ .name = "reference", .kind = .path, .required = false, .description = "Godot-saved file to compare against (project resave makes one); or pass --reference", .aliases = &.{"saved"}, .mcp_hidden = true },
 };
 pub const template = [_]spec.PositionalSpec{
     .{ .name = "template", .description = "Template id, e.g. 2d/top_down_player" },

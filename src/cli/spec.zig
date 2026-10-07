@@ -63,6 +63,13 @@ pub const PositionalSpec = struct {
     required: bool = true,
     /// Accepts one or more values; must be the last positional.
     variadic: bool = false,
+    /// Earlier names, still accepted as MCP fields so calls written against
+    /// them keep working; the schema advertises only `name`.
+    aliases: []const []const u8 = &.{},
+    /// Left out of the MCP schema because an option of the same name already
+    /// carries it there (compare-godot's reference). The command line still
+    /// takes it by position.
+    mcp_hidden: bool = false,
 };
 
 pub const CommandHandler = *const fn (ctx: *anyopaque, inv: *const Invocation) anyerror!Result;
