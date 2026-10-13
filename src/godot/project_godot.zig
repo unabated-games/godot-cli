@@ -101,6 +101,27 @@ pub const Document = struct {
     }
 };
 
+/// The engine version the project's `config/features` names ("4.7"), which
+/// the editor writes on its first save; null for a project it never opened.
+pub fn engineMinor(doc: *const Document) ?[]const u8 {
+    const index = doc.sectionIndex("application") orelse return null;
+    const features = doc.sections.items[index].getEntry("config/features") orelse return null;
+    return minorFromFeatures(features);
+}
+
+/// The engine version a `config/features` value names: the first element
+/// that looks like `4.7`.
+pub fn minorFromFeatures(features_text: []const u8) ?[]const u8 {
+    var i: usize = 0;
+    while (std.mem.indexOfScalarPos(u8, features_text, i, '"')) |open| {
+        const close = std.mem.indexOfScalarPos(u8, features_text, open + 1, '"') orelse return null;
+        const item = features_text[open + 1 .. close];
+        if (item.len >= 3 and std.ascii.isDigit(item[0]) and item[1] == '.' and std.ascii.isDigit(item[2])) return item;
+        i = close + 1;
+    }
+    return null;
+}
+
 pub fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) Error!Document {
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch return error.Io;
     defer allocator.free(bytes);

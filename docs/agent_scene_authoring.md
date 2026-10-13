@@ -487,9 +487,12 @@ godot-cli scene node rename scenes/main.tscn /root/Main/Player \
 
 godot-cli scene node remove scenes/main.tscn /root/Main/OldNode \
   --recursive --project-root .
+
+godot-cli scene node move scenes/hud.tscn /root/HUD/Bar/Leave \
+  --index -1 --project-root .
 ```
 
-Viewport paths always start with `/root/<SceneRootName>/…`.
+Viewport paths always start with `/root/<SceneRootName>/…`. Child order is draw order in 2D and layout order in a container: `node move --index` reorders a node among its siblings, and `--index` on `node add` and `node reparent` places it there to begin with. The index counts as Godot's `move_child` does (0 first, -1 last).
 
 ---
 
@@ -660,10 +663,10 @@ A missing required field fails the same way with `"kind": "missing_field"` and t
 
 | `op` | Required fields | Notes |
 |------|-----------------|-------|
-| `node_add` | `parent`, `name`, `type` | Optional `properties` object, `unique_name`: true for `%Name` access, and `unique_id` / `index` to restore a node exactly where it was (what undo patches use) |
+| `node_add` | `parent`, `name`, `type` | Optional `properties` object, `unique_name`: true for `%Name` access, `index` for its place among the parent's children (0 first, -1 last; without it, last), and `unique_id` to restore a node exactly as it was (what undo patches use) |
 | `node_remove` | `path` | Optional `recursive`: true |
 | `node_rename` | `path`, `name` | |
-| `node_reparent` | `path`, `parent` | Viewport path for new parent |
+| `node_reparent` | `path`, `parent` | Viewport path for new parent. Optional `index` places it among the new parent's children as `move_child` counts (0 first, -1 last); the same parent with an `index` reorders it |
 | `node_set` | `path`, `property`, `value` | Or one `properties` object instead of the pair, as `node_add` takes |
 | `ext_add` | `type`, `path` | Optional `id_hint` → id `{Type}_{hint}` (e.g. `Texture2D_icon`) |
 | `ext_remove` | `id` | Fails if resource is referenced |

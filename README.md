@@ -78,9 +78,10 @@ agent setup, and a first-scene walkthrough.
 | **Godot ID primitives** | `uid encode`/`decode`, `uid create-for-path`, `uid read` (a file's recorded UID, binary resources included), scene-local ids, `.godot/uid_cache.bin` reads, id sessions |
 | **Read** | `scene inspect`, `resource inspect`, `scene node list`/`get`, parsed Variant values with types |
 | **Validate** | `scene validate`, `validate-batch`, `compare-godot`, `round-trip` |
-| **Edit and author** | `scene new`, `node add`/`remove`/`rename`/`reparent`, `ext add`, `sub add`, `instance add`, `set-property`, `normalize`, `retarget-ext` |
+| **Edit and author** | `scene new`, `node add`/`remove`/`rename`/`reparent`/`move`, `ext add`, `sub add`, `instance add`, `set-property`, `normalize`, `retarget-ext` |
 | **Declarative editing** | `scene plan`, `scene apply --intent`/`--patch`, `scene diff`, `scene restore`, `batch` |
 | **Project settings** | `project show`/`apply`, `input`, `settings`, `autoload`, `plugins`, `rendering`, `physics` |
+| **Export presets** | `project export list`/`show`/`options`/`apply`/`validate`/`build`, with secrets kept in `.godot/export_credentials.cfg` |
 | **Component catalog** | `catalog add`, `scan`, `list`, `show`, `validate`, `search`, `export`, `relink` |
 
 Full detail, option by option: **[Command reference](docs/commands.md)** — or

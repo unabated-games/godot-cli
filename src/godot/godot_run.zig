@@ -13,6 +13,11 @@ const class_info = @import("class_info.zig");
 const uid_cache = @import("uid_cache.zig");
 const resource_uid = @import("resource_uid.zig");
 
+/// The window Godot opens for a project with no `display/window/size`. A
+/// smaller fallback ran such projects in a window the game never gets, and a
+/// trial's bottom button bar was off-screen in every frame.
+pub const default_resolution = "1152x648";
+
 pub const Options = struct {
     project_root: []const u8,
     /// Godot binary; found when null (see `locateGodot`).
@@ -20,7 +25,8 @@ pub const Options = struct {
     /// Scene to run, res:// or project-relative; the main scene when null.
     scene: ?[]const u8 = null,
     frames: u32 = 60,
-    resolution: []const u8 = "640x360",
+    /// Godot's own window size for a project that sets none.
+    resolution: []const u8 = default_resolution,
     /// The project's `physics/common/physics_ticks_per_second`. Passed to
     /// Godot as `--fixed-fps`, which makes one main-loop iteration advance
     /// exactly one physics step, so `frames` counts the same thing whether

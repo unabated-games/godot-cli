@@ -210,12 +210,13 @@ pub fn captureSubAddUndo(recorder: *UndoRecorder, allocator: std.mem.Allocator, 
     _ = allocator;
 }
 
-pub fn recordNodeReparentUndo(recorder: *UndoRecorder, node_path: []const u8, old_parent_path: []const u8) Error!void {
+pub fn recordNodeReparentUndo(recorder: *UndoRecorder, node_path: []const u8, old_parent_path: []const u8, old_index: usize) Error!void {
     const a = recorder.allocator();
     var obj: std.json.ObjectMap = .{};
     try obj.put(a, "op", .{ .string = "node_reparent" });
     try obj.put(a, "path", .{ .string = try a.dupe(u8, node_path) });
     try obj.put(a, "parent", .{ .string = try a.dupe(u8, old_parent_path) });
+    try obj.put(a, "index", .{ .integer = @intCast(old_index) });
     try recorder.prepend(.{ .object = obj });
 }
 

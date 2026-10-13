@@ -51,6 +51,7 @@ NAV = [
             ("how-to/batch-edits.md", "Batch edits with intents and patches"),
             ("how-to/build-ui.md", "Build UI"),
             ("how-to/project-settings.md", "Edit project settings"),
+            ("how-to/export-presets.md", "Set up export presets"),
             ("how-to/author-resources.md", "Author .tres resources"),
             ("how-to/review-changes.md", "Review and validate changes"),
             ("how-to/verify-a-change.md", "Verify a change by running the game"),

@@ -205,3 +205,14 @@ jobs:
         run: |
           asset="Godot_v${{ matrix.godot }}_linux.x86_64"
           GODOT="$PWD/godot-bin/${asset}" tools/check_class_table.sh
+
+      # The export option tables come from each editor's own save, and the
+      # editor rewrites any preset whose options differ. This regenerates the
+      # table from this engine, and has the editor load and save presets
+      # godot-cli wrote. Reported, never blocking, like the class table.
+      - name: Export presets against this engine
+        continue-on-error: true
+        run: |
+          zig build
+          asset="Godot_v${{ matrix.godot }}_linux.x86_64"
+          GODOT="$PWD/godot-bin/${asset}" tools/check_export_options.sh

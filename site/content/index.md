@@ -59,7 +59,7 @@ So we ported the rules instead of guessing at them. `src/godot/hash.zig` is a po
 
 The test that keeps us honest runs on every push, against Godot 4.7, 4.7.2, and the newest 4.8 prerelease. Godot saves a fixture scene headless. godot-cli writes the same scene. `cmp` compares the two files. When it fails, the tool is wrong and the editor is right, and we fix the tool.
 
-`project.godot` gets the same treatment. Input actions are brace blocks full of serialized `InputEventKey` objects, and autoloads carry a leading asterisk for singletons. godot-cli parses the file and writes it back, so an input map applied twice replaces the actions by name instead of doubling them.
+`project.godot` gets the same treatment. Input actions are brace blocks full of serialized `InputEventKey` objects, and autoloads carry a leading asterisk for singletons. godot-cli parses the file and writes it back, so an input map applied twice replaces the actions by name instead of doubling them, and the events come out in the layout of the project's own Godot version. `export_presets.cfg` is written the same way: every option a platform has, in the editor's order, with secrets moved to `.godot/export_credentials.cfg`, so opening the project in the editor changes nothing.
 
 ## One document, one write
 

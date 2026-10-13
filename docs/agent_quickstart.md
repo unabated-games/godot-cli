@@ -20,6 +20,7 @@ godot-cli ping --json
 | `scene validate`, `scene inspect`, `scene refs` | **Pass** : enables UID cache and `res://` resolution checks |
 | `project input *` | **Pass** : reads/writes `project.godot` under the project root |
 | `project settings *`, `project autoload *` | **Pass** : main scene, display, layer names, autoloads |
+| `project export *` | **Pass** : reads/writes `export_presets.cfg` and `.godot/export_credentials.cfg` |
 | `scene node list`, `scene node get`, `scene describe`, `scene connection list`, `scene diff` | **Optional** : accepted everywhere; `node list` and `describe` use it to resolve an instanced node to the class it really is, rather than reporting `PackedScene` |
 
 Common `project.godot` keys: `application` → `run/main_scene`, `config/name`; `display` → `window/size/viewport_width`, `window/size/viewport_height`, `window/stretch/mode`; `rendering` and `physics` take the aliases in `project rendering apply` / `project physics apply`. `project apply` takes one intent with `settings`, `input`, `autoload`, `plugins`, `rendering`, and `physics` sections (`$GODOT_CLI_HOME/examples/intents/project_bootstrap.json`).
@@ -31,7 +32,7 @@ Through the MCP server there is no `project-root` argument. A server started wit
 
 ## Rules
 
-1. Scenes are authored in the scene file, the way the editor writes them. Never hand-edit `.tscn`, `.tres`, or `project.godot` text, and never build static UI or level structure in `_ready()` with `load().instantiate()`; that is for things the game spawns while playing.
+1. Scenes are authored in the scene file, the way the editor writes them. Never hand-edit `.tscn`, `.tres`, `project.godot`, or `export_presets.cfg` text, and never build static UI or level structure in `_ready()` with `load().instantiate()`; that is for things the game spawns while playing.
 2. Discover before editing: `scene node list` for viewport paths (`/root/<Root>/...`), `catalog list` and `catalog show <id>` for components the project already has.
 3. A project catalog id is instanced (`scene instance add --catalog-id`), and a scene with no catalog entry by its path (`--scene res://...`); a `godot/...` builtin is a plain node (`scene node add --type`), never instanced.
 4. Presentation lives on nodes (`anchor_*`, `grow_*`, `theme_override_*`, `custom_minimum_size`), signals in `[connection]` sections (`scene connection add`), resources in `.tres` files (`resource new`). None of them in `_ready()`.
@@ -70,6 +71,9 @@ godot-cli scene apply scenes/main.tscn --patch patch.json --dry-run --project-ro
 godot-cli resource new --output materials/wood.tres --type StandardMaterial3D --property roughness --value 0.8 --project-root .
 godot-cli project settings set --project-root . --section application --key run/main_scene --value res://scenes/main.tscn
 godot-cli project input apply --project-root . --intent intents/wasd_movement.json
+godot-cli project export options --project-root . --platform Android --filter keystore --json   # option names, defaults, choices
+godot-cli project export apply --project-root . --intent intents/export_desktop_web.json --json  # presets the way the editor writes them
+godot-cli project export build --project-root . --preset Linux --json                            # runs the export; needs Godot's export templates
 godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
 
 # check
@@ -90,12 +94,12 @@ Read `data.frame` (a PNG) and `data.errors`. A run whose log held an error comes
 ```bash
 mkdir -p capture && touch capture/.gdignore
 godot --headless --path . --import --quit
-godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
+godot --path . --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
 ```
 
 ## Over MCP
 
-The server has one tool per command, named with underscores: `scene_node_add`, `project_run`. Starting it with `--toolset core` serves the thirteen that cover most sessions instead of all ninety-one, which matters for a client that loads every schema up front, and `godot-cli://docs/mcp-cheatsheet` is this surface in tool-and-arguments form. Those thirteen are `project_new`, `project_show`, `project_input_apply`, `scene_new`, `scene_describe`, `scene_apply`, `scene_instance_add`, `scene_connection_add`, `resource_new`, `catalog_list`, `catalog_add`, `scene_validate`, `project_run`. `project_run` returns the frame as an image and the last lines of the log; `--press move_right@10..40` holds an input action over a frame range and `--click /root/Main/HUD/PauseButton@20` clicks a node, so movement and buttons can be seen working; after a click the cursor moves off the node, so the frame shows its normal style, and `--keep-cursor` keeps it there for the hover style. The documents below are resources: `godot-cli://docs/recipes` is the short one to read before writing an intent.
+The server has one tool per command, named with underscores: `scene_node_add`, `project_run`. Starting it with `--toolset core` serves the thirteen that cover most sessions instead of all one hundred, which matters for a client that loads every schema up front, and `godot-cli://docs/mcp-cheatsheet` is this surface in tool-and-arguments form. Those thirteen are `project_new`, `project_show`, `project_input_apply`, `scene_new`, `scene_describe`, `scene_apply`, `scene_instance_add`, `scene_connection_add`, `resource_new`, `catalog_list`, `catalog_add`, `scene_validate`, `project_run`. `project_run` returns the frame as an image and the last lines of the log; `--press move_right@10..40` holds an input action over a frame range and `--click /root/Main/HUD/PauseButton@20` clicks a node, so movement and buttons can be seen working; after a click the cursor moves off the node, so the frame shows its normal style, and `--keep-cursor` keeps it there for the hover style. The documents below are resources: `godot-cli://docs/recipes` is the short one to read before writing an intent.
 
 ## Read next
 

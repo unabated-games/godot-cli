@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-09-25" "godot-cli 0.26.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-10-13" "godot-cli 0.27.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -510,11 +510,13 @@ Godot project root (optional; ignored for file\-only reads)
 .SS godot\-cli scene node add
 Add a child node under a parent path
 .PP
-Requires \-\-parent, \-\-name, and \-\-type. Assigns unique_id
-on save via save preparation. With \-\-dry\-run, section_text
-is the exact section a write would add. The unique_id in it
-is the one the write assigns, because it is seeded from the
-scene's path, so a write straight after gives the same text.
+Requires \-\-parent, \-\-name, and \-\-type. The node is added
+as the parent's last child, or where \-\-index puts it. Assigns
+unique_id on save via save preparation. With \-\-dry\-run,
+section_text is the exact section a write would add. The unique_id
+in it is the one the write assigns, because it is seeded from
+the scene's path, so a write straight after gives the same
+text.
 .TP
 \fIfile\fR
 Scene file (.tscn)
@@ -549,6 +551,11 @@ Write property value verbatim
 \fB\-\-unique\-name\fR
 Set unique_name_in_owner on the new node (Access as Unique
 Name / %Name)
+.TP
+\fB\-\-index\fR \fIn\fR
+Position among the parent's children, as Godot's move_child
+counts it: 0 is first, \-1 is last; without it the node is
+added last
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -691,7 +698,11 @@ Move a node under a new parent path
 .PP
 Takes the scene path and the node's viewport path: scene node
 reparent main.tscn /root/Main/Player/Camera \-\-parent /root/Main.
-The node becomes the new parent's last child, as in the editor.
+The node becomes the new parent's last child, as in the editor,
+or the one \-\-index names. With \-\-project\-root, script
+lines that reach the node by a path ($Player/Camera, get_node("Player/Camera"))
+are listed, since those break; %Name references resolve through
+the owner and keep working.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -701,6 +712,67 @@ Node by viewport path, e.g. /root/Main/Player
 .TP
 \fB\-\-parent\fR \fIvalue\fR
 New parent, viewport path (e.g. /root/Main)
+.TP
+\fB\-\-index\fR \fIn\fR
+Position among the parent's children, as Godot's move_child
+counts it: 0 is first, \-1 is last; without it the node goes
+last
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root for res:// seed path and id session cache
+.TP
+\fB\-\-resource\-path\fR \fIvalue\fR
+Godot res:// path for ID seeding (overrides the project root)
+.TP
+\fB\-\-no\-prepare\-save\fR
+Skip Godot save preparation (ID repair/sort)
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output path (default: overwrite input)
+.TP
+\fB\-\-dry\-run\fR
+Parse and validate edit without writing
+.TP
+\fB\-\-snapshot\fR \fIpath\fR
+Before writing, copy the file as it is now to this path, for
+scene diff or scene restore later. Put it under .godot/: a
+copy Godot can see carries the scene's uid, and Godot then
+reports a duplicate and may point uid:// references at the
+copy. Nothing under .godot/ is imported, and it is normally
+gitignored
+.TP
+\fB\-\-id\-session\fR \fIpath\fR
+Path to ext_resource id session cache JSON
+.TP
+\fB\-\-no\-id\-session\fR
+Do not load or update ext_resource id session cache
+.TP
+\fB\-\-godot\-save\-format\fR
+Strip Godot\-omitted header fields and default sub_resource
+properties
+.TP
+\fB\-\-normalize\-properties\fR
+Rewrite property values through Variant parse/format
+.SS godot\-cli scene node move
+Reorder a node among its siblings
+.PP
+Takes the scene path and the node's viewport path: scene node
+move hud.tscn /root/HUD/Bar/Leave \-\-index \-1. Child order
+is draw order in 2D, and layout order in a container. \-\-index
+counts as Godot's move_child does: 0 is first, \-1 is last.
+The node's children move with it, and its path does not change,
+so nothing that names it breaks; only a script that picks children
+by position, with get_child(), sees a different node.
+.TP
+\fIfile\fR
+Scene or resource file (.tscn or .tres)
+.TP
+\fInode\fR
+Node by viewport path, e.g. /root/Main/Player
+.TP
+\fB\-\-index\fR \fIn\fR
+Position among the parent's children, as Godot's move_child
+counts it: 0 is first, \-1 is last
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -2313,7 +2385,7 @@ for a static screen (default: 60)
 .TP
 \fB\-\-resolution\fR \fIvalue\fR
 Window size as WIDTHxHEIGHT; default is the project's display/window/size,
-else 640x360
+else Godot's own 1152x648
 .TP
 \fB\-\-capture\-dir\fR \fIpath\fR
 Folder under the project for the frame and log; the default
@@ -2459,24 +2531,26 @@ One intent: {"actions": [{"name": "move_left", "deadzone":
 0.5, "events": [...]}]}; each action replaces the one of the
 same name. Event types: {"type": "key", "keycode": <name or
 number>, "physical": true, "ctrl": false, "shift": false, "alt":
-false, "meta": false}, {"type": "mouse_button", "button": <name
-or number>}, {"type": "joypad_button", "button": <name or number>},
-{"type": "joypad_motion", "axis": <name or number>, "axis_value":
-\-1.0}. Keys: a letter or digit, space, escape, tab, backtab,
-backspace, enter/return, kp_enter, insert, delete, pause, print,
-home, end, left, up, right, down, pageup, pagedown, shift,
-ctrl, meta/cmd, alt, capslock, numlock, scrolllock, f1\-f12;
-or a Godot keycode number. Names are matched without case,
-and KEY_<letter> is accepted. Mouse buttons: left, right, middle,
-wheel_up, wheel_down, wheel_left, wheel_right, xbutton1/x1,
-xbutton2/x2; or the MouseButton number. Names are matched without
-case. Joypad buttons: a/south, b/east, x/west, y/north, back/select,
-guide/home, start, left_stick/l3, right_stick/r3, left_shoulder/lb,
-right_shoulder/rb, dpad_up, dpad_down, dpad_left, dpad_right,
-misc1, paddle1\-4, touchpad, misc2\-6; or the JoyButton number.
-Names are matched without case. Joypad axes: left_x/LX, left_y/LY,
-right_x/RX, right_y/RY, trigger_left/LT, trigger_right/RT;
-or the JoyAxis number. Names are matched without case.
+false, "meta": false} (physical defaults to true: the key's
+place on the keyboard, so WASD stays put on AZERTY), {"type":
+"mouse_button", "button": <name or number>}, {"type": "joypad_button",
+"button": <name or number>}, {"type": "joypad_motion", "axis":
+<name or number>, "axis_value": \-1.0}. Keys: a letter or digit,
+space, escape, tab, backtab, backspace, enter/return, kp_enter,
+insert, delete, pause, print, home, end, left, up, right, down,
+pageup, pagedown, shift, ctrl, meta/cmd, alt, capslock, numlock,
+scrolllock, f1\-f12; or a Godot keycode number. Names are matched
+without case, and KEY_<letter> is accepted. Mouse buttons:
+left, right, middle, wheel_up, wheel_down, wheel_left, wheel_right,
+xbutton1/x1, xbutton2/x2; or the MouseButton number. Names
+are matched without case. Joypad buttons: a/south, b/east,
+x/west, y/north, back/select, guide/home, start, left_stick/l3,
+right_stick/r3, left_shoulder/lb, right_shoulder/rb, dpad_up,
+dpad_down, dpad_left, dpad_right, misc1, paddle1\-4, touchpad,
+misc2\-6; or the JoyButton number. Names are matched without
+case. Joypad axes: left_x/LX, left_y/LY, right_x/RX, right_y/RY,
+trigger_left/LT, trigger_right/RT; or the JoyAxis number. Names
+are matched without case.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
@@ -2726,6 +2800,176 @@ Validate known physics engine and scalar values
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
+.SS godot\-cli project export
+Export presets in export_presets.cfg, and the export itself
+.PP
+Creates and edits export presets the way the editor writes
+them: every option the platform defines, in the editor's order,
+with secrets (keystore passwords, the script encryption key)
+in .godot/export_credentials.cfg rather than the committed
+file. The option list comes from the editor of the project's
+Godot version (config/features), or the newest one godot\-cli
+has for a project that names none.
+.SS godot\-cli project export list
+List export presets
+.PP
+Each preset's name, platform, runnable flag, its preset keys
+(export_path, export_filter, custom_features, ...), and the
+options that differ from the default. A preset Godot would
+skip (a platform it does not match, or one past a gap in the
+numbering) is listed with godot_skips saying why and how to
+fix it. Secret values are never shown, only whether they are
+set. Result data: path, exists, presets, godot_version, project_godot_version,
+summary.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.SS godot\-cli project export show
+Show one export preset
+.PP
+One preset, as list shows it; with \-\-all\-options, every
+option the platform has and its value, the default where the
+file sets none, rather than only the changed ones. Secret values
+are never shown. Result data: the preset's fields, changed_options
+or options, summary.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.TP
+\fB\-\-preset\fR \fIvalue\fR
+The preset's name, as project export list shows it
+.TP
+\fB\-\-all\-options\fR
+Every option with its value, not only the ones that differ
+from the default
+.SS godot\-cli project export options
+List the export options a platform has
+.PP
+Every option the platform's exporter defines in this Godot
+version: name, default, type, choices for an option with a
+fixed set, and whether it is secret. Also the preset keys every
+platform shares (export_path, export_filter, include_filter,
+\&...). Use it to find an option's name before setting it with
+project export apply. Result data: platform, options, preset_keys,
+godot_version, summary.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.TP
+\fB\-\-platform\fR \fIvalue\fR
+Android, iOS, Linux, macOS, visionOS, Web, or Windows Desktop
+(Windows also works)
+.TP
+\fB\-\-filter\fR \fIvalue\fR
+Only options whose name contains this, e.g. icon or keystore
+.SS godot\-cli project export apply
+Create, update, rename, or remove export presets
+.PP
+Applies {"presets": [...], "remove": [...]}. A preset entry
+is matched by name and created if there is none, which needs
+platform (Android, iOS, Linux, macOS, visionOS, Web, Windows
+Desktop; Windows, HTML5 and the like are accepted and written
+as the name Godot matches). Fields: name, platform, rename,
+runnable (one per platform), export_path, export_filter (all_resources,
+scenes, resources, exclude, customized) with export_files,
+include_filter and exclude_filter (a string or a list), custom_features
+(a string or a list), dedicated_server, script_export_mode
+(text, binary_tokens, compressed_binary_tokens), the patch
+and encryption keys, script_encryption_key, and options: {name:
+value} with names from project export options. Option values
+are typed by the option: true/false, numbers, strings, a choice's
+label ("AAB" for gradle_build/export_format), arrays of strings.
+An option the platform does not have is refused with the nearest
+name, unless the entry sets allow_unknown_options for an addon's
+own option. The whole preset is written as the editor writes
+it, every option included, so opening the project in the editor
+changes nothing. Secret options go to .godot/export_credentials.cfg.
+An export_path inside the project gets a .gdignore in its top
+folder (build/ for build/windows/game.exe), so Godot neither
+imports builds nor packs one into the next. A preset whose
+platform Godot does not match (Windows) is corrected by giving
+the right one, keeping its settings; presets past a gap in
+the numbering are kept and renumbered; secrets found in export_presets.cfg
+move to the credentials file. Result data: path, credentials_path,
+created, updated, removed, secrets_written and secrets_moved
+(names only), gdignore_created, presets, dry_run, summary.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.TP
+\fB\-\-intent\fR \fIpath\fR
+Intent JSON file: {"presets": [{"name": "Windows", "platform":
+"Windows Desktop", "export_path": "build/windows/game.exe",
+"runnable": true, "options": {"binary_format/embed_pck": true}}],
+"remove": ["Old"]}
+.TP
+\fB\-\-intent\-json\fR \fIvalue\fR
+The intent itself, instead of a file; the same document the
+intent option describes
+.TP
+\fB\-\-file\fR \fIpath\fR
+Alias for \-\-intent
+.TP
+\fB\-\-dry\-run\fR
+Check and apply in memory without writing either file
+.SS godot\-cli project export validate
+Check export_presets.cfg for what Godot would drop or reject
+.PP
+Errors: a platform Godot does not know (it skips the preset
+and drops it on its next save; Windows must be Windows Desktop),
+a gap in the preset numbering (Godot stops reading at the gap),
+two presets with one name, an option value of the wrong type
+or outside its choices, and Android settings that need gradle_build/use_gradle_build
+(an AAB, compressed native libraries, swipe to dismiss, a min
+SDK), which Godot refuses to export. Warnings: missing include_filter
+or exclude_filter, no export_path, an export_path inside the
+project in a folder with no .gdignore (Godot imports the build
+and packs it into the next), a keystore or template file that
+does not exist on this machine, an option the platform does
+not have, a secret in the committed file, a res:// path that
+does not exist, a runnable entry naming no preset. matches_editor_save
+says whether the editor would leave the file as it is. Exits
+non\-zero when there is an error. Result data: path, exists,
+issues, error_count, warning_count, matches_editor_save, summary.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.SS godot\-cli project export build
+Export the project with a preset (runs Godot)
+.PP
+Runs godot \-\-headless \-\-export\-release (or \-\-export\-debug,
+\-\-export\-pack) with the preset, creating the output folder
+first, and a .gdignore in its top folder inside the project
+(build/ for build/windows/game.exe) so Godot neither imports
+the build nor packs it into the next one. Needs the export
+templates for this exact Godot version; without them it fails
+as export_templates_missing, with missing_template naming the
+path Godot looked in. Any other failure is export_failed, with
+Godot's ERROR lines and the reasons listed under them in errors.
+Result data: preset, platform, mode, output, output_path, exit,
+files (each output file and its size), errors (Godot's ERROR
+lines and their reasons), missing_template, gdignore_created,
+stdout_tail and stderr_tail on failure, summary.
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (default: current directory)
+.TP
+\fB\-\-preset\fR \fIvalue\fR
+The preset to export, by name
+.TP
+\fB\-\-output\fR \fIpath\fR
+Output file, relative to the project root or absolute; default
+the preset's export_path
+.TP
+\fB\-\-debug\fR
+Export with the debug template (\-\-export\-debug)
+.TP
+\fB\-\-pack\fR
+Export only the .pck or .zip, no executable (\-\-export\-pack)
+.TP
+\fB\-\-godot\fR \fIpath\fR
+Godot binary; default $GODOT, then godot on PATH, then the
+macOS app bundle
 .SS godot\-cli completions
 Print shell completions (bash, zsh, fish)
 .PP

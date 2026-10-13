@@ -31,7 +31,7 @@ Use `godot-cli` on PATH. Never reference the godot-cli source tree; docs and exa
 
 Targets **Godot 4.6 and later**: every node line carries the `unique_id` the engine added in 4.6.
 
-If the client is connected to `godot-cli mcp` instead, the same commands are tools named `scene_node_add`, `catalog_list`, and so on, with the docs above available as `godot-cli://docs/...` resources; the rules below apply unchanged. `godot-cli://docs/mcp-cheatsheet` is this surface in tool-and-arguments form, and a server started with `--toolset core` serves the thirteen tools that cover most sessions rather than all ninety-one.
+If the client is connected to `godot-cli mcp` instead, the same commands are tools named `scene_node_add`, `catalog_list`, and so on, with the docs above available as `godot-cli://docs/...` resources; the rules below apply unchanged. `godot-cli://docs/mcp-cheatsheet` is this surface in tool-and-arguments form, and a server started with `--toolset core` serves the thirteen tools that cover most sessions rather than all one hundred.
 
 Work from the Godot project root (`project.godot`). Pass `--json` on every command and `--project-root .` for writes, catalog, validate, apply, and project commands.
 
@@ -43,7 +43,8 @@ Work from the Godot project root (`project.godot`). Pass `--json` on every comma
 4. Presentation on nodes, signals as `[connection]` sections (`scene connection add`), resources as `.tres` (`resource new`).
 5. Values are Variant text; strings carry their own quotes (`"\"Paused\""`).
 6. Files move with `project move`, never `mv`.
-7. Validate after every edit; run the game and read the frame and the log before reporting done. Validate type-checks property values against the node's class and connections against the signals it emits, so a wrong type or a misspelled signal fails there rather than at run time.
+7. Export presets are written with `project export apply` (option names from `project export options --platform <p>`), never by editing `export_presets.cfg`; `project export build --preset <name>` runs the export.
+8. Validate after every edit; run the game and read the frame and the log before reporting done. Validate type-checks property values against the node's class and connections against the signals it emits, so a wrong type or a misspelled signal fails there rather than at run time.
 
 ## Workflow checklist
 

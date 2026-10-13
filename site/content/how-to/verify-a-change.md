@@ -152,7 +152,7 @@ worth knowing when you want to adapt it:
 ```bash
 mkdir -p capture && touch capture/.gdignore
 godot --headless --path . --import --quit
-godot --path . --resolution 640x360 --write-movie capture/shot.png \
+godot --path . --write-movie capture/shot.png \
   --quit-after 60 --log-file capture/godot.log --no-header
 ```
 

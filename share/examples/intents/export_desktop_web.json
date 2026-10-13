@@ -1,0 +1,28 @@
+{
+  "presets": [
+    {
+      "name": "Windows",
+      "platform": "Windows Desktop",
+      "runnable": true,
+      "export_path": "build/windows/game.exe",
+      "options": {
+        "binary_format/embed_pck": true,
+        "application/product_name": "My Game"
+      }
+    },
+    {
+      "name": "Linux",
+      "platform": "Linux",
+      "export_path": "build/linux/game.x86_64",
+      "options": {
+        "binary_format/embed_pck": true
+      }
+    },
+    {
+      "name": "Web",
+      "platform": "Web",
+      "export_path": "build/web/index.html",
+      "exclude_filter": ["*.md", "docs/*"]
+    }
+  ]
+}

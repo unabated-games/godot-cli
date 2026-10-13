@@ -28,8 +28,8 @@ Put these in whatever file your harness reads: `AGENTS.md` for Codex and OpenCod
 ```markdown
 ## Scene authoring
 
-Use godot-cli for every change to .tscn, .tres, and project.godot. Do not
-hand-edit scene text.
+Use godot-cli for every change to .tscn, .tres, project.godot, and
+export_presets.cfg. Do not hand-edit scene text.
 
 Work from the project root and pass --json. Pass --project-root . for writes,
 catalog lookups, validation, and apply.
@@ -63,6 +63,15 @@ _ready() styling calls.
 Connect signals in the scene, not in _ready():
   godot-cli scene connection add <scene> --from <emitter path> --signal <name> \
     --to <receiver path> --method <method> --project-root .
+
+Export presets: find option names with project export options, set them
+with project export apply, and prove the preset with project export build:
+  godot-cli project export options --platform <platform> --filter <word> \
+    --project-root . --json
+  godot-cli project export apply --project-root . --json \
+    --intent-json '{"presets":[{"name":"Windows","platform":"Windows Desktop",
+    "export_path":"build/windows/game.exe","options":{...}}]}'
+  godot-cli project export build --preset <name> --project-root . --json
 
 Finish every change with:
   godot-cli scene validate <scene> --project-root . --json
@@ -178,7 +187,7 @@ OpenCode reads `opencode.json`:
 }
 ```
 
-The agent docs travel with the server as resources, so an agent that has never seen `$GODOT_CLI_HOME` can still read `godot-cli://docs/quickstart` and `godot-cli://docs/godot-basics`, and `godot-cli://catalog` is the live catalog of the pinned project. The `godot-scene-session` prompt opens a session with the same seven rules the skill carries; in Claude Code it appears as a slash command under the server's name. Install the skill as well where the client supports it. The two say the same thing, and a rule the agent reads twice is a rule it keeps.
+The agent docs travel with the server as resources, so an agent that has never seen `$GODOT_CLI_HOME` can still read `godot-cli://docs/quickstart` and `godot-cli://docs/godot-basics`, and `godot-cli://catalog` is the live catalog of the pinned project. The `godot-scene-session` prompt opens a session with the same eight rules the skill carries; in Claude Code it appears as a slash command under the server's name. Install the skill as well where the client supports it. The two say the same thing, and a rule the agent reads twice is a rule it keeps.
 
 The server speaks both protocol eras: the `initialize` handshake current clients send, and the stateless 2026-07-28 revision for clients that move to it.
 

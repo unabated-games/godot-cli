@@ -19,6 +19,8 @@ Each guide is a task with the commands to finish it. If you are new here, read [
 
 [Edit project settings]({{ base_url }}/how-to/project-settings/): the input map, autoloads, editor plugins, rendering and physics backends, and the main scene, all in `project.godot`.
 
+[Set up export presets]({{ base_url }}/how-to/export-presets/): Windows, Linux, Web and mobile presets in `export_presets.cfg`, written the way the editor writes them, with secrets kept out of the committed file, and the export itself.
+
 ## Working with agents
 
 [Teach an agent your sub-scenes]({{ base_url }}/how-to/your-own-components/) is the one to read first. It walks the component catalog end to end, from describing a scene you have already built to an agent instancing it by id instead of rebuilding it from raw nodes.

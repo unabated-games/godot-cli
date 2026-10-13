@@ -129,7 +129,7 @@ const op_fields = [_]OpFields{
     opRow("node_add", &.{ "parent", "name", "type", "properties", "unique_name", "unique_id", "index" }),
     opRow("node_remove", &.{ "path", "recursive" }),
     opRow("node_rename", &.{ "path", "name" }),
-    opRow("node_reparent", &.{ "path", "parent" }),
+    opRow("node_reparent", &.{ "path", "parent", "index" }),
     opRow("node_set", &.{ "path", "property", "value", "properties" }),
     opRow("ext_add", &.{ "type", "path", "id_hint" }),
     opRow("ext_remove", &.{"id"}),
@@ -141,6 +141,19 @@ const op_fields = [_]OpFields{
     opRow("connection_add", &.{ "from", "signal", "to", "method", "binds", "unbinds", "deferred", "one_shot" }),
     opRow("connection_remove", &.{ "from", "signal", "to", "method" }),
 };
+
+/// A child position from an op's `index`, as `move_child` takes it.
+fn optionalIndex(object: std.json.ObjectMap) Error!?i64 {
+    const value = object.get("index") orelse return null;
+    return switch (value) {
+        .integer => |n| n,
+        .null => null,
+        else => {
+            error_details.record(.{ .field = "index", .hint = "an integer: 0 is first, -1 is last" });
+            return error.InvalidPatch;
+        },
+    };
+}
 
 fn checkOpFields(op_name: []const u8, object: std.json.ObjectMap) Error!void {
     const known = for (op_fields) |row| {
@@ -196,10 +209,13 @@ fn applyOneOp(
                 .integer => |n| n,
                 else => null,
             },
-            .index = switch (op_value.object.get("index") orelse std.json.Value{ .null = {} }) {
-                .integer => |n| if (n >= 0) @as(usize, @intCast(n)) else null,
-                else => null,
-            },
+            .index = if (try optionalIndex(op_value.object)) |wanted|
+                scene_edit.resolveChildIndex(wanted, try scene_edit.childCount(allocator, doc, parent, null)) orelse {
+                    error_details.record(.{ .field = "index", .hint = "a child position as move_child takes it: 0 is first, -1 is last, and no further than the parent's child count" });
+                    return error.ChildIndexOutOfRange;
+                }
+            else
+                null,
         });
         defer added.deinit(allocator);
         if (op_value.object.get("properties")) |props| {
@@ -286,13 +302,19 @@ fn applyOneOp(
             break :blk try allocator.dupe(u8, target.path[0..last]);
         };
         defer allocator.free(old_parent);
-        try scene_edit.reparentNode(allocator, doc, path, parent);
+        const old_index = try scene_edit.childIndexOf(allocator, doc, target.path);
+        const moved = scene_edit.reparentNodeWithOptions(allocator, doc, path, parent, .{ .index = try optionalIndex(op_value.object) }) catch |err| {
+            if (err == error.ChildIndexOutOfRange) error_details.record(.{ .field = "index", .hint = "a child position as move_child takes it: 0 is first, -1 is last, and no further than the parent's other children" });
+            return err;
+        };
         if (options.undo) |recorder| {
-            // The undo must address the node where it now lives.
+            // The undo must address the node where it now lives, and put it
+            // back in its old slot rather than last.
             const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent, target.name });
             defer allocator.free(new_path);
-            try scene_undo.recordNodeReparentUndo(recorder, new_path, old_parent);
+            try scene_undo.recordNodeReparentUndo(recorder, new_path, old_parent, old_index);
         }
+        if (!moved.parent_changed) return std.fmt.allocPrint(allocator, "moved {s} to child {d}", .{ path, moved.index });
         return std.fmt.allocPrint(allocator, "reparented {s} under {s}", .{ path, parent });
     }
 

@@ -17,11 +17,11 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.26.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.27.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
-    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-09-25";
+    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-10-13";
 
     const version_options = b.addOptions();
     version_options.addOption([]const u8, "version", version_string);
@@ -96,6 +96,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "example_hud_top_bar", .path = "share/examples/intents/hud_top_bar.json" },
         .{ .name = "example_main_scene", .path = "share/examples/intents/main_scene.json" },
         .{ .name = "example_physics_jolt", .path = "share/examples/intents/physics_jolt.json" },
+        .{ .name = "example_export_desktop_web", .path = "share/examples/intents/export_desktop_web.json" },
         .{ .name = "example_physics_layers", .path = "share/examples/intents/physics_layers.json" },
         .{ .name = "example_player_with_icon", .path = "share/examples/intents/player_with_icon.json" },
         .{ .name = "example_project_bootstrap", .path = "share/examples/intents/project_bootstrap.json" },
@@ -284,6 +285,35 @@ pub fn build(b: *std.Build) void {
     scene_author_smoke.setCwd(b.path("."));
     scene_author_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&scene_author_smoke.step);
+
+    // A reparent to the same parent changes no path, and a %Name reference
+    // survives any reparent within the scene; a session was told both broke.
+    // --index then orders children without that trick.
+    const node_order_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\dir=$(mktemp -d /tmp/godot_cli_order_XXXXXX) && trap 'rm -rf "$dir"' EXIT &&
+        \\g=$PWD/zig-out/bin/godot-cli && cd "$dir" &&
+        \\printf 'config_version=5\n' > project.godot &&
+        \\printf 'extends Node2D\nfunc _ready():\n\t%%Act.show()\n\t%%Actor.hide()\n\t$Bar/Act.show()\n' > s.gd &&
+        \\printf '[gd_scene format=3]\n\n[ext_resource type="Script" path="res://s.gd" id="1_s"]\n\n[node name="Main" type="Node2D"]\nscript = ExtResource("1_s")\n\n[node name="Bar" type="HBoxContainer" parent="."]\n' > s.tscn &&
+        \\for n in Act Leave Sit; do printf '\n[node name="%s" type="Button" parent="Bar"]\nunique_name_in_owner = true\n' $n >> s.tscn; done &&
+        \\printf '\n[node name="Actor" type="Node2D" parent="."]\nunique_name_in_owner = true\n' >> s.tscn &&
+        \\same=$($g scene node reparent s.tscn /root/Main/Bar/Act --parent /root/Main/Bar --project-root . --json --dry-run) &&
+        \\echo "$same" | grep -q '"parent_changed":false' && echo "$same" | grep -q '"script_refs":0' &&
+        \\away=$($g scene node reparent s.tscn /root/Main/Bar/Act --parent /root/Main --project-root . --json --dry-run) &&
+        \\echo "$away" | grep -q '"script_refs":1' && echo "$away" | grep -q 'Bar/Act.show' && ! echo "$away" | grep -q '%Act' &&
+        \\renamed=$($g scene node rename s.tscn /root/Main/Bar/Act --name Go --project-root . --json --dry-run) &&
+        \\echo "$renamed" | grep -q '"script_refs":2' && ! echo "$renamed" | grep -q '%Actor' &&
+        \\$g scene node move s.tscn /root/Main/Bar/Leave --index -1 --no-prepare-save >/dev/null &&
+        \\$g scene node add s.tscn --parent /root/Main/Bar --name Dance --type Button --index 0 --no-prepare-save >/dev/null &&
+        \\[ "$(grep -o 'name="[A-Za-z]*" type="Button"' s.tscn | cut -d'"' -f2 | tr '\n' ' ')" = "Dance Act Sit Leave " ] &&
+        \\! $g scene node move s.tscn /root/Main/Bar/Sit --index 4 --json | grep -q '"ok":true' &&
+        \\set +e && $g scene node bogus s.tscn --json > bogus.json; code=$? && set -e &&
+        \\[ "$code" = 2 ] && grep -q '"kind":"unknown_command"' bogus.json
+    });
+    node_order_smoke.setCwd(b.path("."));
+    node_order_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&node_order_smoke.step);
 
     const scene_instance_smoke = b.addSystemCommand(&.{
         "bash", "-ec",
@@ -598,6 +628,36 @@ pub fn build(b: *std.Build) void {
     project_physics_apply_smoke.setCwd(b.path("."));
     project_physics_apply_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&project_physics_apply_smoke.step);
+
+    // Export presets: the example intent writes three presets the way the
+    // editor would (validate agrees), a wrong option name is refused with the
+    // near miss, and a secret never reaches the committed file.
+    const project_export_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\tmp=$(mktemp -d) && trap 'rm -rf "$tmp"' EXIT &&
+        \\cp test_fixtures/project/project.godot "$tmp/project.godot" &&
+        \\g=./zig-out/bin/godot-cli &&
+        \\$g project export apply --project-root "$tmp" --intent share/examples/intents/export_desktop_web.json --json > "$tmp/applied.json" &&
+        \\grep -q '"created":\["Windows","Linux","Web"\]' "$tmp/applied.json" && grep -q '"gdignore_created":\["build"\]' "$tmp/applied.json" &&
+        \\test -f "$tmp/build/.gdignore" &&
+        \\grep -q '^"Windows Desktop"="Windows"$' "$tmp/export_presets.cfg" &&
+        \\grep -q '^exclude_filter="\*.md, docs/\*"$' "$tmp/export_presets.cfg" &&
+        \\$g project export validate --project-root "$tmp" --json | grep -q '"error_count":0,"warning_count":0,"matches_editor_save":true' &&
+        \\$g project export list --project-root "$tmp" --json | grep -q '"changed_options":{"binary_format/embed_pck":true,"application/product_name":"My Game"}' &&
+        \\$g project export options --project-root "$tmp" --platform android --filter export_format --json | grep -q '"choices":\["Export APK","Export AAB","Export AAR"\]' &&
+        \\! $g project export apply --project-root "$tmp" --intent-json '{"presets":[{"name":"Linux","options":{"binary_format/embed_pk":true}}]}' --json > "$tmp/refused.json" &&
+        \\grep -q '"kind":"unknown_option"' "$tmp/refused.json" && grep -q 'did you mean binary_format/embed_pck' "$tmp/refused.json" &&
+        \\$g project export apply --project-root "$tmp" --intent-json '{"presets":[{"name":"Android","platform":"Android","options":{"keystore/release_password":"hunter2","gradle_build/export_format":"AAB"}}]}' --json | grep -q '"secrets_written":\["Android: keystore/release_password"\]' &&
+        \\! grep -q hunter2 "$tmp/export_presets.cfg" && grep -q '^keystore/release_password="hunter2"$' "$tmp/.godot/export_credentials.cfg" &&
+        \\grep -q '^gradle_build/export_format=1$' "$tmp/export_presets.cfg" &&
+        \\! $g project export show --project-root "$tmp" --preset Android --json | grep -q hunter2 &&
+        \\$g project export apply --project-root "$tmp" --intent-json '{"remove":["Linux"],"presets":[{"name":"Web","rename":"HTML"}]}' --json | grep -q '"removed":\["Linux"\]' &&
+        \\grep -q '^\[preset.2\]$' "$tmp/export_presets.cfg" && ! grep -q '^\[preset.3\]$' "$tmp/export_presets.cfg" &&
+        \\grep -q '^name="HTML"$' "$tmp/export_presets.cfg"
+    });
+    project_export_smoke.setCwd(b.path("."));
+    project_export_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&project_export_smoke.step);
 
     const project_show_smoke = b.addSystemCommand(&.{
         "bash", "-ec",

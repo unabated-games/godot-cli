@@ -61,6 +61,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli scene node remove`](#godot-cli-scene-node-remove) | Remove a node by viewport path |
 | [`godot-cli scene node rename`](#godot-cli-scene-node-rename) | Rename a node and rewrite descendant parent attributes |
 | [`godot-cli scene node reparent`](#godot-cli-scene-node-reparent) | Move a node under a new parent path |
+| [`godot-cli scene node move`](#godot-cli-scene-node-move) | Reorder a node among its siblings |
 | [`godot-cli scene connection`](#godot-cli-scene-connection) | Signal connections stored in the scene ([connection] sections) |
 | [`godot-cli scene connection list`](#godot-cli-scene-connection-list) | List signal connections with from/to as viewport paths |
 | [`godot-cli scene connection add`](#godot-cli-scene-connection-add) | Connect a signal from one node to a method on another |
@@ -146,6 +147,13 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli project physics list`](#godot-cli-project-physics-list) | List [physics] section settings |
 | [`godot-cli project physics apply`](#godot-cli-project-physics-apply) | Apply physics intent JSON (friendly aliases) |
 | [`godot-cli project physics validate`](#godot-cli-project-physics-validate) | Validate known physics engine and scalar values |
+| [`godot-cli project export`](#godot-cli-project-export) | Export presets in export_presets.cfg, and the export itself |
+| [`godot-cli project export list`](#godot-cli-project-export-list) | List export presets |
+| [`godot-cli project export show`](#godot-cli-project-export-show) | Show one export preset |
+| [`godot-cli project export options`](#godot-cli-project-export-options) | List the export options a platform has |
+| [`godot-cli project export apply`](#godot-cli-project-export-apply) | Create, update, rename, or remove export presets |
+| [`godot-cli project export validate`](#godot-cli-project-export-validate) | Check export_presets.cfg for what Godot would drop or reject |
+| [`godot-cli project export build`](#godot-cli-project-export-build) | Export the project with a preset (runs Godot) |
 | [`godot-cli completions`](#godot-cli-completions) | Print shell completions (bash, zsh, fish) |
 | [`godot-cli man`](#godot-cli-man) | Print the godot-cli(1) man page in roff format |
 | [`godot-cli reference`](#godot-cli-reference) | Print the command reference as Markdown or JSON |
@@ -693,6 +701,7 @@ godot-cli scene node [options]
 | [`remove`](#godot-cli-scene-node-remove) | Remove a node by viewport path |
 | [`rename`](#godot-cli-scene-node-rename) | Rename a node and rewrite descendant parent attributes |
 | [`reparent`](#godot-cli-scene-node-reparent) | Move a node under a new parent path |
+| [`move`](#godot-cli-scene-node-move) | Reorder a node among its siblings |
 
 ### `godot-cli scene node list`
 
@@ -743,7 +752,7 @@ godot-cli scene node get [options] <file> [node]
 
 Add a child node under a parent path
 
-Requires --parent, --name, and --type. Assigns unique_id on save via save preparation. With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.
+Requires --parent, --name, and --type. The node is added as the parent's last child, or where --index puts it. Assigns unique_id on save via save preparation. With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.
 
 ```
 godot-cli scene node add [options] <file>
@@ -767,6 +776,7 @@ godot-cli scene node add [options] <file>
 | `--properties` | `<value>` | JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes ("text": "\"Score\""), and a constructor is its text with no extra quotes ("position": "Vector2(3, 0)", "mesh": "ExtResource(\"2_rock\")") | — |
 | `--raw-value` | — | Write property value verbatim | — |
 | `--unique-name` | — | Set unique_name_in_owner on the new node (Access as Unique Name / %Name) | — |
+| `--index` | `<n>` | Position among the parent's children, as Godot's move_child counts it: 0 is first, -1 is last; without it the node is added last | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -848,7 +858,7 @@ godot-cli scene node rename [options] <file> <node>
 
 Move a node under a new parent path
 
-Takes the scene path and the node's viewport path: scene node reparent main.tscn /root/Main/Player/Camera --parent /root/Main. The node becomes the new parent's last child, as in the editor.
+Takes the scene path and the node's viewport path: scene node reparent main.tscn /root/Main/Player/Camera --parent /root/Main. The node becomes the new parent's last child, as in the editor, or the one --index names. With --project-root, script lines that reach the node by a path ($Player/Camera, get_node("Player/Camera")) are listed, since those break; %Name references resolve through the owner and keep working.
 
 ```
 godot-cli scene node reparent [options] <file> <node>
@@ -866,6 +876,40 @@ godot-cli scene node reparent [options] <file> <node>
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--parent` | `<value>` | New parent, viewport path (e.g. /root/Main) (required) | — |
+| `--index` | `<n>` | Position among the parent's children, as Godot's move_child counts it: 0 is first, -1 is last; without it the node goes last | — |
+| `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
+| `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
+| `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
+| `--output` | `<path>` | Output path (default: overwrite input) | — |
+| `--dry-run` | — | Parse and validate edit without writing | — |
+| `--snapshot` | `<path>` | Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored | — |
+| `--id-session` | `<path>` | Path to ext_resource id session cache JSON | — |
+| `--no-id-session` | — | Do not load or update ext_resource id session cache | — |
+| `--godot-save-format` | — | Strip Godot-omitted header fields and default sub_resource properties | — |
+| `--normalize-properties` | — | Rewrite property values through Variant parse/format | — |
+
+### `godot-cli scene node move`
+
+Reorder a node among its siblings
+
+Takes the scene path and the node's viewport path: scene node move hud.tscn /root/HUD/Bar/Leave --index -1. Child order is draw order in 2D, and layout order in a container. --index counts as Godot's move_child does: 0 is first, -1 is last. The node's children move with it, and its path does not change, so nothing that names it breaks; only a script that picks children by position, with get_child(), sees a different node.
+
+```
+godot-cli scene node move [options] <file> <node>
+```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<file>` | Scene or resource file (.tscn or .tres) |
+| `<node>` | Node by viewport path, e.g. /root/Main/Player |
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--index` | `<n>` | Position among the parent's children, as Godot's move_child counts it: 0 is first, -1 is last (required) | — |
 | `--project-root` | `<path>` | Godot project root for res:// seed path and id session cache | — |
 | `--resource-path` | `<value>` | Godot res:// path for ID seeding (overrides the project root) | — |
 | `--no-prepare-save` | — | Skip Godot save preparation (ID repair/sort) | — |
@@ -2129,6 +2173,7 @@ godot-cli project [options]
 | [`plugins`](#godot-cli-project-plugins) | Editor plugins enable/disable in project.godot |
 | [`rendering`](#godot-cli-project-rendering) | Rendering method and graphics driver settings |
 | [`physics`](#godot-cli-project-physics) | Physics engine and gravity settings |
+| [`export`](#godot-cli-project-export) | Export presets in export_presets.cfg, and the export itself |
 
 **Options**
 
@@ -2218,7 +2263,7 @@ godot-cli project run [options]
 | `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
 | `--scene` | `<value>` | Scene to run (res:// or project-relative); the main scene when omitted | — |
 | `--frames` | `<n>` | Frames to run before quitting; 60 is one second, 5 is enough for a static screen | `60` |
-| `--resolution` | `<value>` | Window size as WIDTHxHEIGHT; default is the project's display/window/size, else 640x360 | — |
+| `--resolution` | `<value>` | Window size as WIDTHxHEIGHT; default is the project's display/window/size, else Godot's own 1152x648 | — |
 | `--capture-dir` | `<path>` | Folder under the project for the frame and log; the default is under .godot/, which Godot never imports | `.godot/godot-cli` |
 | `--no-import` | — | Skip the headless import pass that assigns UIDs to new files | — |
 | `--keep-frames` | — | Keep every frame and the .wav; the default keeps only the last frame | — |
@@ -2322,7 +2367,7 @@ godot-cli project input list [options]
 
 Apply input map intent JSON (merge/replace per action)
 
-One intent: {"actions": [{"name": "move_left", "deadzone": 0.5, "events": [...]}]}; each action replaces the one of the same name. Event types: {"type": "key", "keycode": &lt;name or number&gt;, "physical": true, "ctrl": false, "shift": false, "alt": false, "meta": false}, {"type": "mouse_button", "button": &lt;name or number&gt;}, {"type": "joypad_button", "button": &lt;name or number&gt;}, {"type": "joypad_motion", "axis": &lt;name or number&gt;, "axis_value": -1.0}. Keys: a letter or digit, space, escape, tab, backtab, backspace, enter/return, kp_enter, insert, delete, pause, print, home, end, left, up, right, down, pageup, pagedown, shift, ctrl, meta/cmd, alt, capslock, numlock, scrolllock, f1-f12; or a Godot keycode number. Names are matched without case, and KEY_&lt;letter&gt; is accepted. Mouse buttons: left, right, middle, wheel_up, wheel_down, wheel_left, wheel_right, xbutton1/x1, xbutton2/x2; or the MouseButton number. Names are matched without case. Joypad buttons: a/south, b/east, x/west, y/north, back/select, guide/home, start, left_stick/l3, right_stick/r3, left_shoulder/lb, right_shoulder/rb, dpad_up, dpad_down, dpad_left, dpad_right, misc1, paddle1-4, touchpad, misc2-6; or the JoyButton number. Names are matched without case. Joypad axes: left_x/LX, left_y/LY, right_x/RX, right_y/RY, trigger_left/LT, trigger_right/RT; or the JoyAxis number. Names are matched without case.
+One intent: {"actions": [{"name": "move_left", "deadzone": 0.5, "events": [...]}]}; each action replaces the one of the same name. Event types: {"type": "key", "keycode": &lt;name or number&gt;, "physical": true, "ctrl": false, "shift": false, "alt": false, "meta": false} (physical defaults to true: the key's place on the keyboard, so WASD stays put on AZERTY), {"type": "mouse_button", "button": &lt;name or number&gt;}, {"type": "joypad_button", "button": &lt;name or number&gt;}, {"type": "joypad_motion", "axis": &lt;name or number&gt;, "axis_value": -1.0}. Keys: a letter or digit, space, escape, tab, backtab, backspace, enter/return, kp_enter, insert, delete, pause, print, home, end, left, up, right, down, pageup, pagedown, shift, ctrl, meta/cmd, alt, capslock, numlock, scrolllock, f1-f12; or a Godot keycode number. Names are matched without case, and KEY_&lt;letter&gt; is accepted. Mouse buttons: left, right, middle, wheel_up, wheel_down, wheel_left, wheel_right, xbutton1/x1, xbutton2/x2; or the MouseButton number. Names are matched without case. Joypad buttons: a/south, b/east, x/west, y/north, back/select, guide/home, start, left_stick/l3, right_stick/r3, left_shoulder/lb, right_shoulder/rb, dpad_up, dpad_down, dpad_left, dpad_right, misc1, paddle1-4, touchpad, misc2-6; or the JoyButton number. Names are matched without case. Joypad axes: left_x/LX, left_y/LY, right_x/RX, right_y/RY, trigger_left/LT, trigger_right/RT; or the JoyAxis number. Names are matched without case.
 
 ```
 godot-cli project input apply [options]
@@ -2736,6 +2781,136 @@ godot-cli project physics validate [options]
 | Option | Value | Description | Default |
 |--------|-------|-------------|---------|
 | `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
+
+### `godot-cli project export`
+
+Export presets in export_presets.cfg, and the export itself
+
+Creates and edits export presets the way the editor writes them: every option the platform defines, in the editor's order, with secrets (keystore passwords, the script encryption key) in .godot/export_credentials.cfg rather than the committed file. The option list comes from the editor of the project's Godot version (config/features), or the newest one godot-cli has for a project that names none.
+
+```
+godot-cli project export [options]
+```
+
+**Subcommands**
+
+| Subcommand | Summary |
+|------------|---------|
+| [`list`](#godot-cli-project-export-list) | List export presets |
+| [`show`](#godot-cli-project-export-show) | Show one export preset |
+| [`options`](#godot-cli-project-export-options) | List the export options a platform has |
+| [`apply`](#godot-cli-project-export-apply) | Create, update, rename, or remove export presets |
+| [`validate`](#godot-cli-project-export-validate) | Check export_presets.cfg for what Godot would drop or reject |
+| [`build`](#godot-cli-project-export-build) | Export the project with a preset (runs Godot) |
+
+### `godot-cli project export list`
+
+List export presets
+
+Each preset's name, platform, runnable flag, its preset keys (export_path, export_filter, custom_features, ...), and the options that differ from the default. A preset Godot would skip (a platform it does not match, or one past a gap in the numbering) is listed with godot_skips saying why and how to fix it. Secret values are never shown, only whether they are set. Result data: path, exists, presets, godot_version, project_godot_version, summary.
+
+```
+godot-cli project export list [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+
+### `godot-cli project export show`
+
+Show one export preset
+
+One preset, as list shows it; with --all-options, every option the platform has and its value, the default where the file sets none, rather than only the changed ones. Secret values are never shown. Result data: the preset's fields, changed_options or options, summary.
+
+```
+godot-cli project export show [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+| `--preset` | `<value>` | The preset's name, as project export list shows it (required) | — |
+| `--all-options` | — | Every option with its value, not only the ones that differ from the default | — |
+
+### `godot-cli project export options`
+
+List the export options a platform has
+
+Every option the platform's exporter defines in this Godot version: name, default, type, choices for an option with a fixed set, and whether it is secret. Also the preset keys every platform shares (export_path, export_filter, include_filter, ...). Use it to find an option's name before setting it with project export apply. Result data: platform, options, preset_keys, godot_version, summary.
+
+```
+godot-cli project export options [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+| `--platform` | `<value>` | Android, iOS, Linux, macOS, visionOS, Web, or Windows Desktop (Windows also works) (required) | — |
+| `--filter` | `<value>` | Only options whose name contains this, e.g. icon or keystore | — |
+
+### `godot-cli project export apply`
+
+Create, update, rename, or remove export presets
+
+Applies {"presets": [...], "remove": [...]}. A preset entry is matched by name and created if there is none, which needs platform (Android, iOS, Linux, macOS, visionOS, Web, Windows Desktop; Windows, HTML5 and the like are accepted and written as the name Godot matches). Fields: name, platform, rename, runnable (one per platform), export_path, export_filter (all_resources, scenes, resources, exclude, customized) with export_files, include_filter and exclude_filter (a string or a list), custom_features (a string or a list), dedicated_server, script_export_mode (text, binary_tokens, compressed_binary_tokens), the patch and encryption keys, script_encryption_key, and options: {name: value} with names from project export options. Option values are typed by the option: true/false, numbers, strings, a choice's label ("AAB" for gradle_build/export_format), arrays of strings. An option the platform does not have is refused with the nearest name, unless the entry sets allow_unknown_options for an addon's own option. The whole preset is written as the editor writes it, every option included, so opening the project in the editor changes nothing. Secret options go to .godot/export_credentials.cfg. An export_path inside the project gets a .gdignore in its top folder (build/ for build/windows/game.exe), so Godot neither imports builds nor packs one into the next. A preset whose platform Godot does not match (Windows) is corrected by giving the right one, keeping its settings; presets past a gap in the numbering are kept and renumbered; secrets found in export_presets.cfg move to the credentials file. Result data: path, credentials_path, created, updated, removed, secrets_written and secrets_moved (names only), gdignore_created, presets, dry_run, summary.
+
+```
+godot-cli project export apply [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+| `--intent` | `<path>` | Intent JSON file: {"presets": [{"name": "Windows", "platform": "Windows Desktop", "export_path": "build/windows/game.exe", "runnable": true, "options": {"binary_format/embed_pck": true}}], "remove": ["Old"]} | — |
+| `--intent-json` | `<value>` | The intent itself, instead of a file; the same document the intent option describes | — |
+| `--file` | `<path>` | Alias for --intent | — |
+| `--dry-run` | — | Check and apply in memory without writing either file | — |
+
+### `godot-cli project export validate`
+
+Check export_presets.cfg for what Godot would drop or reject
+
+Errors: a platform Godot does not know (it skips the preset and drops it on its next save; Windows must be Windows Desktop), a gap in the preset numbering (Godot stops reading at the gap), two presets with one name, an option value of the wrong type or outside its choices, and Android settings that need gradle_build/use_gradle_build (an AAB, compressed native libraries, swipe to dismiss, a min SDK), which Godot refuses to export. Warnings: missing include_filter or exclude_filter, no export_path, an export_path inside the project in a folder with no .gdignore (Godot imports the build and packs it into the next), a keystore or template file that does not exist on this machine, an option the platform does not have, a secret in the committed file, a res:// path that does not exist, a runnable entry naming no preset. matches_editor_save says whether the editor would leave the file as it is. Exits non-zero when there is an error. Result data: path, exists, issues, error_count, warning_count, matches_editor_save, summary.
+
+```
+godot-cli project export validate [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+
+### `godot-cli project export build`
+
+Export the project with a preset (runs Godot)
+
+Runs godot --headless --export-release (or --export-debug, --export-pack) with the preset, creating the output folder first, and a .gdignore in its top folder inside the project (build/ for build/windows/game.exe) so Godot neither imports the build nor packs it into the next one. Needs the export templates for this exact Godot version; without them it fails as export_templates_missing, with missing_template naming the path Godot looked in. Any other failure is export_failed, with Godot's ERROR lines and the reasons listed under them in errors. Result data: preset, platform, mode, output, output_path, exit, files (each output file and its size), errors (Godot's ERROR lines and their reasons), missing_template, gdignore_created, stdout_tail and stderr_tail on failure, summary.
+
+```
+godot-cli project export build [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (default: current directory) | — |
+| `--preset` | `<value>` | The preset to export, by name (required) | — |
+| `--output` | `<path>` | Output file, relative to the project root or absolute; default the preset's export_path | — |
+| `--debug` | — | Export with the debug template (--export-debug) | — |
+| `--pack` | — | Export only the .pck or .zip, no executable (--export-pack) | — |
+| `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
 
 ### `godot-cli completions`
 

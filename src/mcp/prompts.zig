@@ -15,9 +15,9 @@ pub const rules =
     \\
     \\Rules:
     \\1. Structure lives in the scene file, as the editor writes it. Never hand-edit
-    \\   .tscn, .tres, or project.godot text, and never build static UI or level
-    \\   structure in _ready() with load().instantiate(); that is for things the
-    \\   game spawns while playing.
+    \\   .tscn, .tres, project.godot, or export_presets.cfg text, and never build
+    \\   static UI or level structure in _ready() with load().instantiate(); that
+    \\   is for things the game spawns while playing.
     \\2. Discover before editing: scene_describe for the whole scene in one call
     \\   (tree with properties, connections, references, scripts), catalog_list
     \\   for components the project already has, with the prose that says which
@@ -35,7 +35,10 @@ pub const rules =
     \\   unnamed ones of the same type no longer collide.
     \\6. Move files with project_move, never mv; a plain move leaves every res://
     \\   reference stale.
-    \\7. Validate after every edit with scene_validate, then project_run and read
+    \\7. Export presets are written with project_export_apply, never by editing
+    \\   export_presets.cfg: project_export_options lists a platform's option
+    \\   names, defaults and choices, and project_export_build runs the export.
+    \\8. Validate after every edit with scene_validate, then project_run and read
     \\   the returned image, data.log_tail, and data.errors before reporting done.
     \\   Validate checks property values against the node's class and connections
     \\   against the signals the class emits, so a wrong type or a misspelled

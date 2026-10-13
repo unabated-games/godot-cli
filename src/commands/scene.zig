@@ -1034,7 +1034,12 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     const node_type = inv.getOption("type") orelse return error.Usage;
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
-    var added = try scene_edit.addNode(cli.allocator, &doc, parent_path, node_name, node_type);
+    const index: ?usize = if (inv.getOption("index")) |text| blk: {
+        const wanted = std.fmt.parseInt(i64, text, 10) catch return error.Usage;
+        const others = try scene_edit.childCount(cli.allocator, &doc, parent_path, null);
+        break :blk scene_edit.resolveChildIndex(wanted, others) orelse return childIndexOutOfRange(cli.allocator, text, parent_path, others);
+    } else null;
+    var added = try scene_edit.addNodeWithOptions(cli.allocator, &doc, parent_path, node_name, node_type, .{ .index = index });
     defer added.deinit(cli.allocator);
 
     const property_pairs = try collectPropertyPairs(cli, inv, node_type);
@@ -1073,7 +1078,10 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     if (inv.flag("dry-run")) {
         if (try dryRunSectionText(cli, &doc, added.path)) |text| try data.put(cli.allocator, "section_text", .{ .string = text });
     }
-    const summary = try std.fmt.allocPrint(cli.allocator, "added {s} at {s}", .{ node_name, added.path });
+    const summary = if (index) |at|
+        try std.fmt.allocPrint(cli.allocator, "added {s} at {s}, as child {d}", .{ node_name, added.path, at })
+    else
+        try std.fmt.allocPrint(cli.allocator, "added {s} at {s}", .{ node_name, added.path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1086,7 +1094,7 @@ fn sceneNodeRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     const node_path = inv.positionals[1];
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
-    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "was removed");
+    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "was removed", .paths_and_unique_name);
     const removed = try scene_edit.removeNode(cli.allocator, &doc, node_path, inv.flag("recursive"));
 
     const output_path = inv.getOption("output") orelse input_path;
@@ -1320,7 +1328,7 @@ fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
     try data.put(cli.allocator, "method", .{ .string = try cli.allocator.dupe(u8, method) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(section_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "connected {s} {s} to {s} {s}", .{ from, signal, to, method });
+    const summary = try std.fmt.allocPrint(cli.allocator, "{s} {s} {s} to {s} {s}", .{ if (inv.flag("dry-run")) "would connect" else "connected", from, signal, to, method });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = messages.items };
 }
@@ -1358,7 +1366,7 @@ fn sceneNodeRenameHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     const new_name = inv.getOption("name") orelse return error.Usage;
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
-    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "was renamed");
+    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "was renamed", .paths_and_unique_name);
     const new_path = try scene_edit.renameNode(cli.allocator, &doc, node_path, new_name);
     defer cli.allocator.free(new_path);
 
@@ -1386,10 +1394,61 @@ fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     const input_path = inv.positionals[0];
     const node_path = inv.positionals[1];
     const new_parent = inv.getOption("parent") orelse return error.Usage;
+    const index = try indexOption(inv);
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
-    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, "moved to another parent");
-    try scene_edit.reparentNode(cli.allocator, &doc, node_path, new_parent);
+    // Gathered before the edit, while the node is still where scripts expect
+    // it. A %Name reference resolves through the owner, which a reparent
+    // inside the scene leaves alone, so only path references are at risk.
+    const verb = try std.fmt.allocPrint(cli.allocator, "moved under {s}", .{new_parent});
+    const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, verb, .paths_only);
+    const moved = scene_edit.reparentNodeWithOptions(cli.allocator, &doc, node_path, new_parent, .{ .index = index }) catch |err| switch (err) {
+        error.ChildIndexOutOfRange => return childIndexOutOfRange(cli.allocator, inv.getOption("index").?, new_parent, try scene_edit.childCount(cli.allocator, &doc, new_parent, node_path)),
+        else => return err,
+    };
+
+    const output_path = inv.getOption("output") orelse input_path;
+    if (!inv.flag("dry-run")) {
+        try writeWithPrepare(cli, inv, output_path, &doc);
+    }
+
+    // The same parent means no path changed, so nothing that named the node
+    // can have broken; trial reports had this called a move to another parent.
+    const messages: []const []const u8 = if (moved.parent_changed) script_refs else &.{};
+    const leaf = if (std.mem.lastIndexOfScalar(u8, node_path, '/')) |slash| node_path[slash + 1 ..] else node_path;
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
+    try data.put(cli.allocator, "node_path", .{ .string = try std.fmt.allocPrint(cli.allocator, "{s}/{s}", .{ new_parent, leaf }) });
+    try data.put(cli.allocator, "old_path", .{ .string = try cli.allocator.dupe(u8, node_path) });
+    try data.put(cli.allocator, "parent", .{ .string = try cli.allocator.dupe(u8, new_parent) });
+    try data.put(cli.allocator, "parent_changed", .{ .bool = moved.parent_changed });
+    try data.put(cli.allocator, "index", .{ .integer = @intCast(moved.index) });
+    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    const summary = if (moved.parent_changed)
+        try std.fmt.allocPrint(cli.allocator, "reparented {s} under {s}, as child {d}", .{ node_path, new_parent, moved.index })
+    else
+        try std.fmt.allocPrint(cli.allocator, "{s} already had that parent; moved it to child {d}", .{ node_path, moved.index });
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+    try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(messages.len) });
+
+    return .{ .data = .{ .object = data }, .messages = messages };
+}
+
+fn sceneNodeMoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    if (inv.positionals.len < 2) return error.Usage;
+    const cli = appFrom(ctx);
+    const input_path = inv.positionals[0];
+    const node_path = inv.positionals[1];
+    const index = (try indexOption(inv)) orelse return error.Usage;
+
+    var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
+    const moved = scene_edit.moveNode(cli.allocator, &doc, node_path, index) catch |err| switch (err) {
+        error.ChildIndexOutOfRange => {
+            const parent = node_path[0 .. std.mem.lastIndexOfScalar(u8, node_path, '/') orelse 0];
+            return childIndexOutOfRange(cli.allocator, inv.getOption("index").?, parent, try scene_edit.childCount(cli.allocator, &doc, parent, node_path));
+        },
+        else => return err,
+    };
 
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
@@ -1399,13 +1458,21 @@ fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
     try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, node_path) });
-    try data.put(cli.allocator, "parent", .{ .string = try cli.allocator.dupe(u8, new_parent) });
+    try data.put(cli.allocator, "index", .{ .integer = @intCast(moved.index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "reparented {s} under {s}", .{ node_path, new_parent });
-    try data.put(cli.allocator, "summary", .{ .string = summary });
-    try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(script_refs.len) });
+    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "moved {s} to child {d} of its parent", .{ node_path, moved.index }) });
+    return .{ .data = .{ .object = data }, .messages = &.{} };
+}
 
-    return .{ .data = .{ .object = data }, .messages = script_refs };
+fn indexOption(inv: *const spec.Invocation) !?i64 {
+    const text = inv.getOption("index") orelse return null;
+    return std.fmt.parseInt(i64, text, 10) catch error.Usage;
+}
+
+fn childIndexOutOfRange(allocator: std.mem.Allocator, given: []const u8, parent: []const u8, others: usize) error{ ChildIndexOutOfRange, OutOfMemory } {
+    const hint = try std.fmt.allocPrint(allocator, "{s} has {d} other children, so --index takes 0 to {d}, or -1 to -{d} counting from the end", .{ parent, others, others, others + 1 });
+    error_details.record(.{ .field = "index", .value = given, .hint = hint });
+    return error.ChildIndexOutOfRange;
 }
 
 fn referrersToJson(allocator: std.mem.Allocator, referrers: []const scene_resources.Referrer) !std.json.Array {
@@ -1991,7 +2058,7 @@ pub const ScriptHit = struct {
 /// quoted path. A structural change — an extract, a remove, a rename, a
 /// reparent — leaves these still parsing and resolving to nothing, which is
 /// the class of breakage trials 17 and 18 asked to be told about.
-fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const ScriptHit {
+fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8, include_unique: bool) ![]const ScriptHit {
     var out: std.ArrayList(ScriptHit) = .empty;
     const root_prefix_end = (std.mem.indexOfScalarPos(u8, node_path, "/root/".len, '/') orelse return out.items) + 1;
     const rel = node_path[root_prefix_end..];
@@ -2012,9 +2079,9 @@ fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const
         var lines = std.mem.splitScalar(u8, text, '\n');
         while (lines.next()) |line| {
             line_no += 1;
-            const hit = std.mem.indexOf(u8, line, dollar) != null or
-                std.mem.indexOf(u8, line, quoted) != null or
-                std.mem.indexOf(u8, line, unique) != null;
+            const hit = namesNode(line, dollar) or
+                namesNode(line, quoted) or
+                (include_unique and namesNode(line, unique));
             if (!hit) continue;
             try out.append(cli.allocator, .{
                 .res_path = res_path,
@@ -2028,19 +2095,57 @@ fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const
 
 fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const []const u8 {
     var out: std.ArrayList([]const u8) = .empty;
-    for (try scriptReferencesToNode(cli, root, doc, node_path)) |hit| {
+    for (try scriptReferencesToNode(cli, root, doc, node_path, true)) |hit| {
         try out.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ hit.res_path, hit.line_no, hit.text }));
     }
     return out.items;
 }
 
+/// Which references a change breaks. A rename or a removal breaks `%Name` as
+/// well as paths; a reparent within the scene keeps the owner, and `%Name`
+/// resolves through the owner, so only paths break.
+const RefScope = enum { paths_only, paths_and_unique_name };
+
+fn nodeIsUnique(cli: *const app_mod.App, doc: *const text_format.document.Document, node_path: []const u8) bool {
+    const index = scene_edit.findNodeSectionIndex(cli.allocator, doc, node_path) catch return false;
+    for (doc.sections.items[index].properties.items) |prop| {
+        if (std.mem.eql(u8, std.mem.trim(u8, prop.raw, " \t\r"), "unique_name_in_owner = true")) return true;
+    }
+    return false;
+}
+
+/// Whether `line` holds `needle` as a whole name: `%Act` and `$HUD/Act`, or
+/// `$HUD/Act/Icon` below it, but not `%Actor`.
+fn namesNode(line: []const u8, needle: []const u8) bool {
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, line, from, needle)) |at| {
+        const end = at + needle.len;
+        if (end == line.len) return true;
+        const next = line[end];
+        if (!(std.ascii.isAlphanumeric(next) or next == '_')) return true;
+        from = at + 1;
+    }
+    return false;
+}
+
+test "a reference names a node only up to a name boundary" {
+    try std.testing.expect(namesNode("    %Act.pressed.connect(_go)", "%Act"));
+    try std.testing.expect(namesNode("var b = %Act", "%Act"));
+    try std.testing.expect(namesNode("$Layer/Act/Icon.hide()", "$Layer/Act"));
+    try std.testing.expect(namesNode("get_node(\"Layer/Act\")", "\"Layer/Act"));
+    try std.testing.expect(!namesNode("%Actor.hide() # %Act_2", "%Act"));
+}
+
 /// Messages for a structural change: the scripts that named the node before
 /// it moved or went away. `--project-root` is what makes the scan possible,
 /// so without one the change is silent, as it was before.
-fn scriptRefMessages(cli: *const app_mod.App, inv: *const spec.Invocation, doc: *const text_format.document.Document, node_path: []const u8, verb: []const u8) ![]const []const u8 {
+fn scriptRefMessages(cli: *const app_mod.App, inv: *const spec.Invocation, doc: *const text_format.document.Document, node_path: []const u8, verb: []const u8, scope: RefScope) ![]const []const u8 {
     const root = projectRootFrom(inv) orelse return &.{};
     var out: std.ArrayList([]const u8) = .empty;
-    const hits = scriptReferencesToNode(cli, root, doc, node_path) catch return &.{};
+    // `%Name` reaches only a node marked unique_name_in_owner; for any other
+    // node a `%` line with the same name is about something else.
+    const include_unique = scope == .paths_and_unique_name and nodeIsUnique(cli, doc, node_path);
+    const hits = scriptReferencesToNode(cli, root, doc, node_path, include_unique) catch return &.{};
     for (hits) |hit| {
         try out.append(cli.allocator, try std.fmt.allocPrint(
             cli.allocator,
@@ -2672,12 +2777,17 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "properties", .kind = .string, .description = "JSON object of property name to value, instead of or as well as --property/--value; where both set one property, this object wins. Numbers and booleans are JSON; a string is Variant text and carries its own quotes (\"text\": \"\\\"Score\\\"\"), and a constructor is its text with no extra quotes (\"position\": \"Vector2(3, 0)\", \"mesh\": \"ExtResource(\\\"2_rock\\\")\")" },
         .{ .long = "raw-value", .kind = .flag, .description = "Write property value verbatim" },
         .{ .long = "unique-name", .kind = .flag, .description = "Set unique_name_in_owner on the new node (Access as Unique Name / %Name)" },
+        .{ .long = "index", .kind = .integer, .description = "Position among the parent's children, as Godot's move_child counts it: 0 is first, -1 is last; without it the node is added last" },
     } ++ save_options;
     const node_rename_options = [_]spec.OptionSpec{
         .{ .long = "name", .kind = .string, .description = "New node name", .required = true },
     } ++ save_options;
     const node_reparent_options = [_]spec.OptionSpec{
         .{ .long = "parent", .kind = .string, .description = "New parent, viewport path (e.g. /root/Main)", .required = true },
+        .{ .long = "index", .kind = .integer, .description = "Position among the parent's children, as Godot's move_child counts it: 0 is first, -1 is last; without it the node goes last" },
+    } ++ save_options;
+    const node_move_options = [_]spec.OptionSpec{
+        .{ .long = "index", .kind = .integer, .description = "Position among the parent's children, as Godot's move_child counts it: 0 is first, -1 is last", .required = true },
     } ++ save_options;
     const node_remove_options = [_]spec.OptionSpec{
         .{ .long = "recursive", .kind = .flag, .description = "Remove descendant nodes as well" },
@@ -2892,7 +3002,7 @@ pub fn sceneCommands() spec.CommandSpec {
                     .{
                         .name = "add",
                         .summary = "Add a child node under a parent path",
-                        .description = "Requires --parent, --name, and --type. Assigns unique_id on save via save preparation. With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.",
+                        .description = "Requires --parent, --name, and --type. The node is added as the parent's last child, or where --index puts it. Assigns unique_id on save via save preparation. With --dry-run, section_text is the exact section a write would add. The unique_id in it is the one the write assigns, because it is seeded from the scene's path, so a write straight after gives the same text.",
                         .options = &node_edit_options,
                         .handler = sceneNodeAddHandler,
                         .positionals = &pos.scene_file,
@@ -2915,10 +3025,18 @@ pub fn sceneCommands() spec.CommandSpec {
                     },
                     .{
                         .name = "reparent",
-                        .description = "Takes the scene path and the node's viewport path: scene node reparent main.tscn /root/Main/Player/Camera --parent /root/Main. The node becomes the new parent's last child, as in the editor.",
+                        .description = "Takes the scene path and the node's viewport path: scene node reparent main.tscn /root/Main/Player/Camera --parent /root/Main. The node becomes the new parent's last child, as in the editor, or the one --index names. With --project-root, script lines that reach the node by a path ($Player/Camera, get_node(\"Player/Camera\")) are listed, since those break; %Name references resolve through the owner and keep working.",
                         .summary = "Move a node under a new parent path",
                         .options = &node_reparent_options,
                         .handler = sceneNodeReparentHandler,
+                        .positionals = &pos.file_and_node,
+                    },
+                    .{
+                        .name = "move",
+                        .summary = "Reorder a node among its siblings",
+                        .description = "Takes the scene path and the node's viewport path: scene node move hud.tscn /root/HUD/Bar/Leave --index -1. Child order is draw order in 2D, and layout order in a container. --index counts as Godot's move_child does: 0 is first, -1 is last. The node's children move with it, and its path does not change, so nothing that names it breaks; only a script that picks children by position, with get_child(), sees a different node.",
+                        .options = &node_move_options,
+                        .handler = sceneNodeMoveHandler,
                         .positionals = &pos.file_and_node,
                     },
                 },

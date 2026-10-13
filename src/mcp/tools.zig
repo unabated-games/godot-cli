@@ -34,7 +34,7 @@ pub fn isExcluded(first_segment: []const u8) bool {
 }
 
 /// The tools that cover most sessions, in the order the quickstart names
-/// them. A client that loads every schema up front pays for all ninety-one
+/// them. A client that loads every schema up front pays for all one hundred
 /// otherwise, which four trials called out; `mcp --toolset core` serves these.
 pub const core_tool_names = [_][]const u8{
     "project_new",

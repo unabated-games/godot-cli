@@ -13,9 +13,10 @@ const project_rendering = @import("../godot/project_rendering.zig");
 const project_physics = @import("../godot/project_physics.zig");
 const project_unified = @import("../godot/project_unified.zig");
 const project_move = @import("../godot/project_move.zig");
+const project_export = @import("project_export.zig");
 const pos = @import("positionals.zig");
 
-fn appFrom(ctx: *anyopaque) *const app_mod.App {
+pub fn appFrom(ctx: *anyopaque) *const app_mod.App {
     return @ptrCast(@alignCast(ctx));
 }
 
@@ -52,11 +53,11 @@ fn loadProject(cli: *const app_mod.App, inv: *const spec.Invocation) !struct {
     return .{ .path = path, .doc = doc };
 }
 
-const IntentSource = struct { label: []const u8, bytes: []const u8 };
+pub const IntentSource = struct { label: []const u8, bytes: []const u8 };
 
 /// `--intent-json` carries the document itself; otherwise `--intent` (or the
 /// older `--file`) names a file. A missing file reports its path.
-fn readIntentSource(cli: *const app_mod.App, inv: *const spec.Invocation) !IntentSource {
+pub fn readIntentSource(cli: *const app_mod.App, inv: *const spec.Invocation) !IntentSource {
     if (inv.getOption("intent-json")) |text| {
         return .{ .label = "inline", .bytes = try cli.allocator.dupe(u8, text) };
     }
@@ -183,7 +184,7 @@ fn resaveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     return .{ .data = .{ .object = data }, .exit_code = if (ok) .success else .failure };
 }
 
-fn tail(text: []const u8, max: usize) []const u8 {
+pub fn tail(text: []const u8, max: usize) []const u8 {
     return if (text.len > max) text[text.len - max ..] else text;
 }
 
@@ -263,12 +264,19 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         }
     } else |_| {}
 
+    // Godot refuses to run with no scene to run, but only after the import,
+    // and the reason was left in the log under a generic checks_failed.
+    if (inv.getOption("scene") == null and main_scene == null) {
+        error_details.record(.{ .field = "scene", .hint = "the project has no application/run/main_scene; pass --scene res://<scene>.tscn, or set one with project settings set --section application --key run/main_scene --value res://<scene>.tscn" });
+        return error.NoMainScene;
+    }
+
     const run = try godot_run.run(cli.allocator, cli.io, cli.environ, .{
         .project_root = root,
         .godot = inv.getOption("godot"),
         .scene = inv.getOption("scene"),
         .frames = frames,
-        .resolution = inv.getOption("resolution") orelse project_resolution orelse "640x360",
+        .resolution = inv.getOption("resolution") orelse project_resolution orelse godot_run.default_resolution,
         .physics_fps = physics_fps,
         .capture_dir = inv.getOption("capture-dir") orelse godot_run.default_capture_dir,
         .import = !inv.flag("no-import"),
@@ -328,10 +336,15 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     const clean_exit = run.exit != null and run.exit.? == 0;
     const ok = clean_exit and run.errors.len == 0;
-    const summary = if (ok)
+    // A game that quits itself (a Quit button clicked) writes fewer frames
+    // than were asked for; the summary said all of them ran.
+    const quit_early = !inv.flag("headless") and run.frames_written > 0 and run.frames_written < frames;
+    const summary = if (ok and quit_early)
+        try std.fmt.allocPrint(cli.allocator, "the game quit after {d} of {d} frame(s), with no errors; read {s}", .{ run.frames_written, frames, run.frame orelse run.log_path })
+    else if (ok)
         try std.fmt.allocPrint(cli.allocator, "ran {d} frame(s) with no errors; read {s}", .{ frames, run.frame orelse run.log_path })
     else if (!clean_exit)
-        try std.fmt.allocPrint(cli.allocator, "godot did not exit cleanly (exit {?d}); see stderr_tail and {s}", .{ run.exit, run.log_path })
+        try std.fmt.allocPrint(cli.allocator, "godot did not exit cleanly (exit {?d}); see {s} and {s}", .{ run.exit, if (run.stderr_tail.len != 0) "stderr_tail" else "log_tail", run.log_path })
     else
         try std.fmt.allocPrint(cli.allocator, "{d} error line(s) in {s}; the change is not done", .{ run.errors.len, run.log_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
@@ -1276,7 +1289,7 @@ fn intentOptions(comptime intent_description: []const u8) [5]spec.OptionSpec {
     };
 }
 
-const godot_option = spec.OptionSpec{ .long = "godot", .kind = .path, .description = "Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle" };
+pub const godot_option = spec.OptionSpec{ .long = "godot", .kind = .path, .description = "Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle" };
 const import_options = [_]spec.OptionSpec{
     .{ .long = "project-root", .kind = .path, .description = "Godot project root (default: current directory)" },
     godot_option,
@@ -1292,7 +1305,7 @@ const run_options = [_]spec.OptionSpec{
     godot_option,
     .{ .long = "scene", .kind = .string, .description = "Scene to run (res:// or project-relative); the main scene when omitted" },
     .{ .long = "frames", .kind = .integer, .description = "Frames to run before quitting; 60 is one second, 5 is enough for a static screen", .default_value = "60" },
-    .{ .long = "resolution", .kind = .string, .description = "Window size as WIDTHxHEIGHT; default is the project's display/window/size, else 640x360" },
+    .{ .long = "resolution", .kind = .string, .description = "Window size as WIDTHxHEIGHT; default is the project's display/window/size, else Godot's own 1152x648" },
     .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; the default is under .godot/, which Godot never imports", .default_value = ".godot/godot-cli" },
     .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },
     .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
@@ -1423,7 +1436,7 @@ pub fn commands() spec.CommandSpec {
                     .{
                         .name = "apply",
                         .summary = "Apply input map intent JSON (merge/replace per action)",
-                        .description = "One intent: {\"actions\": [{\"name\": \"move_left\", \"deadzone\": 0.5, \"events\": [...]}]}; each action replaces the one of the same name. Event types: {\"type\": \"key\", \"keycode\": <name or number>, \"physical\": true, \"ctrl\": false, \"shift\": false, \"alt\": false, \"meta\": false}, {\"type\": \"mouse_button\", \"button\": <name or number>}, {\"type\": \"joypad_button\", \"button\": <name or number>}, {\"type\": \"joypad_motion\", \"axis\": <name or number>, \"axis_value\": -1.0}. Keys: " ++ project_input.key_names ++ ". Mouse buttons: " ++ project_input.mouse_button_names ++ ". Joypad buttons: " ++ project_input.joypad_button_names ++ ". Joypad axes: " ++ project_input.joypad_axis_names ++ ".",
+                        .description = "One intent: {\"actions\": [{\"name\": \"move_left\", \"deadzone\": 0.5, \"events\": [...]}]}; each action replaces the one of the same name. Event types: {\"type\": \"key\", \"keycode\": <name or number>, \"physical\": true, \"ctrl\": false, \"shift\": false, \"alt\": false, \"meta\": false} (physical defaults to true: the key's place on the keyboard, so WASD stays put on AZERTY), {\"type\": \"mouse_button\", \"button\": <name or number>}, {\"type\": \"joypad_button\", \"button\": <name or number>}, {\"type\": \"joypad_motion\", \"axis\": <name or number>, \"axis_value\": -1.0}. Keys: " ++ project_input.key_names ++ ". Mouse buttons: " ++ project_input.mouse_button_names ++ ". Joypad buttons: " ++ project_input.joypad_button_names ++ ". Joypad axes: " ++ project_input.joypad_axis_names ++ ".",
                         .options = &input_intent_options,
                         .handler = inputApplyHandler,
                     },
@@ -1479,6 +1492,7 @@ pub fn commands() spec.CommandSpec {
                     .{ .name = "validate", .summary = "Validate known physics engine and scalar values", .options = &project_options, .handler = physicsValidateHandler },
                 },
             },
+            project_export.commands(),
         },
     };
 }

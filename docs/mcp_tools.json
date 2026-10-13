@@ -1,6 +1,6 @@
 {
   "name": "godot-cli",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "server": {
@@ -460,6 +460,7 @@
         "--property",
         "--value",
         "--unique-name",
+        "--index",
         "--output",
         "--project-root",
         "--dry-run"
@@ -546,6 +547,7 @@
       ],
       "options": [
         "--parent",
+        "--index",
         "--output",
         "--project-root",
         "--dry-run"
@@ -559,6 +561,36 @@
           "/root/Main/Hero",
           "--parent",
           "/root/Main",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "scene_node_move",
+      "argv": [
+        "scene",
+        "node",
+        "move",
+        "<file.tscn>",
+        "<node-path>",
+        "--index",
+        "<n>"
+      ],
+      "options": [
+        "--output",
+        "--project-root",
+        "--dry-run"
+      ],
+      "description": "Reorder a node among its siblings; --index counts as move_child does, 0 first and -1 last.",
+      "json_request": {
+        "argv": [
+          "scene",
+          "node",
+          "move",
+          "hud.tscn",
+          "/root/HUD/Bar/Leave",
+          "--index",
+          "-1",
           "--json"
         ]
       }
@@ -2094,6 +2126,159 @@
           "project",
           "physics",
           "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_export_list",
+      "argv": [
+        "project",
+        "export",
+        "list",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "export",
+          "list",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_export_show",
+      "argv": [
+        "project",
+        "export",
+        "show",
+        "--preset",
+        "<name>",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--all-options"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "export",
+          "show",
+          "--preset",
+          "Windows",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_export_options",
+      "argv": [
+        "project",
+        "export",
+        "options",
+        "--platform",
+        "<platform>",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--filter"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "export",
+          "options",
+          "--platform",
+          "Android",
+          "--filter",
+          "keystore",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_export_apply",
+      "argv": [
+        "project",
+        "export",
+        "apply",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--intent",
+        "--intent-json",
+        "--dry-run"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "export",
+          "apply",
+          "--intent",
+          "intents/export_desktop_web.json",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_export_validate",
+      "argv": [
+        "project",
+        "export",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "export",
+          "validate",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_export_build",
+      "argv": [
+        "project",
+        "export",
+        "build",
+        "--preset",
+        "<name>",
+        "--project-root",
+        "<path>"
+      ],
+      "options": [
+        "--output",
+        "--debug",
+        "--pack",
+        "--godot"
+      ],
+      "json_request": {
+        "argv": [
+          "project",
+          "export",
+          "build",
+          "--preset",
+          "Linux",
           "--project-root",
           ".",
           "--json"

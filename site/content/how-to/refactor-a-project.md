@@ -111,8 +111,21 @@ godot-cli scene node reparent scenes/main.tscn /root/Main/Panel --parent /root/M
 
 Both rewrite the `parent=` attributes of every descendant, and `reparent` keeps
 the node's unique id. What neither can do is fix a script that says
-`$Main/Box`, so grep for the old name afterwards — the same class of breakage
-`scene extract` reports for you.
+`$Box`. With `--project-root`, each lists the lines in the scene's scripts that
+still name the node the old way. A `%Box` reference breaks on a rename but
+not on a reparent, because it resolves through the scene's root rather than
+the path.
+
+A reparent puts the node last under its new parent; `--index` puts it
+elsewhere. To change the order without changing the parent, which is draw
+order in 2D and layout order in a container, use `scene node move`:
+
+```bash
+godot-cli scene node move scenes/hud.tscn /root/HUD/Bar/Leave --index -1
+```
+
+`--index` counts as Godot's `move_child` does: 0 is first and -1 is last.
+`scene node add` takes it too.
 
 ## Take a snapshot you can roll back to
 

@@ -26,8 +26,9 @@ loads every schema up front.
 | `scene_validate` | `file` | Ids, references, property types, signal names |
 | `project_run` | `frames`, `click`, `press`, `type` | Run it and look at the frame |
 
-Everything else — renames, reparents, extracts, moves, diffs, the batch runner
-— is a tool too; `tools/list` has all ninety-one.
+Everything else — renames, reparents, extracts, moves, diffs, export presets
+(`project_export_options`, `project_export_apply`, `project_export_build`), the
+batch runner — is a tool too; `tools/list` has all one hundred.
 
 ## A session, start to finish
 

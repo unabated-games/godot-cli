@@ -162,6 +162,15 @@ godot-cli project settings set --project-root . \
 godot-cli project apply --project-root . --intent examples/intents/project_bootstrap.json
 ```
 
+Export presets live in `export_presets.cfg`, which `project export` reads and
+writes the way the editor does. Secrets go to `.godot/export_credentials.cfg`:
+
+```bash
+godot-cli project export options --platform web --project-root . --json
+godot-cli project export apply --project-root . --intent examples/intents/export_desktop_web.json
+godot-cli project export validate --project-root . --json
+```
+
 ## Set up an agent
 
 ```bash

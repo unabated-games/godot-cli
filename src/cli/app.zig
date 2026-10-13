@@ -98,6 +98,24 @@ pub const App = struct {
             return .usage;
         };
 
+        // A group left holding a word that is none of its subcommands was
+        // asked for a command that does not exist. Printing the group's help
+        // and exiting 0 read as success, and a trial took a missing
+        // `scene node move` for a working one.
+        if (command.handler == null and command.children.len > 0 and inv.positionals.len > 0) {
+            var names: std.ArrayList(u8) = .empty;
+            for (command.children, 0..) |child, i| {
+                if (i > 0) names.appendSlice(self.allocator, ", ") catch {};
+                names.appendSlice(self.allocator, child.name) catch {};
+            }
+            const failure = emit.Failure{
+                .kind = "unknown_command",
+                .message = std.fmt.allocPrint(self.allocator, "{s} has no subcommand {s}; it has: {s}", .{ std.mem.join(self.allocator, " ", inv.path) catch "this command", inv.positionals[0], names.items }) catch "unknown command",
+            };
+            emit.emitFailure(self.allocator, self.io, &stdout_buffer, &stderr_buffer, inv.global.json_output, inv.path, failure) catch {};
+            return .usage;
+        }
+
         if (inv.global.help) {
             var stdout_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), self.io, &stdout_buffer);
             help.printCommandHelp(self.allocator, &stdout_file_writer.interface, self.root, inv.path) catch |err| {
@@ -264,6 +282,14 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
         .{ .err = "InvalidPath", .kind = "invalid_path", .message = "the path is not one this command can use" },
         .{ .err = "ResaveOverSource", .kind = "resave_over_source", .message = "project resave writes a copy, never over the file it reads" },
         .{ .err = "UidCacheMissing", .kind = "uid_cache_missing", .message = "the project has no uid cache yet" },
+        .{ .err = "ExportUnknownPlatform", .kind = "unknown_platform", .message = "no export platform with that name" },
+        .{ .err = "ExportUnknownOption", .kind = "unknown_option", .message = "the platform has no export option with that name" },
+        .{ .err = "ExportInvalidValue", .kind = "invalid_value", .message = "the value is not one this export setting takes" },
+        .{ .err = "ExportPresetNotFound", .kind = "preset_not_found", .message = "no export preset with that name" },
+        .{ .err = "ExportUnknownField", .kind = "unknown_field", .message = "the intent has a field export presets do not take" },
+        .{ .err = "ExportDuplicateName", .kind = "duplicate_name", .message = "another export preset already has that name" },
+        .{ .err = "NoMainScene", .kind = "no_main_scene", .message = "the project has no main scene to run" },
+        .{ .err = "ChildIndexOutOfRange", .kind = "child_index_out_of_range", .message = "the parent does not have a child at that index" },
         .{ .err = "BinaryResourceUnreadable", .kind = "binary_resource_unreadable", .message = "the binary resource's header could not be read" },
     };
     for (mapped) |entry| if (std.mem.eql(u8, name, entry.err)) {

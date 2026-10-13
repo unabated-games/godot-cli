@@ -15,12 +15,44 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-10-13
+
 ### Added
 
+- **`project export`: export presets, written the way the editor writes them.** A session asked to set up export settings found nothing in godot-cli for `export_presets.cfg` and had to hand-edit it. That file is easy to break without noticing: Windows must be `Windows Desktop`, a gap in the preset numbering hides every preset after it, and in either case Godot drops the preset on its next save without a word. There are six commands:
+  - `list` and `show` read the presets. Secret values are never shown.
+  - `options --platform <p>` lists a platform's export options with their defaults, types and choices.
+  - `apply` creates, updates, renames and removes presets from an intent. Values are typed by the option, so `"gradle_build/export_format": "AAB"` is written as `1`. A misspelled option is refused with the nearest real name.
+  - `validate` reports what Godot would drop or reject. That includes Android settings that need a Gradle build, such as an AAB, and a keystore missing from this machine.
+  - `build` runs the export, and names the missing template when there is none. When Godot refuses, it returns the reasons Godot lists under its `ERROR:` header, not just the header.
+
+  A hand-written file is repaired rather than trusted, and nothing in it is lost:
+  - A preset past a gap in the numbering is read, where Godot would stop at the gap, and the next write renumbers it.
+  - A platform Godot does not match (`Windows`) is corrected by naming the right one. Its settings stay.
+  - A secret found in the committed file moves to the credentials file, and the result lists it.
+
+  `list` and `show` flag the presets Godot would skip, with the fix. Trial 39 met this exact file before these changes went in. It got everything right, but only by deleting and retyping Windows, and by reading the raw file to recover the Linux settings the tools could not see. Trial 40 ran the same task after them.
+
+  An export folder inside the project gets a `.gdignore`, as Godot recommends. Without one, Godot imported a web build's icons as project files, and the next `all_resources` export would have packed that build into the game.
+
+  Every option a platform has is written, in the editor's order, so opening the project in the editor changes nothing. Secrets go to `.godot/export_credentials.cfg`, where the editor keeps them, not to the committed file. The command warns when no `.gitignore` covers `.godot/`. Export options appear in no class reference, so the option lists come from the editors themselves: `tools/gen_export_options.sh` has Godot 4.7 and 4.8 each save a full preset for every platform. A preset written from scratch for all seven platforms matches each editor's own save byte for byte, and CI has the real editor re-save presets godot-cli wrote and checks nothing changes. Trial 38 set up Windows, Linux, Web and Android presets from a plain-English request, without a hand edit, and built three of them. The fourth failed only for want of an Android SDK, and the trial's findings are the Android checks, the `.gdignore` and the error reasons above.
+
+- **`scene node move --index`, and `--index` on `scene node add` and `scene node reparent`.** Child order is draw order in 2D and layout order in a container, and nothing could set it. A session building a button bar wanted Leave to stay rightmost after adding two buttons. Its only option was to reparent buttons to the parent they already had, which happens to put a node last. `--index` counts as Godot's `move_child` does: 0 is first and -1 is last. An index past the end is refused, and the error says how many children the parent has. The `node_add` and `node_reparent` patch ops take `index` too, and the undo of a reparent now puts the node back in its old place rather than last.
 - **`scene set-property` reports `written`: the text that went into the file.** `value` is still what was given. They differ when a float is given as a whole number: `--value 3` on `light_energy` is written `3.0`. Trial 37 only saw `3.0` by running a diff afterwards. With several properties, as with `value`, it is the first.
 
 ### Fixed
 
+- **`project input apply` wrote events in a layout no editor writes, so the editor's next save rewrote every action.** A session applied 28 actions, and the next `godot --headless --import` rewrote all of them with no change in meaning. Godot 4.8 writes each property of an event on its own line, with a space after the colon, after engine commit d3a753d31d. Godot 4.7 and earlier write an event on one line but end it with a line break, so a list reads `)\n, Object(`. godot-cli wrote neither form. It now writes the layout of the project's version, from `config/features`. A project the editor has never opened names no version and gets 4.8's layout, as the export option lists do. A whole-number deadzone is now written `1.0`, as the editor writes it. The 4.7 and 4.8 editors both re-save the result byte for byte, and tests hold both saves as fixtures. A missing `axis_value`, `type`, `events` or `name` in an input intent now names the field; before, the failure had no details.
+- **A subcommand that does not exist printed its group's help and exited 0.** `scene node move` on a binary without it looked like it ran, with `--json` too, and trial 41 had to notice that the output was help text. It now fails as `unknown_command` (exit 2), and the message lists the subcommands there are.
+- **`project run` ran a project with no window size at 640x360.** Godot opens such a project at 1152x648, so the run showed a smaller window than the game has. In trial 41, a bottom button bar was off-screen in every frame and the run still passed. The fallback is now Godot's own size. The plain `godot` commands in the docs no longer pass `--resolution 640x360` either.
+- **`project run` said it ran every frame when the game quit early.** A click on a Quit button ended the run at frame 12 of 30, and the summary said "ran 30 frame(s)". It now says the game quit after 12 of 30.
+- **`project run` on a project with no main scene failed late and vaguely.** It imported for eight seconds, failed as `checks_failed` with no details, and pointed at a `stderr_tail` it had not returned. Godot's reason was only in the log. It now fails at once as `no_main_scene`, and the hint names `--scene` and the setting. A failed run's summary now points at `log_tail` when there is no stderr to show. Trial 42 found all three, and the input help now says that `physical` defaults to true.
+- **`scene connection add --dry-run` said "connected".** It now says "would connect".
+- **`scene node reparent` warned about script references that still work.** The same session reparented a button to the parent it already had, to move it last. Every `%Act` line in the scene's script came back as "moved to another parent, so the reference no longer resolves". Neither part was true:
+  - The parent was the same, so no path changed. A reparent to the same parent now lists no references, and its summary says the parent did not change.
+  - A `%Name` reference resolves through the scene's root, which a reparent within the scene does not change. A reparent now lists only references by path, `$HUD/Act` and `get_node("HUD/Act")`.
+
+  A rename or a removal still lists `%Name` lines, but only for a node marked `unique_name_in_owner`. Every structural command now matches a reference only up to a name boundary, so `%Act` no longer matches `%Actor`.
 - **A whole number given as text for a float property was still written without `.0`.** `scene set-property --property light_energy --value 2` wrote `light_energy = 2`, where the editor writes `2.0`. So did `--property`/`--value` on `scene node add`, `scene sub add` and `resource new`. 0.26.0 fixed this for JSON numbers (`--properties`, patches and intents) and its notes said `set-property` was covered. Only its `--properties` form was. The text path now asks the class table the same way: a float property keeps its `.0` and an int property drops it. `--raw-value` still writes the text as given.
 - **`scene validate` called a correct `JSON.data` a type mismatch.** The class table typed it as a resource reference, where any value is right, such as `data = {...}`. The engine's source docs include a page for the Variant type itself, so the table generator read "Variant" as a class name. It now maps Variant to "any value". The class-table drift check found this: against a binary's own class reference it could never report clean.
 

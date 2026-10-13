@@ -16,6 +16,7 @@ pub const Error = error{
     CannotRemoveRoot,
     CannotReparentRoot,
     ReparentCycle,
+    ChildIndexOutOfRange,
     HasChildren,
     InvalidNodePath,
     AmbiguousNodeName,
@@ -126,7 +127,7 @@ pub fn addNodeWithOptions(
     if (options.unique_id) |id| try header.setUniqueIdField(allocator, id);
 
     const insert_at = if (options.index) |wanted|
-        try insertIndexForChildPosition(allocator, doc, parent.path, wanted)
+        try node_section_order.insertIndexForChildPosition(allocator, doc, parent.path, wanted)
     else
         try node_section_order.insertIndexForNewChild(allocator, doc, parent.path);
     const section_index = blk: {
@@ -147,32 +148,6 @@ pub fn addNodeWithOptions(
         .path = new_path,
         .parent_attr = parent_attr,
     };
-}
-
-/// Document position for a node that should end up as the parent's `wanted`
-/// child: the section of the child currently in that slot, or the end of the
-/// parent's children when there is none.
-fn insertIndexForChildPosition(
-    allocator: std.mem.Allocator,
-    doc: *const document.Document,
-    parent_viewport_path: []const u8,
-    wanted: usize,
-) Error!usize {
-    var list = try node_tree.collectNodes(allocator, doc);
-    defer list.deinit(allocator);
-
-    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_viewport_path});
-    defer allocator.free(prefix);
-
-    var seen: usize = 0;
-    for (list.nodes) |*node| {
-        if (!std.mem.startsWith(u8, node.path, prefix)) continue;
-        // Direct children only: a grandchild's path has another separator.
-        if (std.mem.indexOfScalar(u8, node.path[prefix.len..], '/') != null) continue;
-        if (seen == wanted) return node.section_index;
-        seen += 1;
-    }
-    return node_section_order.insertIndexForNewChild(allocator, doc, parent_viewport_path);
 }
 
 pub fn setNodeProperty(
@@ -292,12 +267,94 @@ pub fn renameNode(
     return new_path;
 }
 
+pub const ReparentOptions = struct {
+    /// Position among the new parent's children, as Godot's `move_child`
+    /// takes it: from 0, or negative to count from the end (-1 is last).
+    /// Without it the node becomes the last child, as in the editor.
+    index: ?i64 = null,
+};
+
+pub const ReparentResult = struct {
+    /// False for a move within the same parent: every path to the node and
+    /// below it is unchanged, so nothing that names it can have broken.
+    parent_changed: bool,
+    /// Where the node ended up among its parent's children, from 0.
+    index: usize,
+};
+
 pub fn reparentNode(
     allocator: std.mem.Allocator,
     doc: *document.Document,
     node_path: []const u8,
     new_parent_path: []const u8,
 ) Error!void {
+    _ = try reparentNodeWithOptions(allocator, doc, node_path, new_parent_path, .{});
+}
+
+/// Reorder a node among its siblings: `reparentNodeWithOptions` to the parent
+/// it already has.
+pub fn moveNode(allocator: std.mem.Allocator, doc: *document.Document, node_path: []const u8, index: i64) Error!ReparentResult {
+    var list = try node_tree.collectNodes(allocator, doc);
+    defer list.deinit(allocator);
+    const target = node_tree.findByPath(&list, node_path) orelse return error.NodeNotFound;
+    if (target.parent.len == 0) return error.CannotReparentRoot;
+    const last = std.mem.lastIndexOfScalar(u8, target.path, '/') orelse return error.InvalidNodePath;
+    const parent_path = try allocator.dupe(u8, target.path[0..last]);
+    defer allocator.free(parent_path);
+    return reparentNodeWithOptions(allocator, doc, target.path, parent_path, .{ .index = index });
+}
+
+/// The number of `parent_path`'s direct children, leaving out `exclude` (the
+/// node being moved, which does not count against its own new position).
+pub fn childCount(allocator: std.mem.Allocator, doc: *const document.Document, parent_path: []const u8, exclude: ?[]const u8) Error!usize {
+    var list = try node_tree.collectNodes(allocator, doc);
+    defer list.deinit(allocator);
+    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_path});
+    defer allocator.free(prefix);
+    var count: usize = 0;
+    for (list.nodes) |*node| {
+        if (!std.mem.startsWith(u8, node.path, prefix)) continue;
+        if (std.mem.indexOfScalar(u8, node.path[prefix.len..], '/') != null) continue;
+        if (exclude) |path| if (std.mem.eql(u8, node.path, path)) continue;
+        count += 1;
+    }
+    return count;
+}
+
+/// Where `node_path` sits among its parent's children, from 0.
+pub fn childIndexOf(allocator: std.mem.Allocator, doc: *const document.Document, node_path: []const u8) Error!usize {
+    var list = try node_tree.collectNodes(allocator, doc);
+    defer list.deinit(allocator);
+    const target = node_tree.findByPath(&list, node_path) orelse return error.NodeNotFound;
+    const last = std.mem.lastIndexOfScalar(u8, target.path, '/') orelse return error.InvalidNodePath;
+    const parent = target.path[0 .. last + 1];
+    var index: usize = 0;
+    for (list.nodes) |*node| {
+        if (node.section_index >= target.section_index) continue;
+        if (!std.mem.startsWith(u8, node.path, parent)) continue;
+        if (std.mem.indexOfScalar(u8, node.path[parent.len..], '/') != null) continue;
+        index += 1;
+    }
+    return index;
+}
+
+/// A child position as Godot's `move_child` reads it, for a parent that has
+/// `others` children besides the node being placed: 0 to `others`, or
+/// negative from the end, so -1 is last.
+pub fn resolveChildIndex(wanted: i64, others: usize) ?usize {
+    const slots: i64 = @intCast(others + 1);
+    const resolved = if (wanted < 0) slots + wanted else wanted;
+    if (resolved < 0 or resolved >= slots) return null;
+    return @intCast(resolved);
+}
+
+pub fn reparentNodeWithOptions(
+    allocator: std.mem.Allocator,
+    doc: *document.Document,
+    node_path: []const u8,
+    new_parent_path: []const u8,
+    options: ReparentOptions,
+) Error!ReparentResult {
     var list = try node_tree.collectNodes(allocator, doc);
     defer list.deinit(allocator);
 
@@ -315,6 +372,14 @@ pub fn reparentNode(
     if (hasSiblingNameExcluding(&list, parent_for_sibling, target.name, target.path)) {
         return error.DuplicateNodeName;
     }
+
+    const old_parent_path = parentViewportPathConst(target.path, &list) orelse return error.CannotReparentRoot;
+    const parent_changed = !std.mem.eql(u8, old_parent_path, new_parent.path);
+    const others = try childCount(allocator, doc, new_parent.path, target.path);
+    const index: ?usize = if (options.index) |wanted|
+        resolveChildIndex(wanted, others) orelse return error.ChildIndexOutOfRange
+    else
+        null;
 
     const old_prefix = try nodePathPrefixFromViewport(allocator, scene_root.name, target.path);
     defer allocator.free(old_prefix);
@@ -356,7 +421,8 @@ pub fn reparentNode(
         try scene_connections.rewritePaths(allocator, doc, old_prefix, new_prefix);
     }
 
-    try node_section_order.moveSubtreeAfterReparent(allocator, doc, section_index, new_parent.path);
+    try node_section_order.moveSubtreeAfterReparent(allocator, doc, section_index, new_parent.path, index);
+    return .{ .parent_changed = parent_changed, .index = index orelse others };
 }
 
 pub fn findNodeSectionIndex(allocator: std.mem.Allocator, doc: *const document.Document, node_path: []const u8) Error!usize {
@@ -506,6 +572,89 @@ test "add remove rename reparent nodes" {
 
     try std.testing.expectEqual(@as(usize, 1), try removeNode(allocator, &doc, "/root/Main/Sprite", false));
     try std.testing.expectEqual(@as(usize, 1), try removeNode(allocator, &doc, "/root/Main/Hero", false));
+}
+
+fn childOrder(allocator: std.mem.Allocator, doc: *const document.Document, parent_path: []const u8) ![]const u8 {
+    var list = try node_tree.collectNodes(allocator, doc);
+    defer list.deinit(allocator);
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_path});
+    defer allocator.free(prefix);
+    var ordered: std.ArrayList(*const node_tree.NodeInfo) = .empty;
+    defer ordered.deinit(allocator);
+    for (list.nodes) |*node| {
+        if (!std.mem.startsWith(u8, node.path, prefix)) continue;
+        if (std.mem.indexOfScalar(u8, node.path[prefix.len..], '/') != null) continue;
+        try ordered.append(allocator, node);
+    }
+    std.mem.sort(*const node_tree.NodeInfo, ordered.items, {}, struct {
+        fn less(_: void, a: *const node_tree.NodeInfo, b: *const node_tree.NodeInfo) bool {
+            return a.section_index < b.section_index;
+        }
+    }.less);
+    for (ordered.items, 0..) |node, i| {
+        if (i > 0) try out.append(allocator, ' ');
+        try out.appendSlice(allocator, node.name);
+    }
+    return out.toOwnedSlice(allocator);
+}
+
+test "move puts a node at a child index, counted as move_child counts it" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="Bar" type="HBoxContainer"]
+        \\
+        \\[node name="Act" type="Button" parent="."]
+        \\
+        \\[node name="Icon" type="TextureRect" parent="Act"]
+        \\
+        \\[node name="Leave" type="Button" parent="."]
+        \\
+        \\[node name="Sit" type="Button" parent="."]
+        \\
+        \\[node name="Dance" type="Button" parent="."]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    // Leave to the end, the way a reparent to the same parent did it.
+    var result = try moveNode(allocator, &doc, "/root/Bar/Leave", -1);
+    try std.testing.expect(!result.parent_changed);
+    try std.testing.expectEqual(@as(usize, 3), result.index);
+    var order = try childOrder(allocator, &doc, "/root/Bar");
+    try std.testing.expectEqualStrings("Act Sit Dance Leave", order);
+    allocator.free(order);
+
+    // Act, with its child, to second place; the child stays under it.
+    result = try moveNode(allocator, &doc, "/root/Bar/Act", 1);
+    try std.testing.expectEqual(@as(usize, 1), result.index);
+    order = try childOrder(allocator, &doc, "/root/Bar");
+    try std.testing.expectEqualStrings("Sit Act Dance Leave", order);
+    allocator.free(order);
+    order = try childOrder(allocator, &doc, "/root/Bar/Act");
+    try std.testing.expectEqualStrings("Icon", order);
+    allocator.free(order);
+
+    _ = try moveNode(allocator, &doc, "/root/Bar/Dance", 0);
+    order = try childOrder(allocator, &doc, "/root/Bar");
+    try std.testing.expectEqualStrings("Dance Sit Act Leave", order);
+    allocator.free(order);
+
+    // Four children: 0..3 and -1..-4 are the slots, nothing beyond.
+    try std.testing.expectError(error.ChildIndexOutOfRange, moveNode(allocator, &doc, "/root/Bar/Sit", 4));
+    try std.testing.expectError(error.ChildIndexOutOfRange, moveNode(allocator, &doc, "/root/Bar/Sit", -5));
+    try std.testing.expectError(error.CannotReparentRoot, moveNode(allocator, &doc, "/root/Bar", 0));
+
+    // A reparent can name the slot under the new parent too.
+    const moved = try reparentNodeWithOptions(allocator, &doc, "/root/Bar/Act/Icon", "/root/Bar", .{ .index = 0 });
+    try std.testing.expect(moved.parent_changed);
+    order = try childOrder(allocator, &doc, "/root/Bar");
+    try std.testing.expectEqualStrings("Icon Dance Sit Act Leave", order);
+    allocator.free(order);
 }
 
 test "reparent preserves parent-before-child section order" {

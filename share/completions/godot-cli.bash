@@ -30,7 +30,7 @@ _godot_cli_children() {
             echo "add remove"
             ;;
         'scene node')
-            echo "list get add remove rename reparent"
+            echo "list get add remove rename reparent move"
             ;;
         'scene connection')
             echo "list add remove"
@@ -54,7 +54,7 @@ _godot_cli_children() {
             echo "add relink scan list show validate search export"
             ;;
         'project')
-            echo "new import resave run show move apply input settings autoload plugins rendering physics"
+            echo "new import resave run show move apply input settings autoload plugins rendering physics export"
             ;;
         'project input')
             echo "list apply validate"
@@ -73,6 +73,9 @@ _godot_cli_children() {
             ;;
         'project physics')
             echo "list apply validate"
+            ;;
+        'project export')
+            echo "list show options apply validate build"
             ;;
         *)
             echo ""
@@ -128,7 +131,7 @@ _godot_cli_options() {
             echo "--node-name --parent --project-root"
             ;;
         'scene node add')
-            echo "--parent --name --type --property --value --properties --raw-value --unique-name --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--parent --name --type --property --value --properties --raw-value --unique-name --index --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node remove')
             echo "--recursive --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
@@ -137,7 +140,10 @@ _godot_cli_options() {
             echo "--name --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene node reparent')
-            echo "--parent --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--parent --index --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
+            ;;
+        'scene node move')
+            echo "--index --project-root --resource-path --no-prepare-save --output --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene connection list')
             echo "--project-root"
@@ -352,6 +358,24 @@ _godot_cli_options() {
         'project physics validate')
             echo "--project-root"
             ;;
+        'project export list')
+            echo "--project-root"
+            ;;
+        'project export show')
+            echo "--project-root --preset --all-options"
+            ;;
+        'project export options')
+            echo "--project-root --platform --filter"
+            ;;
+        'project export apply')
+            echo "--project-root --intent --intent-json --file --dry-run"
+            ;;
+        'project export validate')
+            echo "--project-root"
+            ;;
+        'project export build')
+            echo "--project-root --preset --output --debug --pack --godot"
+            ;;
         'completions')
             echo "--output"
             ;;
@@ -395,6 +419,7 @@ _godot_cli_takes_args() {
         'scene node remove') return 0 ;;
         'scene node rename') return 0 ;;
         'scene node reparent') return 0 ;;
+        'scene node move') return 0 ;;
         'scene connection list') return 0 ;;
         'scene connection add') return 0 ;;
         'scene connection remove') return 0 ;;
@@ -466,6 +491,12 @@ _godot_cli_takes_args() {
         'project physics list') return 0 ;;
         'project physics apply') return 0 ;;
         'project physics validate') return 0 ;;
+        'project export list') return 0 ;;
+        'project export show') return 0 ;;
+        'project export options') return 0 ;;
+        'project export apply') return 0 ;;
+        'project export validate') return 0 ;;
+        'project export build') return 0 ;;
         'completions') return 0 ;;
         'man') return 0 ;;
         'reference') return 0 ;;

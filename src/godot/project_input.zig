@@ -67,9 +67,10 @@ pub fn applyIntentJson(
 
     const root = parsed.value;
     if (root != .object) return error.InvalidIntent;
-    const actions_value = root.object.get("actions") orelse return error.MissingIntentField;
+    const actions_value = root.object.get("actions") orelse return missing("actions", "{\"actions\": [{\"name\": \"jump\", \"events\": [{\"type\": \"key\", \"keycode\": \"Space\"}]}]}");
     if (actions_value != .array) return error.InvalidIntent;
 
+    const layout = objectLayout(project_godot.engineMinor(doc));
     const input = try doc.ensureSection(allocator, "input");
     var applied: std.ArrayList([]const u8) = .empty;
     errdefer {
@@ -84,7 +85,7 @@ pub fn applyIntentJson(
         if (action_value.* != .object) return error.InvalidIntent;
         const action = action_value.object;
 
-        const name_value = action.get("name") orelse return error.MissingIntentField;
+        const name_value = action.get("name") orelse return missing("name", "each action needs the action's name");
         if (name_value != .string or name_value.string.len == 0) return error.InvalidIntent;
         const action_name = name_value.string;
 
@@ -97,7 +98,7 @@ pub fn applyIntentJson(
         else
             0.5;
 
-        const events_value = action.get("events") orelse return error.MissingIntentField;
+        const events_value = action.get("events") orelse return missing("events", "each action needs a list of events; [] for none");
         if (events_value != .array) return error.InvalidIntent;
 
         var event_strings: std.ArrayList([]const u8) = .empty;
@@ -108,8 +109,9 @@ pub fn applyIntentJson(
 
         for (events_value.array.items) |*event_value| {
             if (event_value.* != .object) return error.InvalidIntent;
-            const event_text = try formatEventFromJson(allocator, event_value.object);
-            try event_strings.append(allocator, event_text);
+            const compact = try formatEventFromJson(allocator, event_value.object);
+            defer allocator.free(compact);
+            try event_strings.append(allocator, try layoutObject(allocator, compact, layout));
         }
 
         const block = try formatActionBlock(allocator, deadzone, event_strings.items);
@@ -186,10 +188,87 @@ fn findObjectEnd(text: []const u8, start: usize) ?usize {
     return null;
 }
 
+/// A required intent field is absent: say which, so the fix is one edit.
+fn missing(comptime field: []const u8, comptime hint: []const u8) Error {
+    error_details.record(.{ .field = field, .hint = hint });
+    return error.MissingIntentField;
+}
+
 fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayList(u8), comptime fmt: []const u8, args: anytype) Error!void {
     const text = try std.fmt.allocPrint(allocator, fmt, args);
     defer allocator.free(text);
     try out.appendSlice(allocator, text);
+}
+
+/// How the editor writes an `Object(...)` value in project.godot. Godot 4.8
+/// pretty-prints it, one property per line with a space after each colon
+/// (engine commit d3a753d31d, "Pretty print Object variants"); earlier
+/// versions write it on one line and end it with a newline, so an action's
+/// events read `...)\n, Object(...)\n]`. Writing the other version's form
+/// left the file to be rewritten, unchanged in meaning, on the editor's next
+/// save.
+pub const ObjectLayout = enum { one_line, pretty };
+
+/// The layout for a project's engine version. A project the editor never
+/// opened names none and gets the newest editor's, as the export option
+/// tables do.
+pub fn objectLayout(minor: ?[]const u8) ObjectLayout {
+    const text = minor orelse return .pretty;
+    var parts = std.mem.splitScalar(u8, text, '.');
+    const major = std.fmt.parseInt(u32, parts.next() orelse return .pretty, 10) catch return .pretty;
+    const minor_number = std.fmt.parseInt(u32, parts.next() orelse return .pretty, 10) catch return .pretty;
+    if (major > 4 or (major == 4 and minor_number >= 8)) return .pretty;
+    return .one_line;
+}
+
+/// Re-lay a one-line `Object(Class,"key":value,...)` in `layout`. The input
+/// is what `formatEventFromJson` builds, so its keys are plain names and a
+/// comma between properties is the only one outside brackets and strings.
+fn layoutObject(allocator: std.mem.Allocator, compact: []const u8, layout: ObjectLayout) Error![]const u8 {
+    const prefix = "Object(";
+    if (!std.mem.startsWith(u8, compact, prefix) or compact.len < prefix.len + 1 or compact[compact.len - 1] != ')') return error.InvalidEvent;
+    const inner = compact[prefix.len .. compact.len - 1];
+
+    var parts: std.ArrayList([]const u8) = .empty;
+    defer parts.deinit(allocator);
+    var depth: usize = 0;
+    var in_string = false;
+    var start: usize = 0;
+    var i: usize = 0;
+    while (i < inner.len) : (i += 1) {
+        const c = inner[i];
+        if (in_string) {
+            if (c == '\\') i += 1 else if (c == '"') in_string = false;
+            continue;
+        }
+        switch (c) {
+            '"' => in_string = true,
+            '(', '[', '{' => depth += 1,
+            ')', ']', '}' => depth -|= 1,
+            ',' => if (depth == 0) {
+                try parts.append(allocator, inner[start..i]);
+                start = i + 1;
+            },
+            else => {},
+        }
+    }
+    try parts.append(allocator, inner[start..]);
+
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try out.appendSlice(allocator, prefix);
+    try out.appendSlice(allocator, parts.items[0]);
+    try out.append(allocator, ',');
+    if (layout == .pretty) try out.append(allocator, '\n');
+    for (parts.items[1..], 0..) |property, index| {
+        if (index > 0) try out.appendSlice(allocator, if (layout == .pretty) ",\n" else ",");
+        const colon = std.mem.indexOf(u8, property, "\":") orelse return error.InvalidEvent;
+        try out.appendSlice(allocator, property[0 .. colon + 2]);
+        if (layout == .pretty) try out.append(allocator, ' ');
+        try out.appendSlice(allocator, property[colon + 2 ..]);
+    }
+    try out.appendSlice(allocator, if (layout == .pretty) "\n)" else ")\n");
+    return out.toOwnedSlice(allocator);
 }
 
 fn formatActionBlock(allocator: std.mem.Allocator, deadzone: f64, events: []const []const u8) Error![]u8 {
@@ -197,7 +276,10 @@ fn formatActionBlock(allocator: std.mem.Allocator, deadzone: f64, events: []cons
     errdefer out.deinit(allocator);
 
     try out.appendSlice(allocator, "{\n");
-    try appendFmt(allocator, &out, "\"deadzone\": {d},\n", .{deadzone});
+    // A whole-number deadzone is a float to Godot, written `1.0`.
+    const deadzone_text = variant.value.formatScalarFloat(allocator, deadzone) catch return error.OutOfMemory;
+    defer allocator.free(deadzone_text);
+    try appendFmt(allocator, &out, "\"deadzone\": {s},\n", .{deadzone_text});
     try out.appendSlice(allocator, "\"events\": [");
     for (events, 0..) |event, index| {
         if (index > 0) try out.appendSlice(allocator, ", ");
@@ -208,7 +290,7 @@ fn formatActionBlock(allocator: std.mem.Allocator, deadzone: f64, events: []cons
 }
 
 fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) Error![]const u8 {
-    const type_value = event.get("type") orelse return error.MissingIntentField;
+    const type_value = event.get("type") orelse return missing("type", "event types: key, mouse_button, joypad_button, joypad_motion");
     if (type_value != .string) return error.InvalidIntent;
 
     if (std.mem.eql(u8, type_value.string, "key")) {
@@ -308,14 +390,14 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
             if (v == .string) break :blk try resolveJoypadAxis(v.string);
             if (v == .integer) break :blk @as(i32, @intCast(v.integer));
             return error.InvalidIntent;
-        } else return error.MissingIntentField;
+        } else return missing("axis", "a joypad axis name, such as left_x or trigger_right, or a JoyAxis number");
         const axis_value = if (event.get("axis_value")) |v| blk: {
             switch (v) {
                 .float => |f| break :blk f,
                 .integer => |n| break :blk @as(f64, @floatFromInt(n)),
                 else => return error.InvalidIntent,
             }
-        } else return error.MissingIntentField;
+        } else return missing("axis_value", "the direction this binding reads, -1.0 or 1.0");
         // axis_value is a float property, and Godot's VariantWriter appends
         // .0 to a whole float; without this a re-save in the editor rewrites
         // every joypad binding godot-cli wrote.
@@ -669,4 +751,39 @@ test "mouse buttons are bindable, with the property shape Godot writes" {
     var seen = [_]bool{false} ** 10;
     for (mouse_buttons) |button| seen[@intCast(button.index)] = true;
     for (seen[1..]) |ok| try std.testing.expect(ok);
+}
+
+test "applied actions come out as each editor's own save, byte for byte" {
+    // Each fixture is project.godot as that editor saved it after this
+    // intent was applied. Taking its [input] away and applying the intent
+    // again has to give the same bytes, or the next editor save rewrites
+    // every action (a session saw 28 of them change, with no change in
+    // meaning).
+    const intent =
+        \\{"actions": [
+        \\  {"name": "jump", "events": [{"type": "key", "keycode": "Space", "physical": true}, {"type": "joypad_button", "button": "a"}]},
+        \\  {"name": "fire", "deadzone": 1, "events": [{"type": "mouse_button", "button": "left"}, {"type": "key", "keycode": "Enter", "ctrl": true}]},
+        \\  {"name": "look", "deadzone": 0.2, "events": [{"type": "joypad_motion", "axis": "right_x", "axis_value": 1}]},
+        \\  {"name": "none", "events": []}
+        \\]}
+    ;
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    for ([_][]const u8{ "test_fixtures/input/godot_4_7/project.godot", "test_fixtures/input/godot_4_8/project.godot" }) |path| {
+        const saved = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, arena, .unlimited);
+        var doc = try project_godot.parseBytes(arena, saved);
+        const input_index = doc.sectionIndex("input").?;
+        _ = doc.sections.orderedRemove(input_index);
+        _ = try applyIntentJson(arena, &doc, intent);
+        try std.testing.expectEqualStrings(saved, try project_godot.render(arena, &doc));
+    }
+}
+
+test "the Object layout follows the project's engine version" {
+    try std.testing.expectEqual(ObjectLayout.one_line, objectLayout("4.7"));
+    try std.testing.expectEqual(ObjectLayout.one_line, objectLayout("4.3"));
+    try std.testing.expectEqual(ObjectLayout.pretty, objectLayout("4.8"));
+    try std.testing.expectEqual(ObjectLayout.pretty, objectLayout("4.10"));
+    try std.testing.expectEqual(ObjectLayout.pretty, objectLayout(null));
 }

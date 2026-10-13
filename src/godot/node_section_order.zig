@@ -97,12 +97,41 @@ pub fn insertIndexForNewChild(
     return insert_at;
 }
 
-/// After reparenting, move `subtree_root_section_index` and all descendants to sit under `new_parent_path`.
+/// Document position for a node that should end up as the parent's `wanted`
+/// child: the section of the child currently in that slot, or the end of the
+/// parent's children when there is none.
+pub fn insertIndexForChildPosition(
+    allocator: std.mem.Allocator,
+    doc: *const document.Document,
+    parent_viewport_path: []const u8,
+    wanted: usize,
+) Error!usize {
+    var list = try node_tree.collectNodes(allocator, doc);
+    defer list.deinit(allocator);
+
+    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_viewport_path});
+    defer allocator.free(prefix);
+
+    var seen: usize = 0;
+    for (list.nodes) |*node| {
+        if (!std.mem.startsWith(u8, node.path, prefix)) continue;
+        // Direct children only: a grandchild's path has another separator.
+        if (std.mem.indexOfScalar(u8, node.path[prefix.len..], '/') != null) continue;
+        if (seen == wanted) return node.section_index;
+        seen += 1;
+    }
+    return insertIndexForNewChild(allocator, doc, parent_viewport_path);
+}
+
+/// After reparenting, move `subtree_root_section_index` and all descendants to
+/// sit under `new_parent_path`: as its last child, or as its `index`th, counted
+/// among the children other than the moved node.
 pub fn moveSubtreeAfterReparent(
     allocator: std.mem.Allocator,
     doc: *document.Document,
     subtree_root_section_index: usize,
     new_parent_viewport_path: []const u8,
+    index: ?usize,
 ) Error!void {
     var list = try node_tree.collectNodes(allocator, doc);
     defer list.deinit(allocator);
@@ -130,8 +159,8 @@ pub fn moveSubtreeAfterReparent(
     errdefer for (sections.items) |*section| section.deinit(allocator);
 
     var shift: usize = 0;
-    for (block.items) |index| {
-        var removed = try document.removeSection(doc, index - shift);
+    for (block.items) |block_index| {
+        var removed = try document.removeSection(doc, block_index - shift);
         sections.append(allocator, removed) catch |err| {
             removed.deinit(allocator);
             return err;
@@ -139,7 +168,10 @@ pub fn moveSubtreeAfterReparent(
         shift += 1;
     }
 
-    const insert_at = try insertIndexForNewChild(allocator, doc, new_parent_viewport_path);
+    const insert_at = if (index) |wanted|
+        try insertIndexForChildPosition(allocator, doc, new_parent_viewport_path, wanted)
+    else
+        try insertIndexForNewChild(allocator, doc, new_parent_viewport_path);
     var offset: usize = 0;
     while (sections.items.len > 0) {
         var section = sections.orderedRemove(0);
@@ -335,7 +367,7 @@ test "move subtree after reparent" {
     const section = &doc.sections.items[player_idx];
     try section.header.setStringField(allocator, "parent", "Playfield");
 
-    try moveSubtreeAfterReparent(allocator, &doc, player_idx, "/root/Main/Playfield");
+    try moveSubtreeAfterReparent(allocator, &doc, player_idx, "/root/Main/Playfield", null);
 
     const playfield_idx = document.findSectionIndexByNodeName(&doc, "Playfield").?;
     const player_after = document.findSectionIndexByNodeName(&doc, "Player").?;

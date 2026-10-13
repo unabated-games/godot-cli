@@ -33,7 +33,7 @@ After a scene change, `scene validate` proves the file is well formed. To see th
 ```bash
 mkdir -p capture && touch capture/.gdignore          # Godot skips this folder, so frames are not imported
 godot --headless --path . --import --quit          # once after adding files, so Godot assigns UIDs
-godot --path . --resolution 640x360 --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
+godot --path . --write-movie capture/shot.png --quit-after 60 --log-file capture/godot.log --no-header
 ```
 
 Read the highest-numbered `capture/shot*.png` and `capture/godot.log`. Sixty frames is one second at 60 FPS, long enough for gravity and a camera to settle; five is enough for a static UI screen. The log holds every `print()`, `push_warning`, `push_error`, and script error with a backtrace; any `ERROR` or `SCRIPT ERROR` line means the change is not done. Without a display, drop `--write-movie` and add `--headless` to get the log alone.

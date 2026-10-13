@@ -48,6 +48,24 @@ CI reports drift between that table and the engine it tests against, from
 `scene validate` enforces, so it is a deliberate change. The table carries a
 `godot_version`, and before that script existed nothing read it.
 
+The export option tables in `src/godot/export_options/` are generated as well,
+one per Godot minor version, but from an editor binary rather than source:
+export options are defined in each platform's C++ and appear in no class
+reference. The script has the editor save a full preset for every platform and
+reads the table from that save. `KEEP_SAVE` keeps the save itself, which is the
+golden file the writer's tests compare against byte for byte:
+
+```bash
+GODOT=/path/to/godot KEEP_SAVE=test_fixtures/export/godot_4_8 \
+  tools/gen_export_options.sh > src/godot/export_options/godot_4_8.zig
+zig fmt src/godot/export_options/godot_4_8.zig
+```
+
+A new minor version needs its file added to `tables` in
+`src/godot/export_options.zig`. CI runs `tools/check_export_options.sh` against
+each engine it tests: it reports table drift, and whether the editor re-saves
+presets godot-cli wrote without changing a byte.
+
 The Godot round-trip suite needs a Godot 4.7 install:
 
 ```bash
