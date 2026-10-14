@@ -119,7 +119,7 @@ that costs a debugging session is a value of the wrong type:
 ```
 
 Property types and signal names come from a table generated out of Godot's own
-`doc/classes` XML — 520 classes, 3933 properties, 377 signals — so `pressd` for
+`doc/classes` XML (716 classes, 4422 properties, 397 signals), so `pressd` for
 `pressed` is caught before the run, not during it. The checks stay quiet about
 anything the table does not cover: theme overrides, `metadata/*`, a script's
 exported variables, and connections from a scripted node.

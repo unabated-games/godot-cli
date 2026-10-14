@@ -28,14 +28,15 @@ Validation exits 1 when it finds an error, and returns every issue with a line n
 | `unknown_signal` | error | A connection names a signal the emitting class does not have, and its script does not declare |
 | `unknown_property` | warning | A property the class does not have, on a node with no script and no instance: Godot keeps the line and ignores it |
 | `connection_node_missing` | error | A connection names a node that is not in the scene |
+| `property_not_stored` | warning | A 3D node placed with `position`, `rotation`, `scale` or the like, which the editor's next save turns into `transform` |
 | `control_under_node2d` | warning | A `Control` under a `Node2D` has no parent rect, so anchors give it no size and it may draw nothing |
 | `dangling_ext_resource` | error | A property references an `ExtResource` id nothing declares |
 
 ### The checks that read the file the way Godot would
 
 `property_type_mismatch`, `unknown_signal` and `unknown_property` come from a
-table generated out of Godot's own class reference — 520 classes, 3933
-properties, 377 signals — so they catch the mistakes that otherwise cost a run
+table generated out of Godot's own class reference (716 classes, 4422
+properties, 397 signals), so they catch the mistakes that otherwise cost a run
 to find:
 
 ```text
@@ -110,7 +111,7 @@ godot-cli scene diff before.tscn after.tscn --json
 godot-cli scene diff before.tscn after.tscn --properties --json
 ```
 
-Without `--properties` you get added, removed, and retyped nodes, which is the level to review a structural change at. With it you also get changed property values, which is what you want when the tree is the same and something moved.
+Without `--properties` you get added, removed, and retyped nodes, which is the level to review a structural change at. With it you also get changed property values, which is what you want when the tree is the same and something moved. Both levels list the resources too: ext_resources added, removed, or changed in type or uid, and sub_resources by id. A node whose `unique_id` changed at the same path is reported as `unique_id_changed`.
 
 The diff is between two files, so keep a copy before an edit, or use a snapshot:
 

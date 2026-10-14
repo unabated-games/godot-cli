@@ -79,7 +79,7 @@ Copy-paste intents ship in `$GODOT_CLI_HOME/examples/intents/`.
 godot-cli scene apply scenes/main.tscn --patch player.json --project-root . --dry-run --json
 ```
 
-The result carries `preview_diff`, the node tree you would end up with. Add `--preview-properties` to include property-level changes. Nothing is written.
+The result carries `preview_diff`, the node tree you would end up with, and `preview_sections`, the exact text of every section the write would add or change. Add `--preview-properties` to include property-level changes. Nothing is written. A single `scene node add` or `scene instance add` with `--dry-run` returns its section as `section_text`.
 
 ## Undo
 

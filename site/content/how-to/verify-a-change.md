@@ -144,6 +144,20 @@ autoload singletons, so a scene whose script names `GameState` runs normally.
 `.godot/godot-cli/`, which carries a `.gdignore`, so Godot never imports the
 PNGs as textures. Only the last frame is kept unless you pass `--keep-frames`.
 
+**The window is the project's size.** A run uses `display/window/size` from
+`project.godot`, and Godot's own 1152x648 when the project sets none, so the
+frame shows what a player would see. `--resolution` overrides it.
+
+**A 3D scene needs a camera to show anything.** Without a `Camera3D`, the frame
+is only the clear colour, and the run proves the scene loads, not how it looks.
+The result says so with `no_camera_3d: true`. The `camera_3d` recipe adds one
+aimed at a point.
+
+**A project with no main scene needs `--scene`.** The run fails at once as
+`no_main_scene`, and the hint gives both fixes: pass `--scene res://...`, or set
+`application/run/main_scene`. A settings-only change, such as an input map, can
+be checked against any scene this way.
+
 ## Running it by hand
 
 `project run` is a wrapper around commands you can type yourself, which is

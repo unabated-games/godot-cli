@@ -150,6 +150,8 @@ godot-cli mcp --project-root .
 
 In that mode the server adds `--project-root .` to every call that accepts it, drops the option from the schemas so the agent cannot get it wrong, and refuses any path argument that resolves outside the project before the command runs.
 
+A client that loads every tool schema up front pays for all one hundred tools. `--toolset core` serves the thirteen that cover most sessions instead, and the `godot-cli://docs/mcp-cheatsheet` resource lists the surface in tool-and-arguments form.
+
 The MCP surface is not writes only: `project_run` imports the project, runs it, and returns the last frame **as an image** along with the log's last lines and every error. An agent with no shell can therefore finish the loop — author, validate, run, look at the screen — and can click a button (`click`) or hold an input action (`press`) to prove the wiring works. That is the difference between an agent that reports a HUD is done and one that has seen it.
 
 Claude Code takes the command line directly, or the same shape in `.mcp.json` at the project root:

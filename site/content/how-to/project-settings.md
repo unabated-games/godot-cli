@@ -63,15 +63,26 @@ godot-cli project input apply --project-root . --intent input.json --json
 applied 4 input action(s) (4 added, 0 replaced)
 ```
 
-What lands in the file is the full serialized event Godot expects:
+What lands in the file is the full serialized event Godot expects, in the
+layout of the project's Godot version. For Godot 4.8:
 
 ```text
 [input]
 move_left={
 "deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,...,"physical_keycode":65,...)]
+"events": [Object(InputEventKey,
+"resource_local_to_scene": false,
+"resource_name": "",
+"device": -1,
+...
+"physical_keycode": 65,
+...
+)]
 }
 ```
+
+Godot 4.7 and earlier write each event on one line instead. godot-cli reads the
+version from `config/features`, so the editor's next save changes nothing.
 
 Applying the same intent twice replaces each action by name instead of appending a second copy, so re-running after an edit is safe. A ready-made WASD intent ships at `$GODOT_CLI_HOME/examples/intents/wasd_movement.json`.
 

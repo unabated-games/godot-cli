@@ -38,7 +38,12 @@ godot-cli uid encode 1350303725746704497
 godot-cli uid decode uid://tidkmw585t0t
 godot-cli uid create-for-path --project-name MyGame --resource-path res://main.tscn main.tscn
 godot-cli uid cache list --project-root .
+godot-cli uid read assets/level.res
 ```
+
+`uid read` takes the UID a file records from the file itself: a scene or
+resource header, binary `.res` and `.scn` included, a script's `.uid` sidecar,
+or an asset's `.import` file. It needs no cache, so it works on a fresh clone.
 
 `.godot/uid_cache.bin` is Godot's own index of UIDs to paths. godot-cli reads it to resolve references, to detect a stale `uid://`, and to repair a catalog manifest whose scene moved.
 
@@ -53,6 +58,20 @@ godot-cli scene compare-godot scenes/main.tscn scenes/main_godot_saved.tscn --js
 ```json
 { "matches_godot_save": true, "summary": "matches: scenes/main.tscn vs Godot reference scenes/main_godot_saved.tscn" }
 ```
+
+You do not need the editor open to get that reference. `project resave` has
+Godot load the file headless and save a copy under `.godot/godot-cli/resave/`,
+never over the file itself:
+
+```bash
+godot-cli project resave scenes/main.tscn --project-root . --json
+```
+
+A match proves the text is what Godot writes for that content. It does not
+prove the editor would keep every line: Godot loads and saves the scene without
+building it, so a property the editor would replace survives. One such line is
+`position` on a 3D node, which the editor stores as `transform`.
+`scene validate` warns about that case as `property_not_stored`.
 
 `scene round-trip <path> --dry-run` is the weaker, faster check: parse the file, write it back, parse again, and confirm the structure survived.
 
@@ -71,15 +90,18 @@ Anything it cannot parse is preserved verbatim and reported with `parse_error` i
 refactoring base and instantiated scenes. Earlier 4.x releases never wrote that
 field and are not supported.
 
-### Why a script's `ProjectSettings.save()` looks different
+### The `[input]` layout depends on the Godot version
 
-Calling `ProjectSettings.save()` from a GDScript can rewrite the `[input]`
-section with each event property on its own line and a space after the colon.
-That is Godot's **Dictionary** writer, not its object writer: the engine writes
-an `Object(...)` inline, with no spaces, which is the form godot-cli produces
-and the form the editor saves. The two parse identically — same events, same
-values — so a section that looks reformatted is not a fidelity problem, and
-matching the dictionary shape would move godot-cli *away* from what the editor
-writes.
+Input events are `Object(...)` values, and Godot 4.8 changed how it writes
+them (engine commit [`d3a753d31d`](https://github.com/godotengine/godot/commit/d3a753d31d)).
+Godot 4.8 puts each property of an event on its own line, with a space after
+the colon. Godot 4.7 and earlier write an event on one line, with no spaces,
+and end it with a line break. Both parse to the same events.
+
+`project input apply` writes the layout of the project's own version, read from
+`config/features` in `project.godot`, so the editor's next save leaves the
+section alone. A project the editor has never opened names no version, and gets
+the 4.8 layout. The 4.7 and 4.8 editors' own saves are test fixtures, and
+godot-cli's output matches each byte for byte.
 
 The round-trip suite runs against Godot 4.7 and 4.7.2, which must pass, and against the newest 4.8 prerelease, which is reported but does not block a push. It passes on all three today. Text scene format 3 is what Godot 4 writes. Binary `.scn` and `.res` files are not supported.
