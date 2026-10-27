@@ -29,7 +29,7 @@ The installer downloads the release archive for your platform, checks it against
 
 Add the `source` line to `~/.zshrc` or `~/.bashrc` to keep it.
 
-To pin a version, pass `--version 0.12.0`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.16 instead of downloading.
+To pin a version, pass `--version 0.12.0`. To install somewhere else, pass `--prefix /opt/godot-cli`. From a checkout, `./install.sh` builds with Zig 0.17 instead of downloading.
 
 ### Windows
 

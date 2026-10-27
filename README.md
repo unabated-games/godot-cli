@@ -4,7 +4,7 @@
 [![Latest release](https://img.shields.io/github/v/release/unabated-games/godot-cli?sort=semver)](https://github.com/unabated-games/godot-cli/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Godot 4.6+](https://img.shields.io/badge/godot-4.6%2B-478cbf.svg)](https://godotengine.org/)
-[![Zig 0.16](https://img.shields.io/badge/zig-0.16-f7a41d.svg)](https://ziglang.org/)
+[![Zig 0.17](https://img.shields.io/badge/zig-0.17-f7a41d.svg)](https://ziglang.org/)
 
 Read, edit, and author Godot scene and resource files from the command line,
 without launching the editor.
@@ -142,7 +142,7 @@ together.
 
 ## Building
 
-Requires [Zig](https://ziglang.org/) 0.16.0 or later. A Godot install is needed
+Requires [Zig](https://ziglang.org/) 0.17.0 or later. A Godot install is needed
 only to run the game or the round-trip suite; the files godot-cli writes target
 **Godot 4.6 and later**, since every node line carries the `unique_id` the
 engine added in 4.6.

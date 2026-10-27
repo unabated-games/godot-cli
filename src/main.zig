@@ -16,5 +16,5 @@ pub fn main(init: std.process.Init) !void {
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     const exit_code = cli.run(args);
-    std.process.exit(@intFromEnum(exit_code));
+    std.process.exit(@backingInt(exit_code));
 }

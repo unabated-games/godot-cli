@@ -704,10 +704,10 @@ test "joypad names cover every JoyButton and JoyAxis" {
     }
 
     // Every index in Godot's enum is reachable by name, 0 to 25 and 0 to 5.
-    var seen_buttons = [_]bool{false} ** 26;
+    var seen_buttons: [26]bool = @splat(false);
     for (joypad_buttons) |button| seen_buttons[@intCast(button.index)] = true;
     for (seen_buttons) |ok| try std.testing.expect(ok);
-    var seen_axes = [_]bool{false} ** 6;
+    var seen_axes: [6]bool = @splat(false);
     for (joypad_axes) |axis| seen_axes[@intCast(axis.index)] = true;
     for (seen_axes) |ok| try std.testing.expect(ok);
 }
@@ -748,7 +748,7 @@ test "mouse buttons are bindable, with the property shape Godot writes" {
     }
 
     // Every MouseButton in the enum is reachable by name, 1 to 9.
-    var seen = [_]bool{false} ** 10;
+    var seen: [10]bool = @splat(false);
     for (mouse_buttons) |button| seen[@intCast(button.index)] = true;
     for (seen[1..]) |ok| try std.testing.expect(ok);
 }

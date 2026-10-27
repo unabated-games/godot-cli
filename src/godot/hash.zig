@@ -52,7 +52,7 @@ test "byte hashes match the widened code-unit path" {
     const cases = [_][]const u8{
         "",
         "res://main.tscn",
-        "res://" ++ "a" ** 600 ++ ".tscn", // longer than the old 512-unit buffer
+        "res://" ++ @as([600]u8, @splat('a')) ++ ".tscn", // longer than the old 512-unit buffer
         "res://ünïcødé/scene.tscn",
     };
     for (cases) |bytes| {

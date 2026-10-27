@@ -18,7 +18,7 @@ author them in the editor**, persisted in `.tscn`. Features that encourage runti
 
 ## Development setup
 
-You need [Zig](https://ziglang.org/) 0.16.0 or later. Nothing else is required for
+You need [Zig](https://ziglang.org/) 0.17.0 or later. Nothing else is required for
 the unit tests.
 
 ```bash

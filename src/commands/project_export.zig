@@ -207,7 +207,7 @@ fn optionsHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     var options = std.json.Array.init(allocator);
     for (platform.options) |option| {
-        if (filter) |f| if (std.ascii.indexOfIgnoreCase(option.name, f) == null) continue;
+        if (filter) |f| if (std.ascii.findIgnoreCase(option.name, f) == null) continue;
         var object: std.json.ObjectMap = .{};
         try object.put(allocator, "name", .{ .string = option.name });
         try object.put(allocator, "default", try jsonOf(allocator, option.default));
@@ -223,7 +223,7 @@ fn optionsHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     var keys = std.json.Array.init(allocator);
     for (loaded.table.preset_keys) |key| {
         if (std.mem.eql(u8, key.name, "name") or std.mem.eql(u8, key.name, "platform")) continue;
-        if (filter) |f| if (std.ascii.indexOfIgnoreCase(key.name, f) == null) continue;
+        if (filter) |f| if (std.ascii.findIgnoreCase(key.name, f) == null) continue;
         var object: std.json.ObjectMap = .{};
         try object.put(allocator, "name", .{ .string = key.name });
         try object.put(allocator, "default", try jsonOf(allocator, key.default));

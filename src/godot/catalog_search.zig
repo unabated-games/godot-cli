@@ -154,12 +154,12 @@ fn scoreManifestText(entry: *const catalog_scan.ManifestEntry, query: []const u8
 
 fn scoreText(haystack: []const u8, needle: []const u8) usize {
     if (haystack.len == 0 or needle.len == 0) return 0;
-    if (std.ascii.indexOfIgnoreCase(haystack, needle) != null) return 2;
+    if (std.ascii.findIgnoreCase(haystack, needle) != null) return 2;
     var score: usize = 0;
     var tokens = std.mem.tokenizeAny(u8, needle, " \t");
     while (tokens.next()) |token| {
         if (token.len == 0) continue;
-        if (std.ascii.indexOfIgnoreCase(haystack, token) != null) score += 1;
+        if (std.ascii.findIgnoreCase(haystack, token) != null) score += 1;
     }
     return score;
 }

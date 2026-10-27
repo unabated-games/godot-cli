@@ -269,7 +269,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     const game_run = try runGodot(allocator, environ, options.project_root, argv);
     result.exit = exitCode(game_run.term);
     result.signal = switch (game_run.term) {
-        .signal => |sig| std.fmt.allocPrint(allocator, "{d}", .{@intFromEnum(sig)}) catch return error.OutOfMemory,
+        .signal => |sig| std.fmt.allocPrint(allocator, "{d}", .{@backingInt(sig)}) catch return error.OutOfMemory,
         else => null,
     };
     result.stderr_tail = try tail(allocator, game_run.stderr, 20);

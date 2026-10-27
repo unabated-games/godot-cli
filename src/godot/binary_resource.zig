@@ -285,7 +285,7 @@ test "a big-endian header reads the same" {
     // FLAG_SAVE_BIG_ENDIAN: the first two fields stay little-endian, the rest flip.
     const bytes = "RSRC" ++ "\x01\x00\x00\x00" ++ "\x00\x00\x00\x00" ++
         "\x00\x00\x00\x04" ++ "\x00\x00\x00\x08" ++ "\x00\x00\x00\x06" ++
-        "\x00\x00\x00\x05" ++ "Mesh\x00" ++ "\x00" ** 8 ++ "\x00\x00\x00\x03" ++
+        "\x00\x00\x00\x05" ++ "Mesh\x00" ++ @as([8]u8, @splat(0)) ++ "\x00\x00\x00\x03" ++
         "\x23\xfa\x62\x6b\xa9\x55\x1c\x7f";
     var header = try parseHeader(allocator, bytes);
     defer header.deinit(allocator);

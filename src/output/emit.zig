@@ -32,7 +32,7 @@ pub fn emitSuccess(
     // builds, which is what the test suite runs, a result carrying invalid
     // UTF-8 is reported as an internal failure instead of being printed.
     var result = result_in;
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         if (firstInvalidString(result.data) orelse firstInvalidStringIn(result.messages)) |bad| {
             var stderr_buffer: [512]u8 = undefined;
             var stderr_file_writer = std.Io.File.Writer.initStreaming(std.Io.File.stderr(), io, &stderr_buffer);
@@ -90,7 +90,7 @@ pub fn emitFailure(
 
     // Failure details are recorded deep in handlers and can borrow memory a
     // caller frees on the way out; Debug builds refuse to print them.
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         if (firstInvalidString(failure.details)) |bad| {
             var stderr_buffer_local: [512]u8 = undefined;
             var stderr_local = std.Io.File.Writer.initStreaming(std.Io.File.stderr(), io, &stderr_buffer_local);

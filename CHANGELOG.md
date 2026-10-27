@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Changed
+
+- **godot-cli builds with Zig 0.17.0, and no longer with 0.16.** This only matters when building from source: release binaries and the installer are unchanged. The port was small: `@splat` in place of the removed `**` array repetition, `std.ascii.findIgnoreCase`, the lowercase `builtin.mode` tags, `addPassthruArgs` in `build.zig`, and `zig fmt`'s own `@backingInt` upgrade. The same 275 tests pass, all six release targets build, the Godot 4.7 and 4.8 round trips pass, and the Windows build runs under wine.
+
 ## [0.27.0] — 2026-10-13
 
 ### Added

@@ -385,7 +385,7 @@ else
 
   if [[ "$DO_BUILD" -eq 1 ]]; then
     command -v zig >/dev/null 2>&1 ||
-      die "zig not found on PATH. Install Zig 0.16+, pass --no-build with a built binary, or use --from-release."
+      die "zig not found on PATH. Install Zig 0.17+, pass --no-build with a built binary, or use --from-release."
     echo "Building godot-cli ($OPTIMIZE)..."
     (cd "$SOURCE_ROOT" && zig build -Doptimize="$OPTIMIZE")
   fi

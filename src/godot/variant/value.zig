@@ -16,8 +16,8 @@ pub const Value = struct {
     float_val: f64 = 0,
     /// Owned when `Kind.ownsString(kind)`.
     string: []const u8 = "",
-    components_f: [16]f64 = .{0} ** 16,
-    components_i: [16]i64 = .{0} ** 16,
+    components_f: [16]f64 = @splat(0),
+    components_i: [16]i64 = @splat(0),
     component_count: u8 = 0,
     integer_components: bool = false,
     /// Canonical packed-array constructor name when kind is `.packed_array`.

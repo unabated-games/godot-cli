@@ -445,7 +445,7 @@ pub fn call(allocator: std.mem.Allocator, app: *const app_mod.App, tool: *const 
     };
     // The same Debug-build guard the CLI runs: a result carrying invalid
     // UTF-8 is freed memory, and the smoke test should fail on it.
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         if (emit.firstInvalidString(result.data) orelse emit.firstInvalidStringIn(result.messages)) |bad| {
             var details: std.json.ObjectMap = .{};
             try details.put(allocator, "at", .{ .string = bad });
