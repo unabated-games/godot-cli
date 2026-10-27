@@ -15,8 +15,16 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.27.1] — 2026-10-27
+
+### Fixed
+
+- **Godot 4.8-beta1 rewrote the export presets godot-cli wrote for a 4.8 project.** The 4.8 option list came from 4.8-dev7, and beta1 changed it: Linux, macOS and Windows gained `debug/export_debug_symbols`, visionOS lost `capabilities/performance_gaming_tier` and `capabilities/performance_a12`, iOS moved those two, and macOS reordered its architecture choices. So the first save in the beta1 editor added and moved lines nobody had asked for. Nothing was lost, but every preset file showed a diff. The 4.8 list is now generated from the beta1 editor, and a preset godot-cli writes for all seven platforms matches beta1's own save byte for byte. Godot 4.7 projects are not affected.
+
 ### Changed
 
+- **The class table is regenerated against Godot 4.8-beta1.** It has one property more and one fewer. `RichTextLabel.resource_access_flags` is new (engine commit `6969b00117`), and `Light3D.shadow_contact_shadows_opacity` is gone (`f2b24fac07`). That property only ever existed in 4.8 prereleases, so a scene still setting it now gets an `unknown_property` warning, which is what beta1 does with the line too.
+- **CI's prerelease round-trip job runs Godot 4.8-beta1**, up from dev7. Scenes and export presets round-trip against it there, and an input map godot-cli wrote came through a beta1 save unchanged.
 - **godot-cli builds with Zig 0.17.0, and no longer with 0.16.** This only matters when building from source: release binaries and the installer are unchanged. The port was small: `@splat` in place of the removed `**` array repetition, `std.ascii.findIgnoreCase`, the lowercase `builtin.mode` tags, `addPassthruArgs` in `build.zig`, and `zig fmt`'s own `@backingInt` upgrade. The same 275 tests pass, all six release targets build, the Godot 4.7 and 4.8 round trips pass, and the Windows build runs under wine.
 
 ## [0.27.0] — 2026-10-13
