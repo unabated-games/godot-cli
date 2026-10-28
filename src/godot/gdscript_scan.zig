@@ -364,8 +364,7 @@ test "functions, extends and class_name are read from the top level only" {
         "func _ready() -> void:\n\tpass\n\n" ++
         "static func make(x: int) -> Player:\n\treturn null\n\n" ++
         "func _on_hit(amount):\n\tpass\n\n" ++
-        "class Inner:\n\tfunc not_mine():\n\t\tpass\n"
-    );
+        "class Inner:\n\tfunc not_mine():\n\t\tpass\n");
     defer interface.deinit(allocator);
     try std.testing.expectEqualStrings("Player", interface.class_name);
     try std.testing.expectEqualStrings("res://actors/base.gd", interface.extends);
