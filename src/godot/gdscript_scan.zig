@@ -32,12 +32,29 @@ pub const SignalInfo = struct {
 pub const ScriptInterface = struct {
     exports: []ExportInfo = &.{},
     signals: []SignalInfo = &.{},
+    /// Names of the functions it defines, static ones included.
+    functions: []const []const u8 = &.{},
+    /// What `extends` names: a class (`Node2D`, a `class_name`) or a quoted
+    /// path, unquoted (`res://base.gd`). Empty when there is no `extends`,
+    /// which for GDScript means RefCounted.
+    extends: []const u8 = "",
+    /// The script's own `class_name`, or empty.
+    class_name: []const u8 = "",
 
     pub fn deinit(self: *ScriptInterface, allocator: std.mem.Allocator) void {
         for (self.exports) |*item| item.deinit(allocator);
         allocator.free(self.exports);
         for (self.signals) |*item| item.deinit(allocator);
         allocator.free(self.signals);
+        for (self.functions) |name| allocator.free(name);
+        allocator.free(self.functions);
+        allocator.free(self.extends);
+        allocator.free(self.class_name);
+    }
+
+    pub fn definesFunction(self: *const ScriptInterface, name: []const u8) bool {
+        for (self.functions) |candidate| if (std.mem.eql(u8, candidate, name)) return true;
+        return false;
     }
 };
 
@@ -56,6 +73,16 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
         for (signals.items) |*item| item.deinit(allocator);
         signals.deinit(allocator);
     }
+
+    var functions: std.ArrayList([]const u8) = .empty;
+    errdefer {
+        for (functions.items) |name| allocator.free(name);
+        functions.deinit(allocator);
+    }
+    var extends: []const u8 = "";
+    errdefer allocator.free(extends);
+    var class_name: []const u8 = "";
+    errdefer allocator.free(class_name);
 
     var current_group: []const u8 = "";
     errdefer if (current_group.len > 0) allocator.free(current_group);
@@ -88,6 +115,34 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
             current_group = try parseGroupName(allocator, trimmed, "@export_category");
             clearAnnotations(allocator, &pending_annotations);
             continue;
+        }
+
+        // Only top-level lines declare the script's own functions and base:
+        // an inner class's are indented.
+        const top_level = line.len > 0 and !std.ascii.isWhitespace(line[0]);
+        if (top_level) {
+            const without_static = if (std.mem.startsWith(u8, trimmed, "static ")) std.mem.trimStart(u8, trimmed["static ".len..], " \t") else trimmed;
+            if (std.mem.startsWith(u8, without_static, "func ")) {
+                const rest = std.mem.trimStart(u8, without_static["func ".len..], " \t");
+                const end = std.mem.indexOfAny(u8, rest, "( \t") orelse rest.len;
+                if (end > 0) try functions.append(allocator, try allocator.dupe(u8, rest[0..end]));
+                clearAnnotations(allocator, &pending_annotations);
+                continue;
+            }
+            // `class_name Player extends CharacterBody2D` is one line in 4.x.
+            if (std.mem.startsWith(u8, trimmed, "class_name ") and class_name.len == 0) {
+                const rest = std.mem.trimStart(u8, trimmed["class_name ".len..], " \t");
+                const end = std.mem.indexOfAny(u8, rest, " \t,#") orelse rest.len;
+                class_name = try allocator.dupe(u8, rest[0..end]);
+                if (std.mem.indexOf(u8, rest, " extends ")) |at| {
+                    if (extends.len == 0) extends = try parseExtends(allocator, rest[at + " extends ".len ..]);
+                }
+                continue;
+            }
+            if (std.mem.startsWith(u8, trimmed, "extends ") and extends.len == 0) {
+                extends = try parseExtends(allocator, trimmed["extends ".len..]);
+                continue;
+            }
         }
 
         if (std.mem.startsWith(u8, trimmed, "signal ")) {
@@ -129,7 +184,21 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
     return .{
         .exports = try exports.toOwnedSlice(allocator),
         .signals = try signals.toOwnedSlice(allocator),
+        .functions = try functions.toOwnedSlice(allocator),
+        .extends = extends,
+        .class_name = class_name,
     };
+}
+
+/// `Node2D`, `"res://base.gd"` or `'res://base.gd'`, up to a comment.
+fn parseExtends(allocator: std.mem.Allocator, text: []const u8) ParseError![]const u8 {
+    const rest = std.mem.trim(u8, text, " \t\r");
+    if (rest.len > 0 and (rest[0] == '"' or rest[0] == '\'')) {
+        const close = std.mem.indexOfScalarPos(u8, rest, 1, rest[0]) orelse return try allocator.dupe(u8, "");
+        return try allocator.dupe(u8, rest[1..close]);
+    }
+    const end = std.mem.indexOfAny(u8, rest, " \t#:") orelse rest.len;
+    return try allocator.dupe(u8, rest[0..end]);
 }
 
 fn isStandaloneAnnotationLine(line: []const u8) bool {
@@ -287,4 +356,25 @@ test "parse export annotations and groups" {
     try std.testing.expectEqualStrings("speed", parsed.exports[0].name);
     try std.testing.expectEqualStrings("Movement", parsed.exports[0].group);
     try std.testing.expectEqualStrings("scene_path", parsed.exports[1].name);
+}
+
+test "functions, extends and class_name are read from the top level only" {
+    const allocator = std.testing.allocator;
+    var interface = try parseScript(allocator, "class_name Player extends \"res://actors/base.gd\"\n\n" ++
+        "func _ready() -> void:\n\tpass\n\n" ++
+        "static func make(x: int) -> Player:\n\treturn null\n\n" ++
+        "func _on_hit(amount):\n\tpass\n\n" ++
+        "class Inner:\n\tfunc not_mine():\n\t\tpass\n"
+    );
+    defer interface.deinit(allocator);
+    try std.testing.expectEqualStrings("Player", interface.class_name);
+    try std.testing.expectEqualStrings("res://actors/base.gd", interface.extends);
+    try std.testing.expect(interface.definesFunction("_ready"));
+    try std.testing.expect(interface.definesFunction("make"));
+    try std.testing.expect(interface.definesFunction("_on_hit"));
+    try std.testing.expect(!interface.definesFunction("not_mine"));
+
+    var plain = try parseScript(allocator, "extends Node2D # a comment\n");
+    defer plain.deinit(allocator);
+    try std.testing.expectEqualStrings("Node2D", plain.extends);
 }

@@ -19,7 +19,7 @@ fn appFrom(ctx: *anyopaque) *const app_mod.App {
 /// parser that reads numbers as doubles, JavaScript's included, rounds it:
 /// trial 30 was handed 5402782583183944000 for 5402782583183943612.
 pub fn idNumberText(allocator: std.mem.Allocator, id: i64) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{d}", .{id});
+    return allocator.print("{d}", .{id});
 }
 
 fn uidEncodeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -117,7 +117,7 @@ fn uidReadHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
             };
             try map.put(cli.allocator, "class", .{ .string = header.class_name });
             try map.put(cli.allocator, "compressed", .{ .bool = header.compressed });
-            try map.put(cli.allocator, "godot_version", .{ .string = try std.fmt.allocPrint(cli.allocator, "{d}.{d}", .{ header.engine_major, header.engine_minor }) });
+            try map.put(cli.allocator, "godot_version", .{ .string = try cli.allocator.print("{d}.{d}", .{ header.engine_major, header.engine_minor }) });
             try map.put(cli.allocator, "format_version", .{ .integer = header.format_version });
             const id = header.uid orelse break :blk null;
             break :blk try resource_uid.idToText(cli.allocator, id);
@@ -211,7 +211,7 @@ fn uidSessionImportHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     const imported = try session.importExtResourceIdsFromDocument(cli.allocator, referrer_path, &doc);
     try session.saveToFile(session_path);
 
-    const summary = try std.fmt.allocPrint(cli.allocator, "imported {d} ext_resource id(s) for {s}", .{ imported, referrer_path });
+    const summary = try cli.allocator.print("imported {d} ext_resource id(s) for {s}", .{ imported, referrer_path });
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "referrer", .{ .string = referrer_path });
     try data.put(cli.allocator, "source", .{ .string = source_path });

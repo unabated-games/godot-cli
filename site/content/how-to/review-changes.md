@@ -18,14 +18,15 @@ Validation exits 1 when it finds an error, and returns every issue with a line n
 
 | Kind | Severity | What it means |
 |------|----------|---------------|
-| `duplicate_scene_id` | error | Two ext or sub resources in the file share an id |
-| `node_parent_order` | error | A node's `parent` refers to a node declared later in the file, which Godot reads as a parent path that vanished |
+| `duplicate_scene_id` | error | Two ext_resources, or two sub_resources, share an id. An ext_resource and a sub_resource may share one, as older files often do |
+| `node_parent_order` | error | A node's `parent` refers to a node declared later in the file, which Godot reads as a parent path that vanished. A parent inside an instanced scene needs no section of its own |
 | `resource_section_order` | error | An `ext_resource` appears after a `sub_resource` |
 | `stale_uid_for_path` | error | A `uid://` reference disagrees with the project's UID cache |
 | `nonstandard_scene_id` | warning | An id does not match the shape the editor writes, such as `1_a` instead of `1_abc12` |
 | `invalid_node_unique_id` | warning | A node's `unique_id` is not a value Godot would generate |
 | `property_type_mismatch` | error | A property's value is the wrong Variant type for its class, e.g. `visible = Vector2(1, 2)` |
-| `unknown_signal` | error | A connection names a signal the emitting class does not have, and its script does not declare |
+| `unknown_signal` | error | A connection names a signal the emitting class does not have, and its script does not declare, nor any script it extends |
+| `unknown_method` | warning | A connection calls a method the receiving node does not have: not in its script, nor in what the script extends, nor in its class. Godot logs "Method not found" each time the signal fires |
 | `unknown_property` | warning | A property the class does not have, on a node with no script and no instance: Godot keeps the line and ignores it |
 | `connection_node_missing` | error | A connection names a node that is not in the scene |
 | `property_not_stored` | warning | A 3D node placed with `position`, `rotation`, `scale` or the like, which the editor's next save turns into `transform` |
@@ -35,9 +36,9 @@ Validation exits 1 when it finds an error, and returns every issue with a line n
 ### The checks that read the file the way Godot would
 
 `property_type_mismatch`, `unknown_signal` and `unknown_property` come from a
-table generated out of Godot's own class reference (716 classes, 4422
-properties, 397 signals), so they catch the mistakes that otherwise cost a run
-to find:
+table generated out of Godot's own class reference (718 classes, 4422
+properties, 399 signals, 4350 methods), so they catch the mistakes that
+otherwise cost a run to find:
 
 ```text
 [err] property_type_mismatch: Control.visible is bool, and this value is vector2:
@@ -50,7 +51,7 @@ to find:
 
 `unknown_property` is a warning rather than an error because the table cannot
 see everything a property might come from. A node with a script attached, or an
-instanced node, is skipped entirely — their `@export` vars are not in any class
+instanced node, is skipped entirely: their `@export` vars are not in any class
 reference. So are namespaced names like `theme_override_constants/margin_left`
 and `metadata/level`, and the handful Godot registers as internal, `layout_mode`
 and `anchors_preset` among them, which the editor writes into every scene it
@@ -61,14 +62,14 @@ it does not carry, a `theme_override_*` entry, a `metadata/*` key, a script's
 exported variables, and a connection whose endpoint lives inside an instance.
 
 If a run answers `uid_cache_unreadable`, the damaged file is Godot's
-`.godot/uid_cache.bin` and not the scene you passed — delete it and run the
+`.godot/uid_cache.bin` and not the scene you passed. Delete it and run the
 project once to rebuild it. `scene validate` itself does not fail on that any
 more; it skips the `stale_uid_for_path` check and says so in `messages`.
 
 **So read a clean `scene validate` for what it is.** It says nothing here was
 found wrong; it does not say every property is real, every signal exists, or
 every value is right. `unknown_property` in particular skips more than it
-checks — a misspelled `theme_override_constants/marign_left` passes, and so
+checks: a misspelled `theme_override_constants/marign_left` passes, and so
 does any property on a node that has a script. A partial check that says
 nothing reads exactly like a complete one that found nothing, which is why the
 step after validating is [running the game]({{ base_url }}/how-to/verify-a-change/)
@@ -88,8 +89,18 @@ A real one reads like this:
 ```
 
 A validate that found errors exits 1 and answers `ok: false` with a
-`checks_failed` failure, keeping the issues in `data` — so `ok`, the exit code,
+`checks_failed` failure, keeping the issues in `data`, so `ok`, the exit code,
 and the error flag an MCP client sets all agree.
+
+Two of the checks also run when a command writes. A write that adds a 3D
+node's `position`, or a connection to a method the receiver does not have,
+says so in `messages` straight away, on a `--dry-run` too, rather than leaving
+it for the next `scene validate`.
+
+Every check has been swept against the 533 scenes and resources in Godot's own
+demo projects, files the editor saved itself. Apart from the layout warning
+`control_under_node2d`, the only issues reported there are three connections
+to methods the demos' scripts really do not define.
 
 `stale_uid_for_path` needs `--project-root`, since it is a question about the project, not the file on its own. Resources get the same treatment with `resource validate` and `resource validate-batch`.
 
@@ -113,7 +124,7 @@ godot-cli scene diff before.tscn after.tscn --properties --json
 
 Without `--properties` you get added, removed, and retyped nodes, which is the level to review a structural change at. With it you also get changed property values, which is what you want when the tree is the same and something moved. Both levels list the resources too: ext_resources added, removed, or changed in type or uid, and sub_resources by id. A node whose `unique_id` changed at the same path is reported as `unique_id_changed`.
 
-The diff is between two files, so keep a copy before an edit, or use a snapshot:
+The diff is between two files, so keep a copy before an edit, or use a snapshot. A session keeps one for you: the MCP server, or a shell with `GODOT_CLI_SESSION` set to any name, copies each scene to `.godot/godot-cli/session/<its path>` before the session's first write to it, and the result's `messages` say where. `scene diff .godot/godot-cli/session/scenes/main.tscn scenes/main.tscn` then shows everything the session changed. A scene the session created has no earlier state, so its copy is the scene as `scene new` wrote it. To keep a copy of your own:
 
 ```bash
 godot-cli scene apply scenes/main.tscn --patch change.json --project-root . \

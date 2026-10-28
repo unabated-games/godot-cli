@@ -52,6 +52,10 @@ A scene with no catalog entry is instanced by its path instead:
   godot-cli scene instance add <scene> --parent <path> --name <Name> \
     --scene res://<path/to/scene.tscn> --project-root .
 
+GDScript files (.gd) are the one thing written by hand: godot-cli authors
+scenes, resources and settings, not scripts. Attach a script with
+scene new --script or scene ext add.
+
 Static structure lives in the scene file. add_child(load(...).instantiate())
 in _ready() is only for objects the game spawns during play, such as
 projectiles, enemy waves, or pooled effects. Menus, HUDs, and level layout are
@@ -65,7 +69,10 @@ Connect signals in the scene, not in _ready():
     --to <receiver path> --method <method> --project-root .
 
 Export presets: find option names with project export options, set them
-with project export apply, and prove the preset with project export build:
+with project export apply, check them with project export validate, and prove
+them with project export build. validate needs nothing installed; build needs
+Godot's export templates for this exact version, a beta included, and
+validate says when they are missing:
   godot-cli project export options --platform <platform> --filter <word> \
     --project-root . --json
   godot-cli project export apply --project-root . --json \
@@ -77,14 +84,24 @@ Finish every change with:
   godot-cli scene validate <scene> --project-root . --json
   godot-cli project run --project-root . --json
 
+A change with no scene in it, such as the input map, is checked the same way:
+  godot-cli project input validate --project-root . --json
+  godot-cli project run --project-root . --press <action>@10..30 --json
+on a scene that reacts to the action (--scene res://... when the project has
+no main scene yet), reading the log. --press sends the action itself, not a
+key or a button, so it proves code reacting to the action works; the bindings
+are what project input list reports.
+
 For a screen that does not move, --frames 5 is enough; the default, 60, is one
 second, which leaves room for movement and clicks. The run imports first, which
 writes a .import file beside each asset and a .uid file beside each script.
-Those belong in version control; .godot/ does not. A 3D scene needs a Camera3D
-for the frame to show anything: without one, none of the scene appears, only
-the clear colour, and the run proves only that the scene loads. The camera_3d
-recipe places one and aims it (position, look_at), and place_3d does the same
-for any 3D node.
+Those belong in version control; .godot/ does not. A 3D scene with no Camera3D
+is captured through a temporary camera the run adds and never saves, with a
+light when the scene has none, and the result says so (no_camera_3d): the game
+itself still shows nothing until it has a camera, and is unlit without a light.
+Pass --no-auto-camera when the question is what a player will see. The
+camera_3d recipe places one and aims it (position, look_at), and place_3d does
+the same for any 3D node.
 
 Validation checks property values against the node's class and connections
 against the signals that class emits, so a wrong type or a misspelled signal
@@ -99,7 +116,7 @@ a button works, click it:
 Add the [Godot basics]({{ base_url }}/how-to/godot-basics/) to the same file if the agent is new to Godot; the layout mistakes in the trials came from not knowing them, not from ignoring the rules.
 
 The last two lines are the ones that change what an agent delivers. Every trial
-that ran the game caught something the file alone could not show — a panel
+that ran the game caught something the file alone could not show: a panel
 drawing nothing because it sat under a `Node2D`, a button whose signal was
 never wired, a layout that validated cleanly and looked wrong. An agent that
 stops at `scene validate` reports "done" from a file it has never seen drawn.
@@ -152,7 +169,7 @@ In that mode the server adds `--project-root .` to every call that accepts it, d
 
 A client that loads every tool schema up front pays for all one hundred tools. `--toolset core` serves the thirteen that cover most sessions instead, and the `godot-cli://docs/mcp-cheatsheet` resource lists the surface in tool-and-arguments form.
 
-The MCP surface is not writes only: `project_run` imports the project, runs it, and returns the last frame **as an image** along with the log's last lines and every error. An agent with no shell can therefore finish the loop — author, validate, run, look at the screen — and can click a button (`click`) or hold an input action (`press`) to prove the wiring works. That is the difference between an agent that reports a HUD is done and one that has seen it.
+The MCP surface is not writes only: `project_run` imports the project, runs it, and returns the last frame **as an image** along with the log's last lines and every error. An agent with no shell can therefore finish the loop (author, validate, run, look at the screen) and can click a button (`click`) or hold an input action (`press`) to prove the wiring works. That is the difference between an agent that reports a HUD is done and one that has seen it.
 
 Claude Code takes the command line directly, or the same shape in `.mcp.json` at the project root:
 

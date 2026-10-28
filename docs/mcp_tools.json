@@ -1,6 +1,6 @@
 {
   "name": "godot-cli",
-  "version": "0.27.1",
+  "version": "0.28.0",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "server": {
@@ -203,10 +203,11 @@
       "options": [
         "--root-name",
         "--root-type",
+        "--script",
         "--project-root",
         "--dry-run"
       ],
-      "description": "Create a new empty scene with gd_scene header and root node.",
+      "description": "Create a new empty scene with gd_scene header and root node; --script attaches a script to the root in the same call.",
       "json_request": {
         "argv": [
           "scene",
@@ -737,7 +738,8 @@
           "sample_godot_saved.tscn",
           "--json"
         ]
-      }
+      },
+      "description": "Compare a scene with a Godot save of it: names the first difference, and lists what it skipped (ids, uids, property order)."
     },
     {
       "name": "scene_round_trip",
@@ -1611,7 +1613,7 @@
         "--project-root",
         "<path>"
       ],
-      "description": "List Input Map actions from project.godot [input] section.",
+      "description": "List Input Map actions from project.godot [input], each binding in words (\"A (physical)\", \"joypad left_x -1.0\").",
       "json_request": {
         "argv": [
           "project",
@@ -1637,7 +1639,7 @@
         "--file",
         "--dry-run"
       ],
-      "description": "Apply input map intent JSON (idempotent per-action replace). Event types: key, joypad_button, joypad_motion.",
+      "description": "Apply input map intent JSON (idempotent per-action replace); actions lists each binding in words, on --dry-run too. Event types: key, mouse_button, joypad_button, joypad_motion.",
       "json_request": {
         "argv": [
           "project",
@@ -1684,7 +1686,7 @@
       "options": [
         "--section"
       ],
-      "description": "List scalar project settings (application, display, layer_names, \u2026).",
+      "description": "List scalar project settings (application, display, layer_names, …).",
       "json_request": {
         "argv": [
           "project",
@@ -2233,7 +2235,8 @@
           ".",
           "--json"
         ]
-      }
+      },
+      "description": "Create, update, rename or remove export presets; changes lists every value changed in each existing preset, old to new."
     },
     {
       "name": "project_export_validate",
@@ -2253,7 +2256,8 @@
           ".",
           "--json"
         ]
-      }
+      },
+      "description": "Check export_presets.cfg for what Godot would drop or reject, and for an Android preset whether this machine can export it (Java and Android SDK, keystores)."
     },
     {
       "name": "project_export_build",
@@ -2267,6 +2271,7 @@
         "<path>"
       ],
       "options": [
+        "--all",
         "--output",
         "--debug",
         "--pack",
@@ -2283,7 +2288,8 @@
           ".",
           "--json"
         ]
-      }
+      },
+      "description": "Run Godot's export for one preset, or every preset with --all (carrying on past a failure)."
     },
     {
       "name": "project_new",
@@ -2301,7 +2307,7 @@
         "--height",
         "<px>"
       ],
-      "description": "Create a project.godot in an empty folder: the project manager's header, config_version=5, the name, and optionally the main scene and window size. Refuses to overwrite one that exists.",
+      "description": "Create a project.godot in an empty folder, as the project manager does: its header, config_version=5, the name, config/features (the Godot version and renderer) and config/icon, optionally the main scene and window size, plus icon.svg, a .gitignore holding .godot/ and a .gitattributes. Refuses to overwrite one that exists.",
       "json_request": {
         "argv": [
           "project",
@@ -2318,7 +2324,14 @@
           "360",
           "--json"
         ]
-      }
+      },
+      "options": [
+        "--godot-version",
+        "--renderer",
+        "--no-vcs",
+        "--no-icon",
+        "--dry-run"
+      ]
     },
     {
       "name": "project_import",
@@ -2357,7 +2370,14 @@
           ".",
           "--json"
         ]
-      }
+      },
+      "description": "Have Godot save a copy of a scene the way the editor would (built in edit state, under the editor hint), the reference for scene_compare_godot; --no-build loads and saves as is.",
+      "options": [
+        "--output",
+        "--no-import",
+        "--no-build",
+        "--godot"
+      ]
     },
     {
       "name": "project_run",
@@ -2371,7 +2391,7 @@
         "--scene",
         "<res://path>"
       ],
-      "description": "Import, run the game for a few frames, and return the last frame, the log, and the error lines; fails when the log holds an error.",
+      "description": "Import, run the game for a few frames, and return the last frame, the log, and the error lines; fails when the log holds an error. A 3D scene with no camera is framed by a temporary one (--no-auto-camera to turn it off).",
       "json_request": {
         "argv": [
           "project",

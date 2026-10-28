@@ -32,7 +32,7 @@ fn emitGenerated(
         try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
         try data.put(cli.allocator, "byte_count", .{ .integer = @intCast(text.len) });
 
-        const summary = try std.fmt.allocPrint(cli.allocator, "wrote {s} to {s}", .{ kind, output_path });
+        const summary = try cli.allocator.print("wrote {s} to {s}", .{ kind, output_path });
         try data.put(cli.allocator, "summary", .{ .string = summary });
 
         return .{ .data = .{ .object = data } };

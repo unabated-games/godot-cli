@@ -92,7 +92,7 @@ pub fn applyIntentJson(
         if (entry.value_ptr.* != .string) return error.InvalidIntent;
         if (!validateValue(resolved, entry.value_ptr.string)) return error.UnknownValue;
         const existed = try project_settings.setSetting(allocator, doc, "rendering", resolved, entry.value_ptr.*);
-        const label = try std.fmt.allocPrint(allocator, "rendering/{s}", .{resolved});
+        const label = try allocator.print("rendering/{s}", .{resolved});
         try applied.append(allocator, label);
         if (existed) replaced += 1 else added += 1;
     }

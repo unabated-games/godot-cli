@@ -84,7 +84,8 @@ distribution. Windows has no `install.sh`; unpack the zip and put `bin\` on
 
 Everything below runs inside a Godot project directory — the one holding
 `project.godot`. Starting from an empty folder, `project new` writes that file
-the way the project manager would:
+the way the project manager would, along with the `icon.svg`, `.gitignore`
+(holding `.godot/`) and `.gitattributes` the project manager writes:
 
 ```bash
 godot-cli project new --name MyGame --main-scene res://level.tscn --width 640 --height 360

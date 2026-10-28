@@ -62,12 +62,15 @@ fn extResourceRun(doc: *const document.Document, index: usize) bool {
 }
 
 /// Godot separates every section with a blank line except consecutive
-/// `[connection]` lines, which it writes one after another.
+/// `[connection]` lines and consecutive `[editable]` lines, which it writes
+/// one after another (`ResourceFormatSaverTextInstance::save`).
 fn contiguousWithPrevious(doc: *const document.Document, index: usize) bool {
     const current = doc.sections.items[index];
     const previous = doc.sections.items[index - 1];
-    return std.mem.eql(u8, current.header.name, "connection") and
-        std.mem.eql(u8, previous.header.name, "connection");
+    for ([_][]const u8{ "connection", "editable" }) |name| {
+        if (std.mem.eql(u8, current.header.name, name) and std.mem.eql(u8, previous.header.name, name)) return true;
+    }
+    return false;
 }
 
 const error_details = @import("../error_details.zig");

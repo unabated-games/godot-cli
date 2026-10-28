@@ -17,11 +17,11 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.27.1";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.28.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
-    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-10-27";
+    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-10-28";
 
     const version_options = b.addOptions();
     version_options.addOption([]const u8, "version", version_string);
@@ -640,7 +640,7 @@ pub fn build(b: *std.Build) void {
         \\test -f "$tmp/build/.gdignore" &&
         \\grep -q '^"Windows Desktop"="Windows"$' "$tmp/export_presets.cfg" &&
         \\grep -q '^exclude_filter="\*.md, docs/\*"$' "$tmp/export_presets.cfg" &&
-        \\$g project export validate --project-root "$tmp" --json | grep -q '"error_count":0,"warning_count":0,"matches_editor_save":true' &&
+        \\GODOT=/nonexistent $g project export validate --project-root "$tmp" --json | grep -q '"error_count":0,"warning_count":0,"matches_editor_save":true' &&
         \\$g project export list --project-root "$tmp" --json | grep -q '"changed_options":{"binary_format/embed_pck":true,"application/product_name":"My Game"}' &&
         \\$g project export options --project-root "$tmp" --platform android --filter export_format --json | grep -q '"choices":\["Export APK","Export AAB","Export AAR"\]' &&
         \\! $g project export apply --project-root "$tmp" --intent-json '{"presets":[{"name":"Linux","options":{"binary_format/embed_pk":true}}]}' --json > "$tmp/refused.json" &&
@@ -885,6 +885,81 @@ pub fn build(b: *std.Build) void {
     backlog_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&backlog_smoke.step);
 
+    // The 0.28.0 backlog, end to end, one item after another.
+    const backlog_028_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\t=$(mktemp -d) &&
+        \\out=$(./zig-out/bin/godot-cli project new --project-root "$t/p" --name Vcs --json) &&
+        \\echo "$out" | grep -q '"vcs_files_written":\[".gitignore",".gitattributes"\]' &&
+        \\grep -qx '.godot/' "$t/p/.gitignore" && grep -qx '\* text=auto eol=lf' "$t/p/.gitattributes" &&
+        \\mkdir "$t/q" && echo '*.tmp' > "$t/q/.gitignore" &&
+        \\out=$(./zig-out/bin/godot-cli project new --project-root "$t/q" --name Kept --json) &&
+        \\echo "$out" | grep -q 'does not ignore .godot/' && test "$(cat "$t/q/.gitignore")" = '*.tmp' &&
+        \\./zig-out/bin/godot-cli project new --project-root "$t/r" --name Bare --no-vcs --json >/dev/null && test ! -e "$t/r/.gitignore" &&
+        \\./zig-out/bin/godot-cli project new --project-root "$t/m" --name Mob --godot-version 4.7.2 --renderer mobile --json | grep -q '"godot_version":"4.7"' &&
+        \\grep -q '^config/features=PackedStringArray("4.7", "Mobile")$' "$t/m/project.godot" && grep -q '^config/icon="res://icon.svg"$' "$t/m/project.godot" &&
+        \\grep -q '^renderer/rendering_method="mobile"$' "$t/m/project.godot" &&
+        \\! ./zig-out/bin/godot-cli project new --project-root "$t/bad" --name B --renderer vulkan --json >/dev/null 2>&1 &&
+        \\./zig-out/bin/godot-cli project export apply --project-root "$t/p" --intent-json '{"presets":[{"name":"Android","platform":"Android","export_path":"build/a.apk","options":{"keystore/release":"/nowhere/r.keystore","keystore/release_password":"pw","version/code":3}}]}' --json >/dev/null &&
+        \\out=$(./zig-out/bin/godot-cli project export apply --project-root "$t/p" --intent-json '{"presets":[{"name":"Android","runnable":true,"options":{"keystore/release_password":"pw2","version/code":4}}]}' --json) &&
+        \\echo "$out" | grep -q '{"key":"options/keystore/release_password","secret":true}' && ! echo "$out" | grep -q 'pw2' &&
+        \\echo "$out" | grep -q '{"key":"options/version/code","old":3,"new":4}' && echo "$out" | grep -q '{"key":"runnable","old":false,"new":true}' &&
+        \\echo "$out" | grep -q '(3 value(s) changed)' &&
+        \\out=$(./zig-out/bin/godot-cli project export validate --project-root "$t/p" --json || true) &&
+        \\echo "$out" | grep -q '"kind":"missing_file".*"file":".godot/export_credentials.cfg"' &&
+        \\out=$(./zig-out/bin/godot-cli project export build --project-root "$t/p" --all --preset Android --json || true) &&
+        \\echo "$out" | grep -q '"field":"preset"' &&
+        \\./zig-out/bin/godot-cli scene new --output "$t/p/level.tscn" --root-name Level --root-type Node3D --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene node add "$t/p/level.tscn" --parent /root/Level --name Box --type MeshInstance3D --properties '{"position":"Vector3(1, 2, 3)"}' --dry-run --json | grep -q 'Box: MeshInstance3D.position is never saved' &&
+        \\./zig-out/bin/godot-cli scene node add "$t/p/level.tscn" --parent /root/Level --name Box --type MeshInstance3D --properties '{"position":"Vector3(1, 2, 3)"}' --json | grep -q 'Box: MeshInstance3D.position is never saved' &&
+        \\out=$(./zig-out/bin/godot-cli scene set-property "$t/p/level.tscn" --node /root/Level/Box --property visible --value false --json) && ! echo "$out" | grep -q 'never saved' &&
+        \\./zig-out/bin/godot-cli scene apply "$t/p/level.tscn" --patch-json '{"ops":[{"op":"node_set","path":"/root/Level/Box","property":"scale","value":"Vector3(2, 2, 2)"}]}' --json | grep -q 'Box: MeshInstance3D.scale is never saved' &&
+        \\out=$(./zig-out/bin/godot-cli project input apply --project-root "$t/p" --intent-json '{"actions":[{"name":"save","events":[{"type":"key","keycode":"S","ctrl":true},{"type":"joypad_motion","axis":"left_x","axis_value":-1,"device":0}]}]}' --dry-run --json) &&
+        \\echo "$out" | grep -q '"events":\["Ctrl+S (physical)","joypad left_x -1.0 (device 0)"\]' && ! grep -q 'save=' "$t/p/project.godot" &&
+        \\./zig-out/bin/godot-cli project input apply --project-root "$t/p" --intent-json '{"actions":[{"name":"fire","events":[{"type":"mouse_button","button":"left"}]}]}' --json >/dev/null &&
+        \\./zig-out/bin/godot-cli project input list --project-root "$t/p" --json | grep -q '"events":\["mouse left"\]' &&
+        \\mkdir -p "$t/p/scripts" && printf 'extends Node\n' > "$t/p/scripts/probe.gd" &&
+        \\out=$(./zig-out/bin/godot-cli scene new --output "$t/p/probe.tscn" --root-name Probe --script scripts/probe.gd --project-root "$t/p" --json) &&
+        \\echo "$out" | grep -q '"script":"res://scripts/probe.gd"' && grep -q '^script = ExtResource("1_' "$t/p/probe.tscn" &&
+        \\grep -q '\[ext_resource type="Script" uid="uid://[a-z0-9]*" path="res://scripts/probe.gd"' "$t/p/probe.tscn" &&
+        \\./zig-out/bin/godot-cli scene validate "$t/p/probe.tscn" --project-root "$t/p" --json | grep -q '"error_count":0' &&
+        \\printf 'extends Control\nsignal picked\nfunc _on_base_hit():\n\tpass\n' > "$t/p/scripts/base.gd" &&
+        \\printf 'extends "res://scripts/base.gd"\nfunc _on_sit():\n\tpass\n' > "$t/p/scripts/menu.gd" &&
+        \\./zig-out/bin/godot-cli scene new --output "$t/p/menu.tscn" --root-name Menu --root-type Control --script scripts/menu.gd --project-root "$t/p" --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene node add "$t/p/menu.tscn" --parent /root/Menu --name Sit --type Button --project-root "$t/p" --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene apply "$t/p/menu.tscn" --intent-json '{"steps":[{"recipe":"connect","from":"/root/Menu/Sit","signal":"pressed","to":"/root/Menu","method":"_on_sit"},{"recipe":"connect","from":"/root/Menu/Sit","signal":"pressed","to":"/root/Menu","method":"_on_base_hit"},{"recipe":"connect","from":"/root/Menu/Sit","signal":"pressed","to":"/root/Menu/Sit","method":"hide"},{"recipe":"connect","from":"/root/Menu","signal":"picked","to":"/root/Menu","method":"queue_free"}]}' --project-root "$t/p" --json >/dev/null &&
+        \\out=$(./zig-out/bin/godot-cli scene validate "$t/p/menu.tscn" --project-root "$t/p" --json) &&
+        \\! echo "$out" | grep -q 'unknown_method' && ! echo "$out" | grep -q 'unknown_signal' &&
+        \\out=$(./zig-out/bin/godot-cli scene connection add "$t/p/menu.tscn" --from /root/Menu/Sit --signal pressed --to /root/Menu --method _on_sitt --project-root "$t/p" --dry-run --json) &&
+        \\echo "$out" | grep -q 'Menu has no method _on_sitt: its script res://scripts/menu.gd and the scripts it extends' &&
+        \\./zig-out/bin/godot-cli scene connection add "$t/p/menu.tscn" --from /root/Menu/Sit --signal pressed --to /root/Menu/Sit --method hidee --project-root "$t/p" --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene validate "$t/p/menu.tscn" --project-root "$t/p" --json | grep -q '"kind":"unknown_method","message":"Sit has no method hidee' &&
+        \\./zig-out/bin/godot-cli project settings set --project-root "$t/p" --section display --key window/size/viewport_width --value 640 --json >/dev/null && grep -q '^window/size/viewport_width=640$' "$t/p/project.godot" &&
+        \\./zig-out/bin/godot-cli project settings set --project-root "$t/p" --section application --key config/features --value 'PackedStringArray("4.8", "Mobile")' --json >/dev/null && grep -q '^config/features=PackedStringArray("4.8", "Mobile")$' "$t/p/project.godot" &&
+        \\./zig-out/bin/godot-cli project settings set --project-root "$t/p" --section application --key config/description --value 'a game' --json >/dev/null && grep -q '^config/description="a game"$' "$t/p/project.godot" &&
+        \\GODOT_CLI_SESSION=one ./zig-out/bin/godot-cli scene node add "$t/p/menu.tscn" --parent /root/Menu --name S1 --type Label --project-root "$t/p" --json | grep -q 'first change to this scene in this session' &&
+        \\out=$(GODOT_CLI_SESSION=one ./zig-out/bin/godot-cli scene node add "$t/p/menu.tscn" --parent /root/Menu --name S2 --type Label --project-root "$t/p" --json) && ! echo "$out" | grep -q 'first change' &&
+        \\./zig-out/bin/godot-cli scene diff "$t/p/.godot/godot-cli/session/menu.tscn" "$t/p/menu.tscn" --json | grep -q '"summary":"2 difference' &&
+        \\GODOT_CLI_SESSION=two ./zig-out/bin/godot-cli scene node add "$t/p/menu.tscn" --parent /root/Menu --name S3 --type Label --project-root "$t/p" --json | grep -q 'first change to this scene in this session' &&
+        \\printf '#!/bin/sh\necho 4.8.beta1.official.test\n' > "$t/fakegodot" && chmod +x "$t/fakegodot" && mkdir -p "$t/th/.local/share/godot/export_templates" "$t/th/Library/Application Support/Godot/export_templates" &&
+        \\out=$(HOME="$t/th" XDG_DATA_HOME="$t/th/.local/share" APPDATA="$t/th/Library/Application Support" GODOT="$t/fakegodot" ./zig-out/bin/godot-cli project export validate --project-root "$t/p" --json || true) &&
+        \\echo "$out" | grep -q '"kind":"export_templates_missing","message":"no export templates for Godot 4.8.beta1' &&
+        \\mkdir -p "$t/th/.local/share/godot/export_templates/4.8.beta1" "$t/th/Library/Application Support/Godot/export_templates/4.8.beta1" &&
+        \\out=$(HOME="$t/th" XDG_DATA_HOME="$t/th/.local/share" APPDATA="$t/th/Library/Application Support" GODOT="$t/fakegodot" ./zig-out/bin/godot-cli project export validate --project-root "$t/p" --json || true) &&
+        \\! echo "$out" | grep -q 'export_templates_missing' &&
+        \\h="$t/home" && for d in "$h/Library/Application Support/Godot" "$h/.config/godot"; do mkdir -p "$d" && printf '[resource]\nexport/android/java_sdk_path = ""\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\n' "$t/sdk" "$t/debug.keystore" > "$d/editor_settings-4.8.tres"; done &&
+        \\out=$(HOME="$h" XDG_CONFIG_HOME="$h/.config" APPDATA="$h/.config" ./zig-out/bin/godot-cli project export validate --project-root "$t/p" --json || true) &&
+        \\echo "$out" | grep -q '"kind":"android_java_sdk"' && echo "$out" | grep -q '"kind":"android_sdk"' && echo "$out" | grep -q '"kind":"android_debug_keystore"' &&
+        \\mkdir -p "$t/jdk/bin" "$t/sdk/platform-tools" "$t/sdk/build-tools/36.1.0" && touch "$t/jdk/bin/java" "$t/sdk/platform-tools/adb" "$t/sdk/build-tools/36.1.0/apksigner" "$t/debug.keystore" &&
+        \\for d in "$h/Library/Application Support/Godot" "$h/.config/godot"; do sed -i.bak "s#java_sdk_path = \"\"#java_sdk_path = \"$t/jdk\"#" "$d/editor_settings-4.8.tres"; done &&
+        \\out=$(HOME="$h" XDG_CONFIG_HOME="$h/.config" APPDATA="$h/.config" ./zig-out/bin/godot-cli project export validate --project-root "$t/p" --json || true) &&
+        \\! echo "$out" | grep -q '"kind":"android_\(java_sdk\|sdk\|debug_keystore\)"' && echo "$out" | grep -q '"kind":"android_release_keystore".*missing: keystore/release_user' &&
+        \\rm -rf "$t"
+    });
+    backlog_028_smoke.setCwd(b.path("."));
+    backlog_028_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&backlog_028_smoke.step);
+
     // Regression: stdout must respect the shell-owned file offset. With a
     // positional-mode writer every invocation pwrites at offset 0 and clobbers
     // whatever the redirect target already holds.
@@ -962,8 +1037,21 @@ pub fn build(b: *std.Build) void {
         \\grep -q 'autoload fixture play pressed' test_fixtures/autoload_project/.godot/godot-cli/godot.log &&
         \\rm -rf test_fixtures/autoload_project/.godot &&
         \\./zig-out/bin/godot-cli project import --project-root test_fixtures/project --godot "$GODOT" --json | grep -q '"ok":true' &&
-        \\./zig-out/bin/godot-cli project resave multi_ext_godot_saved.tscn --project-root test_fixtures/project --godot "$GODOT" --no-import --json | grep -q '"ok":true' &&
+        \\./zig-out/bin/godot-cli project resave multi_ext_godot_saved.tscn --project-root test_fixtures/project --godot "$GODOT" --no-import --no-build --json | grep -q '"ok":true' &&
         \\./zig-out/bin/godot-cli scene compare-godot test_fixtures/project/multi_ext_godot_saved.tscn test_fixtures/project/.godot/godot-cli/resave/multi_ext_godot_saved.tscn --json | grep -q '"matches_godot_save":true' &&
+        \\./zig-out/bin/godot-cli project resave multi_ext_godot_saved.tscn --project-root test_fixtures/project --godot "$GODOT" --no-import --json | grep -q '"built":true' &&
+        \\./zig-out/bin/godot-cli scene compare-godot test_fixtures/project/multi_ext_godot_saved.tscn test_fixtures/project/.godot/godot-cli/resave/multi_ext_godot_saved.tscn --json | grep -q '"difference":"node Sample: its type differs from the Godot save"' &&
+        \\t=$(mktemp -d) && ./zig-out/bin/godot-cli project new --project-root "$t" --name Resave --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene new --output "$t/main.tscn" --root-name Main --root-type Node3D --project-root "$t" --json >/dev/null &&
+        \\./zig-out/bin/godot-cli scene node add "$t/main.tscn" --parent /root/Main --name Lamp --type OmniLight3D --properties '{"position":"Vector3(0, 4, 0)","light_energy":2.0}' --project-root "$t" --json >/dev/null &&
+        \\./zig-out/bin/godot-cli project resave main.tscn --project-root "$t" --godot "$GODOT" --json | grep -q '"ok":true' &&
+        \\grep -q '^transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)$' "$t/.godot/godot-cli/resave/main.tscn" &&
+        \\./zig-out/bin/godot-cli scene compare-godot "$t/main.tscn" "$t/.godot/godot-cli/resave/main.tscn" --json | grep -q '"difference":"node Lamp: here only: position; the Godot save only: transform"' &&
+        \\test -z "$(cd "$t" && find . -path ./.godot -prune -o -newer main.tscn -type f ! -name '*.import' ! -name '*.uid' -print)" &&
+        \\cp test_fixtures/resave/reset_on_save.tscn "$t/anim.tscn" &&
+        \\./zig-out/bin/godot-cli project resave anim.tscn --project-root "$t" --godot "$GODOT" --no-import --json | grep -q '"ok":true' &&
+        \\grep -A1 'name="Sprite"' "$t/.godot/godot-cli/resave/anim.tscn" | grep -q '^position = Vector2(10, 20)$' &&
+        \\rm -rf "$t" &&
         \\! ./zig-out/bin/godot-cli project resave multi_ext_godot_saved.tscn --output multi_ext_godot_saved.tscn --project-root test_fixtures/project --godot "$GODOT" --json >/dev/null &&
         \\rm -rf test_fixtures/project/.godot/godot-cli
     });

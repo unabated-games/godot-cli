@@ -49,7 +49,7 @@ pub fn quoteString(allocator: std.mem.Allocator, text: []const u8) LexError![]u8
 pub fn quoteStringName(allocator: std.mem.Allocator, text: []const u8) LexError![]u8 {
     const inner = try quoteString(allocator, text);
     defer allocator.free(inner);
-    return try std.fmt.allocPrint(allocator, "&{s}", .{inner});
+    return try allocator.print("&{s}", .{inner});
 }
 
 pub fn validateDelimitedSyntax(text: []const u8, open_char: u8, close_char: u8) LexError!void {
@@ -191,9 +191,9 @@ pub fn formatGodotFloat(allocator: std.mem.Allocator, value: f64) LexError![]u8 
 
     const as_f32: f32 = @floatCast(value);
     if (@as(f64, as_f32) == value) {
-        return try std.fmt.allocPrint(allocator, "{d}", .{as_f32});
+        return try allocator.print("{d}", .{as_f32});
     }
-    return try std.fmt.allocPrint(allocator, "{d}", .{value});
+    return try allocator.print("{d}", .{value});
 }
 
 pub fn skipWhitespace(text: []const u8, index: usize) usize {

@@ -100,7 +100,7 @@ pub fn applyIntentJson(
         const resolved = resolveKey(entry.key_ptr.*) orelse return error.UnknownKey;
         if (!validateValue(resolved, entry.value_ptr.*)) return error.UnknownValue;
         const existed = try project_settings.setSetting(allocator, doc, "physics", resolved, entry.value_ptr.*);
-        const label = try std.fmt.allocPrint(allocator, "physics/{s}", .{resolved});
+        const label = try allocator.print("physics/{s}", .{resolved});
         try applied.append(allocator, label);
         if (existed) replaced += 1 else added += 1;
     }

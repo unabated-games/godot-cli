@@ -386,8 +386,7 @@ fn validateEntry(
     errdefer freeIssues(allocator, &issues);
 
     if (entry.catalog_format_version != catalog_format_version_supported) {
-        const message = try std.fmt.allocPrint(
-            allocator,
+        const message = try allocator.print(
             "catalog_format_version must be {d}",
             .{catalog_format_version_supported},
         );
@@ -469,8 +468,7 @@ fn noteUnresolvedIds(
             }
         }
         if (found) continue;
-        const message = try std.fmt.allocPrint(
-            allocator,
+        const message = try allocator.print(
             "{s} names {s}, which is not a catalog id in this project and not a builtin",
             .{ field, id },
         );

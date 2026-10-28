@@ -1,75 +1,10 @@
 # Open asks
 
-Trial 37 (2026-10-07) added a light to a 3D level, diffed it and proved it
-against Godot's save, with no failed call and no hand edit. Its asks, ranked:
-
-1. **A `compare-godot` match does not cover the editor's choice of
-   properties** (M). `project resave` has Godot load the scene and save it
-   without building it, so a line the editor would replace survives into the
-   reference: `position = Vector3(...)` on a 3D node matched, where the editor
-   writes `transform`. `scene validate` warns on that case
-   (`property_not_stored`), and both descriptions now say so. The full fix
-   is a resave that builds the scene first, as the editor does. Tried: an
-   `instantiate(GEN_EDIT_STATE_MAIN)` then `pack()` in a headless script
-   writes `transform` correctly, but against the 11 fixture scenes it dropped
-   a script and an inline Gradient and rewrote a parent path with `#`. So it
-   needs a real look at what the editor does differently, not a swap.
-2. **Warn at write time, not only in validate** (S). `scene node add` with
-   `position` on a 3D node returned no message, so the trial switched to
-   `transform` on its own judgement. The `property_not_stored` check could
-   run on the section a write produces and come back in `messages`.
-3. **Say what `compare-godot` left out** (S). A match skips ext_resource ids
-   and uids by design, and the trial diffed the files by hand to be sure of
-   the rest. List the skipped differences in the result.
-4. **A "before" copy without asking for one** (M). `--snapshot` has to be
-   on the first write, or there is nothing to diff against outside git. A
-   per-scene snapshot taken on a session's first write would make
-   `scene diff` work after the fact.
-5. **A capture of a camera-less 3D scene shows nothing** (M). `project run`
-   says so (`no_camera_3d`). The trial suggested a temporary camera framing
-   the scene's bounds, added for the run and never written to the file.
-
-Trials 38 to 40 (2026-10-12) set up and repaired export presets with the new
-`project export` commands. Their asks that are still open, ranked:
-
-6. **Say what an apply changed, per preset** (S). Trial 40 grepped both files
-   to confirm the teammate's settings and secrets survived a repair. Return
-   each preset's changed keys and options, old value to new (secrets by
-   name only).
-7. **Check Android readiness before a full export** (M). Godot refuses an
-   Android export for things outside the project: no Java or Android SDK in
-   the editor settings, no debug keystore. `project export build` reports
-   them only after a full Godot run. Reading the editor settings file would
-   let `validate` say so up front.
-8. **`project new` writes the `.gitignore` the project manager would** (S).
-   Godot's project manager writes one ignoring `.godot/`. godot-cli's does
-   not, so secrets written to `.godot/export_credentials.cfg` are one
-   `git add .` from being committed. `apply` warns, but cannot fix it.
-9. **Export every preset in one call** (S). Trials 38 to 40 each made one
-   `build` call per preset. A `--all` that carries on past a failure and
-   reports each would be one.
-10. **Point a warning about a secret at the credentials file** (S). A
-    missing-keystore warning points at the `[preset.N]` header, but the value
-    lives in `.godot/export_credentials.cfg`.
-11. **Check that a connection's method exists** (M). `scene connection add`
-    checks the signal against the emitter's class, but not that the
-    receiver's script defines the method. Trial 41 connected `_on_sitt` in a
-    dry run without a warning; the typo would only show at run time. The
-    script is GDScript, so this means finding `func <name>(` in it and in the
-    scripts it extends.
-12. **Show the events, not just a count** (S). `project input list` gives
-    `event_count` per action, and an apply's `--dry-run` gives only names and
-    counts, so trial 42 read raw `Object(...)` text to confirm its bindings.
-    Each event as a line such as "A (physical)" or "left_x -1.0" would make
-    both self-checking.
-13. **Say how to check a settings-only change** (S). The rules end every
-    change with `scene validate` and `project run`. An input-map change has no
-    scene, and a project with no main scene cannot run. Trial 42 built a
-    throwaway scene to test its bindings. A line on `project input validate`
-    and `project run --scene ... --press` would cover it.
-14. **`scene new --script`** (S). Attaching a script to a new scene takes
-    `scene new`, `scene ext add` and `scene set-property script`. Trial 42
-    needed all three for a one-node test scene.
+None. Trials 43 and 44 (2026-10-28) built a 3D level, an input map, a test
+scene and export presets from an empty folder over MCP with no hand edit;
+their asks are closed below. Trial 44's caught a crash in the new
+`project resave` driver (a freed scene left as the SceneTree's edited scene),
+fixed before release.
 
 ## How this list is kept
 
@@ -106,3 +41,4 @@ For the record, the trials' asks that have shipped, by release. The changelog ca
 - 0.20.0: usage prose in `catalog list`; `manifest_res_path` under a relative project root (and with it the id seed); a stated minimum Godot version; a per-event input device; the `[input]` formatting question answered.
 - 0.26.0: trial 30's four asks. UID numbers are decimal strings in JSON; a missing uid cache is `uid_cache_missing`; MCP descriptions name fields, not flags, and `properties` has a constructor example; consecutive ext_resources stay adjacent, as Godot writes them. Clearing that last one turned up two more field-order gaps and five tests that had never run, all fixed. Then trial 31's three: `scene diff --properties` lists an added node's properties and resolves an instanced node's class; the agent rules give the `--scene res://...` fallback for a scene with no catalog entry; `project import` and `project run` say what the import writes into the project. Then trial 32's five, and a `scene node get` failure seen in passing: a pinned server's refusal of an outside path says where a scratch copy can go; `scene diff` reports resources and `unique_id` changes; a node or instance add dry run returns the section it would write; `scene validate` flags a 3D node's placement written as `position` and the like, swept against 218 classes Godot saved first; the agent rules cover MCP, the import's files, and camera-less 3D frames; and a missing node is `node_not_found`. Then trial 33's three: `--snapshot` on every write and `--auto-snapshot` under `.godot/`; `preview_sections` on `scene apply --dry-run`; the rules block's frame count. Then the last two: a whole-number float property keeps its `.0`, decided by the class table; and `project run` notes a 3D scene with no camera. Then trial 35's four: `compare-godot` compares uids and names the first difference; `project resave` makes the Godot save it compares against; `normalize` reports `changed`, with a preview on a dry run; and the `camera_3d` and `place_3d` recipes place and aim a 3D node.
 - 0.27.0: trial 36's ask, `scene diff` taking `before`/`after` and `compare-godot` taking `file`/`reference`, with the old names still accepted over MCP. Trial 37's: `scene set-property` reports the text it wrote as `written`. A user session's: `project export` for export presets, which godot-cli had no way to write, then trials 38 to 40's `.gdignore`, Godot's refusal reasons, and repair of a hand-written file. Another session's: `scene node move` and `--index`, reparent warnings only for references that break, and `project input apply` in each editor's own layout. Trial 41's: `unknown_command` for a missing subcommand, Godot's own window size, and an early quit said as one. Trial 42's: `no_main_scene`, and a run summary that points at `log_tail`.
+- Unreleased (0.28.0): all fourteen of trials 37 to 42's asks. `project resave` builds the scene as the editor does, so `compare-godot` catches what the editor would store differently, and names the property; `property_not_stored` and the new `unknown_method` run on every write; `compare-godot` lists what it skipped; a session keeps a "before" copy of each scene; `project run` frames a camera-less 3D scene with a temporary camera; `project export validate` checks this machine for an Android export; `project new` writes `config/features`, `config/icon`, the `.gitignore` and `.gitattributes`; `project export apply` returns each preset's changes; `project export build --all`; a credentials issue points at the credentials file; `connection` methods are checked against the receiver's scripts; input events in words; the rules say how to check an input-map change; `scene new --script`. Then the two asks that closing them raised: a write puts properties in the editor's order, from a table dumped from the editor binary, and resave applies `reset_on_save` RESET animations. Then trial 43's: export templates checked by validate, the dry-run icon, an added sub_resource's values in the diff, the `uid_not_in_cache` hint, and what `--press` proves. Sweeping Godot's demo projects for false positives found more: multi-line text corrupted by a write, ext and sub ids treated as one namespace, instance overrides' unique_ids replaced, a crash on a node parented inside an instance, and five validator false positives, all fixed.

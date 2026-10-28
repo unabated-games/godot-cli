@@ -115,8 +115,7 @@ fn scanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "valid_entry_count", .{ .integer = @intCast(valid_count) });
     try data.put(cli.allocator, "entries", .{ .array = entries_json });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "catalog: found {d} manifest(s), {d} valid",
         .{ result.entries.len, valid_count },
     );
@@ -204,7 +203,7 @@ fn parseDocPairs(
     var out: std.ArrayList(catalog_add.SignalDoc) = .empty;
     for (texts) |text| {
         const equals = std.mem.indexOfScalar(u8, text, '=') orelse {
-            const hint = try std.fmt.allocPrint(allocator, "write <name>=<documentation>, e.g. {s}", .{example});
+            const hint = try allocator.print("write <name>=<documentation>, e.g. {s}", .{example});
             error_details.record(.{ .field = option, .value = text, .hint = hint });
             return error.InvalidValue;
         };
@@ -279,8 +278,7 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     // someone is told it is waiting: an undocumented export reads to the next
     // caller exactly like one nobody needed to explain.
     if (result.signals_scaffolded > 0 or result.exports_scaffolded > 0) {
-        const note = try std.fmt.allocPrint(
-            cli.allocator,
+        const note = try cli.allocator.print(
             "{d} signal row(s) and {d} export row(s) are scaffolded with an empty doc; fill them with --signal-doc <name>=<meaning> and --export-doc <name>=<meaning> so catalog show tells a caller what they do",
             .{ result.signals_scaffolded, result.exports_scaffolded },
         );
@@ -295,8 +293,7 @@ fn addHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     }
 
     const verb = if (result.updated) "updated" else "created";
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "{s} {s} for {s}",
         .{ verb, result.manifest_path, result.id },
     );
@@ -354,8 +351,7 @@ fn relinkHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "dry_run", .{ .bool = dry_run });
     try data.put(cli.allocator, "entries", .{ .array = entries_json });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "catalog relink: {d} checked, {d} relinked, {d} unresolved{s}",
         .{
             result.checked,
@@ -399,7 +395,7 @@ fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     defer shown.deinit(cli.allocator);
 
     const data = try buildShowJson(cli.allocator, &shown);
-    const summary = try std.fmt.allocPrint(cli.allocator, "catalog: {s} ({s})", .{ shown.id, shown.source });
+    const summary = try cli.allocator.print("catalog: {s} ({s})", .{ shown.id, shown.source });
     var root: std.json.ObjectMap = .{};
     try root.put(cli.allocator, "summary", .{ .string = summary });
     try root.put(cli.allocator, "entry", data);
@@ -445,8 +441,7 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "valid", .{ .bool = error_count == 0 });
     try data.put(cli.allocator, "entries", .{ .array = entries_json });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "catalog validate: {d} error(s), {d} warning(s)",
         .{ error_count, warning_count },
     );
@@ -505,14 +500,12 @@ fn exportHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "markdown", try jsonString(cli.allocator, result.markdown));
 
     const summary = if (dry_run)
-        try std.fmt.allocPrint(
-            cli.allocator,
+        try cli.allocator.print(
             "catalog export: {d} project + {d} builtin entries (dry run)",
             .{ result.project_entry_count, result.builtin_entry_count },
         )
     else
-        try std.fmt.allocPrint(
-            cli.allocator,
+        try cli.allocator.print(
             "catalog export: wrote {s} ({d} project + {d} builtin entries)",
             .{ result.output_path, result.project_entry_count, result.builtin_entry_count },
         );
@@ -562,7 +555,7 @@ fn searchHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "hit_count", .{ .integer = @intCast(result.hits.len) });
     try data.put(cli.allocator, "hits", .{ .array = hits_json });
 
-    const summary = try std.fmt.allocPrint(cli.allocator, "catalog search: {d} hit(s)", .{result.hits.len});
+    const summary = try cli.allocator.print("catalog search: {d} hit(s)", .{result.hits.len});
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{
@@ -604,8 +597,7 @@ fn listHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "entry_count", .{ .integer = @intCast(listed.items.len) });
     try data.put(cli.allocator, "entries", .{ .array = listed });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "catalog: {d} valid entries",
         .{listed.items.len},
     );

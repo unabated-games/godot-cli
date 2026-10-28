@@ -140,8 +140,7 @@ fn noteMissingOption(
         count += 1;
     }
 
-    const hint = std.fmt.allocPrint(
-        allocator,
+    const hint = allocator.print(
         "usage: {s}; this command requires {s}",
         .{ usage.items, required.items },
     ) catch return;
@@ -277,7 +276,7 @@ fn noteUnknownOption(
             subcommands.appendSlice(allocator, child.name) catch return;
         }
         const hint = if (command.children.len != 0)
-            std.fmt.allocPrint(allocator, "this command takes no options of its own; its subcommands do: {s}", .{subcommands.items}) catch return
+            allocator.print("this command takes no options of its own; its subcommands do: {s}", .{subcommands.items}) catch return
         else
             allocator.dupe(u8, "this command takes no options") catch return;
         const joined_parent = std.mem.join(allocator, " ", path) catch return;
@@ -297,9 +296,9 @@ fn noteUnknownOption(
     // confident wrong guess.
     const suggest = closest != null and best <= @max(bare.len, 2) / 2;
     const hint = if (suggest)
-        std.fmt.allocPrint(allocator, "did you mean --{s}? this command takes {s}", .{ closest.?, accepted.items }) catch return
+        allocator.print("did you mean --{s}? this command takes {s}", .{ closest.?, accepted.items }) catch return
     else
-        std.fmt.allocPrint(allocator, "this command takes {s}", .{accepted.items}) catch return;
+        allocator.print("this command takes {s}", .{accepted.items}) catch return;
 
     const joined = std.mem.join(allocator, " ", path) catch return;
     error_details.record(.{ .command = joined, .field = bare, .value = arg, .hint = hint });
@@ -467,7 +466,7 @@ test "every documented global option is recognised" {
     const allocator = std.testing.allocator;
 
     for (spec.global_options) |opt| {
-        const arg = try std.fmt.allocPrint(allocator, "--{s}", .{opt.long});
+        const arg = try allocator.print("--{s}", .{opt.long});
         defer allocator.free(arg);
 
         var inv: spec.Invocation = .{};

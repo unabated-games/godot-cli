@@ -141,7 +141,7 @@ pub fn addNodeWithOptions(
         break :blk insert_at;
     };
 
-    const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent.path, name });
+    const new_path = try allocator.print("{s}/{s}", .{ parent.path, name });
 
     return .{
         .section_index = section_index,
@@ -182,7 +182,7 @@ pub fn removeNode(
     if (!recursive) {
         if (hasDescendantPath(&list, target.path)) return error.HasChildren;
     } else {
-        const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{target.path});
+        const prefix = try allocator.print("{s}/", .{target.path});
         defer allocator.free(prefix);
         for (list.nodes) |*node| {
             if (std.mem.startsWith(u8, node.path, prefix)) {
@@ -237,12 +237,12 @@ pub fn renameNode(
     try doc.sections.items[section_index].header.setStringField(allocator, "name", new_name);
 
     const new_path = if (parent_path) |parent|
-        try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent, new_name })
+        try allocator.print("{s}/{s}", .{ parent, new_name })
     else
-        try std.fmt.allocPrint(allocator, "/root/{s}", .{new_name});
+        try allocator.print("/root/{s}", .{new_name});
 
     if (old_prefix.len > 0) {
-        const old_with_slash = try std.fmt.allocPrint(allocator, "{s}/", .{old_prefix});
+        const old_with_slash = try allocator.print("{s}/", .{old_prefix});
         defer allocator.free(old_with_slash);
         const new_prefix = try nodePathPrefixFromViewport(allocator, scene_root.name, new_path);
         defer allocator.free(new_prefix);
@@ -256,7 +256,7 @@ pub fn renameNode(
             }
             if (std.mem.startsWith(u8, parent_attr, old_with_slash)) {
                 const suffix = parent_attr[old_with_slash.len..];
-                const rewritten = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ new_prefix, suffix });
+                const rewritten = try allocator.print("{s}/{s}", .{ new_prefix, suffix });
                 defer allocator.free(rewritten);
                 try section.header.setStringField(allocator, "parent", rewritten);
             }
@@ -309,7 +309,7 @@ pub fn moveNode(allocator: std.mem.Allocator, doc: *document.Document, node_path
 pub fn childCount(allocator: std.mem.Allocator, doc: *const document.Document, parent_path: []const u8, exclude: ?[]const u8) Error!usize {
     var list = try node_tree.collectNodes(allocator, doc);
     defer list.deinit(allocator);
-    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_path});
+    const prefix = try allocator.print("{s}/", .{parent_path});
     defer allocator.free(prefix);
     var count: usize = 0;
     for (list.nodes) |*node| {
@@ -364,7 +364,7 @@ pub fn reparentNodeWithOptions(
 
     const new_parent = node_tree.findByPath(&list, new_parent_path) orelse return error.ParentNotFound;
     if (std.mem.eql(u8, new_parent.path, target.path)) return error.ReparentCycle;
-    const target_prefix = try std.fmt.allocPrint(allocator, "{s}/", .{target.path});
+    const target_prefix = try allocator.print("{s}/", .{target.path});
     defer allocator.free(target_prefix);
     if (std.mem.startsWith(u8, new_parent.path, target_prefix)) return error.ReparentCycle;
 
@@ -395,14 +395,14 @@ pub fn reparentNodeWithOptions(
         try section.header.setStringField(allocator, "parent", new_parent_attr);
     }
 
-    const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ new_parent.path, target.name });
+    const new_path = try allocator.print("{s}/{s}", .{ new_parent.path, target.name });
     defer allocator.free(new_path);
 
     const new_prefix = try nodePathPrefixFromViewport(allocator, scene_root.name, new_path);
     defer allocator.free(new_prefix);
 
     if (old_prefix.len > 0 and !std.mem.eql(u8, old_prefix, new_prefix)) {
-        const old_with_slash = try std.fmt.allocPrint(allocator, "{s}/", .{old_prefix});
+        const old_with_slash = try allocator.print("{s}/", .{old_prefix});
         defer allocator.free(old_with_slash);
         for (doc.sections.items) |*child_section| {
             if (!std.mem.eql(u8, child_section.header.name, "node")) continue;
@@ -413,7 +413,7 @@ pub fn reparentNodeWithOptions(
             }
             if (std.mem.startsWith(u8, parent_attr, old_with_slash)) {
                 const suffix = parent_attr[old_with_slash.len..];
-                const rewritten = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ new_prefix, suffix });
+                const rewritten = try allocator.print("{s}/{s}", .{ new_prefix, suffix });
                 defer allocator.free(rewritten);
                 try child_section.header.setStringField(allocator, "parent", rewritten);
             }
@@ -463,12 +463,12 @@ fn parentViewportPath(allocator: std.mem.Allocator, path: []const u8) Error!?[]c
 
 /// Godot `parent` attribute path from scene root (e.g. `Player/Sprite`), empty for scene root.
 pub fn nodePathPrefixFromViewport(allocator: std.mem.Allocator, scene_root_name: []const u8, viewport_path: []const u8) Error![]const u8 {
-    const root_prefix = try std.fmt.allocPrint(allocator, "/root/{s}", .{scene_root_name});
+    const root_prefix = try allocator.print("/root/{s}", .{scene_root_name});
     defer allocator.free(root_prefix);
 
     if (std.mem.eql(u8, viewport_path, root_prefix)) return try allocator.dupe(u8, "");
 
-    const child_prefix = try std.fmt.allocPrint(allocator, "/root/{s}/", .{scene_root_name});
+    const child_prefix = try allocator.print("/root/{s}/", .{scene_root_name});
     defer allocator.free(child_prefix);
     if (!std.mem.startsWith(u8, viewport_path, child_prefix)) return error.InvalidNodePath;
 
@@ -477,11 +477,11 @@ pub fn nodePathPrefixFromViewport(allocator: std.mem.Allocator, scene_root_name:
 
 /// Viewport parent path → Godot `parent` attribute (`.` for scene root).
 pub fn viewportPathToParentAttr(allocator: std.mem.Allocator, scene_root_name: []const u8, parent_viewport_path: []const u8) Error![]const u8 {
-    const root_path = try std.fmt.allocPrint(allocator, "/root/{s}", .{scene_root_name});
+    const root_path = try allocator.print("/root/{s}", .{scene_root_name});
     defer allocator.free(root_path);
     if (std.mem.eql(u8, parent_viewport_path, root_path)) return try allocator.dupe(u8, ".");
 
-    const prefix = try std.fmt.allocPrint(allocator, "/root/{s}/", .{scene_root_name});
+    const prefix = try allocator.print("/root/{s}/", .{scene_root_name});
     defer allocator.free(prefix);
     if (!std.mem.startsWith(u8, parent_viewport_path, prefix)) return error.InvalidNodePath;
     return try allocator.dupe(u8, parent_viewport_path[prefix.len..]);
@@ -579,7 +579,7 @@ fn childOrder(allocator: std.mem.Allocator, doc: *const document.Document, paren
     defer list.deinit(allocator);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_path});
+    const prefix = try allocator.print("{s}/", .{parent_path});
     defer allocator.free(prefix);
     var ordered: std.ArrayList(*const node_tree.NodeInfo) = .empty;
     defer ordered.deinit(allocator);

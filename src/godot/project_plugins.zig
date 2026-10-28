@@ -41,14 +41,14 @@ pub fn normalizePluginPath(allocator: std.mem.Allocator, path: []const u8) Error
     if (std.mem.startsWith(u8, path, "res://")) {
         if (std.mem.endsWith(u8, path, "plugin.cfg")) return try allocator.dupe(u8, path);
         if (std.mem.endsWith(u8, path, "/")) {
-            return try std.fmt.allocPrint(allocator, "{s}plugin.cfg", .{path});
+            return try allocator.print("{s}plugin.cfg", .{path});
         }
-        return try std.fmt.allocPrint(allocator, "{s}/plugin.cfg", .{path});
+        return try allocator.print("{s}/plugin.cfg", .{path});
     }
     if (std.mem.startsWith(u8, path, "addons/")) {
-        return try std.fmt.allocPrint(allocator, "res://{s}/plugin.cfg", .{std.mem.trim(u8, path["addons/".len..], "/")});
+        return try allocator.print("res://{s}/plugin.cfg", .{std.mem.trim(u8, path["addons/".len..], "/")});
     }
-    return try std.fmt.allocPrint(allocator, "res://addons/{s}/plugin.cfg", .{std.mem.trim(u8, path, "/")});
+    return try allocator.print("res://addons/{s}/plugin.cfg", .{std.mem.trim(u8, path, "/")});
 }
 
 pub fn parseEnabledPaths(allocator: std.mem.Allocator, section: ?*const project_godot.Section) Error![]const []const u8 {
@@ -130,10 +130,10 @@ pub fn listPlugins(
         const next = iterator.next(io) catch return error.Io;
         const entry = next orelse break;
         if (entry.kind != .directory) continue;
-        const plugin_cfg = try std.fmt.allocPrint(allocator, "res://addons/{s}/plugin.cfg", .{entry.name});
+        const plugin_cfg = try allocator.print("res://addons/{s}/plugin.cfg", .{entry.name});
         defer allocator.free(plugin_cfg);
 
-        const fs_cfg = try std.fmt.allocPrint(allocator, "{s}/{s}/plugin.cfg", .{ addons_dir, entry.name });
+        const fs_cfg = try allocator.print("{s}/{s}/plugin.cfg", .{ addons_dir, entry.name });
         defer allocator.free(fs_cfg);
         std.Io.Dir.cwd().access(io, fs_cfg, .{}) catch continue;
 

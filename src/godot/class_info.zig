@@ -62,6 +62,23 @@ pub fn hasSignal(class_name: []const u8, signal: []const u8) ?bool {
     return false;
 }
 
+/// Whether the class or one it inherits from has the method, or null when
+/// the class is not in the table.
+pub fn hasMethod(class_name: []const u8, method: []const u8) ?bool {
+    if (findClass(class_name) == null) return null;
+    var current = class_name;
+    var hops: usize = 0;
+    while (hops < 64) : (hops += 1) {
+        const class = findClass(current) orelse return false;
+        for (class.methods) |candidate| {
+            if (std.mem.eql(u8, candidate, method)) return true;
+        }
+        if (class.inherits.len == 0) return false;
+        current = class.inherits;
+    }
+    return false;
+}
+
 /// Whether the class is the named one or descends from it. Replaces the hand
 /// written class lists the validator used to carry, which named fifty of the
 /// two hundred and sixty Node classes.

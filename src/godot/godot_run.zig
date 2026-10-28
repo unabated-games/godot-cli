@@ -63,6 +63,9 @@ pub const Options = struct {
     /// shows its hover style. By default the cursor is moved off-screen after
     /// the release and the node draws normally again.
     keep_cursor: bool = false,
+    /// Add a camera framing the scene, and a light if it has none, for a 3D
+    /// scene with no Camera3D. Never written to the scene's file.
+    auto_camera: bool = false,
     /// Also keep these frames (as Godot numbers them, from 0): frame 0 for a
     /// before-and-after pair, a mid-run number for a state such as a menu
     /// part-way open.
@@ -255,12 +258,12 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
 
     // Frame and log paths are relative to the project, and Godot runs with the
     // project as its working directory, so both forms resolve the same way.
-    const shot_pattern = std.fmt.allocPrint(allocator, "{s}/shot.png", .{options.capture_dir}) catch return error.OutOfMemory;
-    const log_relative = std.fmt.allocPrint(allocator, "{s}/godot.log", .{options.capture_dir}) catch return error.OutOfMemory;
-    const frames_text = std.fmt.allocPrint(allocator, "{d}", .{options.frames}) catch return error.OutOfMemory;
+    const shot_pattern = allocator.print("{s}/shot.png", .{options.capture_dir}) catch return error.OutOfMemory;
+    const log_relative = allocator.print("{s}/godot.log", .{options.capture_dir}) catch return error.OutOfMemory;
+    const frames_text = allocator.print("{d}", .{options.frames}) catch return error.OutOfMemory;
 
     var script_relative: ?[]const u8 = null;
-    if (options.presses.len != 0 or options.clicks.len != 0 or options.types.len != 0 or options.focuses.len != 0) {
+    if (options.presses.len != 0 or options.clicks.len != 0 or options.types.len != 0 or options.focuses.len != 0 or options.auto_camera) {
         script_relative = try writeDriverScript(allocator, io, options);
         result.driver_script = std.fs.path.join(allocator, &.{ options.project_root, script_relative.? }) catch return error.OutOfMemory;
     }
@@ -269,7 +272,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     const game_run = try runGodot(allocator, environ, options.project_root, argv);
     result.exit = exitCode(game_run.term);
     result.signal = switch (game_run.term) {
-        .signal => |sig| std.fmt.allocPrint(allocator, "{d}", .{@backingInt(sig)}) catch return error.OutOfMemory,
+        .signal => |sig| allocator.print("{d}", .{@backingInt(sig)}) catch return error.OutOfMemory,
         else => null,
     };
     result.stderr_tail = try tail(allocator, game_run.stderr, 20);
@@ -314,7 +317,7 @@ fn buildArgv(
     // forces this same flag (main.cpp), which is why a windowed run was
     // already steady; passing the project's physics rate makes one iteration
     // one physics step, and one frame mean the same thing in both.
-    const fixed_fps_text = std.fmt.allocPrint(allocator, "{d}", .{options.physics_fps}) catch return error.OutOfMemory;
+    const fixed_fps_text = allocator.print("{d}", .{options.physics_fps}) catch return error.OutOfMemory;
     argv.appendSlice(allocator, &.{ "--fixed-fps", fixed_fps_text }) catch return error.OutOfMemory;
     argv.appendSlice(allocator, &.{ "--quit-after", frames_text, "--log-file", log_relative, "--no-header" }) catch return error.OutOfMemory;
     if (options.user_args.len != 0) {
@@ -329,11 +332,11 @@ fn buildArgv(
 /// is what the trial agents wrote by hand each time.
 fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options) Error![]const u8 {
     const scene_arg = options.scene orelse options.main_scene orelse return error.Io;
-    const scene_res = if (std.mem.startsWith(u8, scene_arg, "res://")) scene_arg else std.fmt.allocPrint(allocator, "res://{s}", .{std.mem.trimStart(u8, scene_arg, "./")}) catch return error.OutOfMemory;
+    const scene_res = if (std.mem.startsWith(u8, scene_arg, "res://")) scene_arg else allocator.print("res://{s}", .{std.mem.trimStart(u8, scene_arg, "./")}) catch return error.OutOfMemory;
 
     var out: std.Io.Writer.Allocating = .init(allocator);
     const w = &out.writer;
-    w.writeAll("# Written by godot-cli project run --press; safe to delete.\nextends SceneTree\n\n") catch return error.OutOfMemory;
+    w.writeAll("# Written by godot-cli project run; safe to delete.\nextends SceneTree\n\n") catch return error.OutOfMemory;
     w.print("const SCENE := \"{s}\"\nconst PRESSES := [", .{scene_res}) catch return error.OutOfMemory;
     for (options.presses, 0..) |press, i| {
         w.print("{s}[\"{s}\", {d}, {d}]", .{ if (i == 0) "" else ", ", press.action, press.start, press.end }) catch return error.OutOfMemory;
@@ -353,6 +356,7 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", entry.node_path, entry.frame }) catch return error.OutOfMemory;
     }
     w.print("]\nconst KEEP_CURSOR := {s}\n", .{if (options.keep_cursor) "true" else "false"}) catch return error.OutOfMemory;
+    w.print("const AUTO_CAMERA := {s}\n", .{if (options.auto_camera) "true" else "false"}) catch return error.OutOfMemory;
     // The headless display server reports no window size, which leaves the
     // root viewport at 64x64 and every Control laid out inside that corner.
     // The driver puts the project's own size back, so a headless run lays out
@@ -481,6 +485,44 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        up.pressed = false
         \\        Input.parse_input_event(up)
         \\
+        \\# A 3D scene with no camera draws only the clear colour. Frame what it
+        \\# has: a camera on the diagonal, far enough back to fit the bounds of
+        \\# every visible node, and a light when there is none. They are added to
+        \\# the root, outside the scene, so nothing about the file changes.
+        \\func _frame_scene() -> void:
+        \\    if root.get_camera_3d() != null:
+        \\        return
+        \\    var bounds := AABB()
+        \\    var found := false
+        \\    var lights := 0
+        \\    for node in root.find_children("*", "VisualInstance3D", true, false):
+        \\        var visual := node as VisualInstance3D
+        \\        if not visual.is_visible_in_tree():
+        \\            continue
+        \\        if visual is Light3D:
+        \\            lights += 1
+        \\            continue
+        \\        var box := visual.global_transform * visual.get_aabb()
+        \\        bounds = box if not found else bounds.merge(box)
+        \\        found = true
+        \\    if not found:
+        \\        bounds = AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2))
+        \\    var centre := bounds.get_center()
+        \\    var radius := maxf(bounds.size.length() * 0.5, 0.5)
+        \\    var camera := Camera3D.new()
+        \\    camera.name = "GodotCliCamera"
+        \\    var distance := radius / sin(deg_to_rad(camera.fov * 0.5)) * 1.1
+        \\    root.add_child(camera)
+        \\    camera.look_at_from_position(centre + Vector3(1, 0.8, 1).normalized() * distance, centre, Vector3.UP)
+        \\    camera.far = maxf(camera.far, distance + radius * 2.0)
+        \\    camera.current = true
+        \\    if lights == 0:
+        \\        var light := DirectionalLight3D.new()
+        \\        light.name = "GodotCliLight"
+        \\        root.add_child(light)
+        \\        light.look_at_from_position(centre + Vector3(0.4, 1, 0.6), centre, Vector3.UP)
+        \\    print("godot-cli: no Camera3D, so a temporary one frames ", bounds, " from ", camera.global_position, " and a temporary light" if lights == 0 else "")
+        \\
         \\func _mouse_away() -> void:
         \\    var motion := InputEventMouseMotion.new()
         \\    motion.position = AWAY
@@ -496,6 +538,8 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\    # the first tick sticks, and the layout follows on the next.
         \\    if _frame <= 2 and root.size != VIEWPORT and DisplayServer.get_name() == "headless":
         \\        root.size = VIEWPORT
+        \\    if AUTO_CAMERA and _frame == 1:
+        \\        _frame_scene()
         \\    for press in PRESSES:
         \\        if _frame == press[1]:
         \\            _action(press[0], true)
@@ -517,7 +561,7 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\
     ) catch return error.OutOfMemory;
 
-    const relative = std.fmt.allocPrint(allocator, "{s}/godot_cli_run.gd", .{options.capture_dir}) catch return error.OutOfMemory;
+    const relative = allocator.print("{s}/godot_cli_run.gd", .{options.capture_dir}) catch return error.OutOfMemory;
     const full = std.fs.path.join(allocator, &.{ options.project_root, relative }) catch return error.OutOfMemory;
     const file = std.Io.Dir.cwd().createFile(io, full, .{}) catch return error.Io;
     defer file.close(io);
@@ -589,7 +633,7 @@ fn collectFrames(allocator: std.mem.Allocator, io: std.Io, options: Options, res
     var keep_names: std.ArrayList([]const u8) = .empty;
     var kept_paths: std.ArrayList([]const u8) = .empty;
     for (options.frames_at) |wanted| {
-        const name = std.fmt.allocPrint(allocator, "shot{d:0>8}.png", .{wanted}) catch return error.OutOfMemory;
+        const name = allocator.print("shot{d:0>8}.png", .{wanted}) catch return error.OutOfMemory;
         keep_names.append(allocator, name) catch return error.OutOfMemory;
         for (frames.items) |written| if (std.mem.eql(u8, written, name)) {
             kept_paths.append(allocator, std.fs.path.join(allocator, &.{ dir_path, written }) catch return error.OutOfMemory) catch return error.OutOfMemory;
@@ -970,4 +1014,28 @@ test "a 3D scene with no camera, in it or in what it instances, is flagged" {
     try tmp.dir.writeFile(io, .{ .sub_path = "flat.tscn", .data = "[gd_scene format=3]\n\n[node name=\"Flat\" type=\"Node2D\"]\n" });
     try std.testing.expect(!isCameralessScene3D(allocator, io, root, "flat.tscn"));
     try std.testing.expect(!isCameralessScene3D(allocator, io, root, "res://missing.tscn"));
+}
+
+test "a camera-less 3D run gets a temporary camera from the driver, and only then" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.testing.io;
+    try tmp.dir.createDirPath(io, "cap");
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root = path_buf[0..try tmp.dir.realPath(io, &path_buf)];
+
+    const framed = try writeDriverScript(arena, io, .{ .project_root = root, .scene = "level.tscn", .capture_dir = "cap", .auto_camera = true });
+    const script = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ root, framed }), arena, .unlimited);
+    try std.testing.expect(std.mem.indexOf(u8, script, "const AUTO_CAMERA := true") != null);
+    // It adds to the root, never to the scene, so nothing it adds is saved,
+    // and it stands down when the scene does have a camera.
+    try std.testing.expect(std.mem.indexOf(u8, script, "root.add_child(camera)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, script, "if root.get_camera_3d() != null:") != null);
+
+    const plain = try writeDriverScript(arena, io, .{ .project_root = root, .scene = "level.tscn", .capture_dir = "cap", .presses = &.{.{ .action = "jump", .start = 1, .end = 2 }} });
+    const plain_script = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ root, plain }), arena, .unlimited);
+    try std.testing.expect(std.mem.indexOf(u8, plain_script, "const AUTO_CAMERA := false") != null);
 }

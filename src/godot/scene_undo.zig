@@ -72,7 +72,7 @@ pub fn writeSnapshot(io: std.Io, source_path: []const u8, dest_path: []const u8)
 }
 
 pub fn defaultSnapshotPath(allocator: std.mem.Allocator, scene_path: []const u8) Error![]const u8 {
-    return std.fmt.allocPrint(allocator, "{s}.godot-cli-snapshot", .{scene_path});
+    return allocator.print("{s}.godot-cli-snapshot", .{scene_path});
 }
 
 pub fn recordNodeAddUndo(recorder: *UndoRecorder, path: []const u8) Error!void {
@@ -237,7 +237,7 @@ pub fn captureRemoveUndoOps(
     try indices.append(allocator, target.section_index);
 
     if (recursive) {
-        const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{target.path});
+        const prefix = try allocator.print("{s}/", .{target.path});
         defer allocator.free(prefix);
         for (list.nodes) |*node| {
             if (std.mem.startsWith(u8, node.path, prefix)) {

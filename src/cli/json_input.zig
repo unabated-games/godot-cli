@@ -125,19 +125,19 @@ fn applyOptionsToArgv(
         switch (value) {
             .bool => |enabled| {
                 if (!enabled) continue;
-                const flag = try std.fmt.allocPrint(allocator, "--{s}", .{key});
+                const flag = try allocator.print("--{s}", .{key});
                 try argv.append(allocator, flag);
             },
             .string => |text| {
-                const flag = try std.fmt.allocPrint(allocator, "--{s}={s}", .{ key, text });
+                const flag = try allocator.print("--{s}={s}", .{ key, text });
                 try argv.append(allocator, flag);
             },
             .integer => |num| {
-                const flag = try std.fmt.allocPrint(allocator, "--{s}={d}", .{ key, num });
+                const flag = try allocator.print("--{s}={d}", .{ key, num });
                 try argv.append(allocator, flag);
             },
             .float => |num| {
-                const flag = try std.fmt.allocPrint(allocator, "--{s}={d}", .{ key, num });
+                const flag = try allocator.print("--{s}={d}", .{ key, num });
                 try argv.append(allocator, flag);
             },
             else => return error.InvalidValue,

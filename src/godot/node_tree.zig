@@ -202,13 +202,13 @@ fn buildNodePath(
     node_name: []const u8,
 ) Error![]u8 {
     if (parent_attr == null) {
-        return try std.fmt.allocPrint(allocator, "/root/{s}", .{node_name});
+        return try allocator.print("/root/{s}", .{node_name});
     }
     const parent = parent_attr.?;
     if (std.mem.eql(u8, parent, ".") or std.mem.eql(u8, parent, scene_root_name)) {
-        return try std.fmt.allocPrint(allocator, "/root/{s}/{s}", .{ scene_root_name, node_name });
+        return try allocator.print("/root/{s}/{s}", .{ scene_root_name, node_name });
     }
-    return try std.fmt.allocPrint(allocator, "/root/{s}/{s}/{s}", .{ scene_root_name, parent, node_name });
+    return try allocator.print("/root/{s}/{s}/{s}", .{ scene_root_name, parent, node_name });
 }
 
 test "collect nodes from sample scene bytes" {

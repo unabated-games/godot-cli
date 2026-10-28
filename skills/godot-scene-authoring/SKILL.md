@@ -44,7 +44,7 @@ Work from the Godot project root (`project.godot`). Pass `--json` on every comma
 5. Values are Variant text; strings carry their own quotes (`"\"Paused\""`).
 6. Files move with `project move`, never `mv`.
 7. Export presets are written with `project export apply` (option names from `project export options --platform <p>`), never by editing `export_presets.cfg`; `project export build --preset <name>` runs the export.
-8. Validate after every edit; run the game and read the frame and the log before reporting done. Validate type-checks property values against the node's class and connections against the signals it emits, so a wrong type or a misspelled signal fails there rather than at run time.
+8. Validate after every edit; run the game and read the frame and the log before reporting done. An input-map change has no scene to validate: `project input validate`, then `project run --press <action>@10..30` on a scene that reacts to it (`--scene res://...` if there is no main scene), and read the log. `--press` sends the action itself, so the bindings are what `project input list` reports. Validate type-checks property values against the node's class and connections against the signals it emits, so a wrong type or a misspelled signal fails there rather than at run time.
 
 ## Workflow checklist
 
@@ -62,6 +62,7 @@ Work from the Godot project root (`project.godot`). Pass `--json` on every comma
 
 ```bash
 godot-cli scene new --output scenes/main.tscn --root-name Main --root-type Node2D --project-root .
+godot-cli scene new --output scenes/test.tscn --root-name Test --root-type Node2D --script scripts/test.gd --project-root .
 godot-cli scene node add scenes/main.tscn --parent /root/Main --name Player --type CharacterBody2D --project-root .
 godot-cli scene instance add scenes/main.tscn --parent /root/Main --name Btn --catalog-id ui/button --project-root .
 godot-cli scene connection add scenes/main.tscn --from /root/Main/Btn --signal pressed --to /root/Main --method _on_btn_pressed --project-root .

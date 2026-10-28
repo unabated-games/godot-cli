@@ -116,7 +116,7 @@ pub fn setSectionProperty(
     if (section_index >= doc.sections.items.len) return error.SectionNotFound;
     const section = &doc.sections.items[section_index];
 
-    const new_line = try std.fmt.allocPrint(allocator, "{s} = {s}", .{ property_name, value });
+    const new_line = try allocator.print("{s} = {s}", .{ property_name, value });
     for (section.properties.items, 0..) |prop, prop_index| {
         if (propertyNameEquals(prop.raw, property_name)) {
             allocator.free(section.properties.items[prop_index].raw);
@@ -141,9 +141,36 @@ pub fn parseBytes(allocator: std.mem.Allocator, bytes: []const u8) ParseError!Do
     var lines = std.mem.splitScalar(u8, bytes, '\n');
     var current: ?Section = null;
     var pending_blank_lines: usize = 0;
+    // A value that runs over several lines: a string holding newlines, or
+    // a dictionary or array Godot writes one entry per line. Its lines are
+    // kept byte for byte in one property, blank and indented ones included;
+    // read line by line, a text's indentation was trimmed, its blank lines
+    // moved out of it, and a line of BBCode starting `[` became a section.
+    var open_value: ?ValueScan = null;
 
     while (lines.next()) |line| {
         line_no += 1;
+        if (open_value) |*scan| {
+            const section = &current.?;
+            const property = &section.properties.items[section.properties.items.len - 1];
+            const content = std.mem.trimEnd(u8, line, "\r");
+            const joined = try std.mem.concat(allocator, u8, &.{ property.raw, "\n", content });
+            allocator.free(property.raw);
+            property.raw = joined;
+            scan.feed(content);
+            if (scan.complete()) {
+                // The closing line is trimmed at its end, as a one-line
+                // value is.
+                const trimmed_end = std.mem.trimEnd(u8, property.raw, &std.ascii.whitespace);
+                if (trimmed_end.len != property.raw.len) {
+                    const shorter = try allocator.dupe(u8, trimmed_end);
+                    allocator.free(property.raw);
+                    property.raw = shorter;
+                }
+                open_value = null;
+            }
+            continue;
+        }
         const trimmed = std.mem.trim(u8, line, &std.ascii.whitespace);
         if (trimmed.len == 0) {
             pending_blank_lines += 1;
@@ -167,8 +194,14 @@ pub fn parseBytes(allocator: std.mem.Allocator, bytes: []const u8) ParseError!Do
         }
 
         if (current) |*section| {
-            const raw = try allocator.dupe(u8, trimmed);
+            var scan: ValueScan = .{};
+            if (std.mem.indexOf(u8, trimmed, " = ")) |equals| scan.feed(trimmed[equals + 3 ..]) else scan.feed(trimmed);
+            // An open value keeps its first line's trailing spaces: they are
+            // inside the string.
+            const kept = if (scan.complete()) trimmed else std.mem.trimStart(u8, std.mem.trimEnd(u8, line, "\r"), &std.ascii.whitespace);
+            const raw = try allocator.dupe(u8, kept);
             try section.properties.append(allocator, .{ .line = line_no, .raw = raw });
+            if (!scan.complete()) open_value = scan;
         }
     }
 
@@ -178,6 +211,41 @@ pub fn parseBytes(allocator: std.mem.Allocator, bytes: []const u8) ParseError!Do
 
     return doc;
 }
+
+/// Whether a value's text so far has closed every string and bracket it
+/// opened. Godot escapes a quote inside a string as `\"`.
+const ValueScan = struct {
+    in_string: bool = false,
+    escaped: bool = false,
+    depth: i64 = 0,
+
+    fn feed(self: *ValueScan, text: []const u8) void {
+        for (text) |c| {
+            if (self.in_string) {
+                if (self.escaped) {
+                    self.escaped = false;
+                } else if (c == '\\') {
+                    self.escaped = true;
+                } else if (c == '"') {
+                    self.in_string = false;
+                }
+                continue;
+            }
+            switch (c) {
+                '"' => self.in_string = true,
+                '(', '[', '{' => self.depth += 1,
+                ')', ']', '}' => self.depth -= 1,
+                else => {},
+            }
+        }
+        // A newline inside a string is content, not an escape's target.
+        self.escaped = false;
+    }
+
+    fn complete(self: *const ValueScan) bool {
+        return !self.in_string and self.depth <= 0;
+    }
+};
 
 pub fn parseFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ParseError!Document {
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch return error.Io;

@@ -7,6 +7,7 @@ const spec = @import("spec.zig");
 const emit = @import("../output/emit.zig");
 const scene_resources = @import("../godot/scene_resources.zig");
 const error_details = @import("../godot/error_details.zig");
+const write_notes = @import("../godot/write_notes.zig");
 
 pub const App = struct {
     root: *const spec.CommandSpec,
@@ -110,7 +111,7 @@ pub const App = struct {
             }
             const failure = emit.Failure{
                 .kind = "unknown_command",
-                .message = std.fmt.allocPrint(self.allocator, "{s} has no subcommand {s}; it has: {s}", .{ std.mem.join(self.allocator, " ", inv.path) catch "this command", inv.positionals[0], names.items }) catch "unknown command",
+                .message = self.allocator.print("{s} has no subcommand {s}; it has: {s}", .{ std.mem.join(self.allocator, " ", inv.path) catch "this command", inv.positionals[0], names.items }) catch "unknown command",
             };
             emit.emitFailure(self.allocator, self.io, &stdout_buffer, &stderr_buffer, inv.global.json_output, inv.path, failure) catch {};
             return .usage;
@@ -176,8 +177,14 @@ pub const App = struct {
     /// Every handler call, from the command line, a batch step, or MCP: a
     /// write given --snapshot copies its file first, exactly once.
     fn runHandler(self: *const App, command: *const spec.CommandSpec, handler: spec.CommandHandler, ctx: *anyopaque, inv: *const spec.Invocation) anyerror!spec.Result {
+        write_notes.reset();
         try @import("../commands/scene.zig").snapshotBeforeWrite(self, command, inv);
-        return handler(ctx, inv);
+        var result = try handler(ctx, inv);
+        const notes = write_notes.take();
+        if (notes.len > 0) {
+            result.messages = try std.mem.concat(self.allocator, []const u8, &.{ result.messages, notes });
+        }
+        return result;
     }
 
     fn loadInvocation(self: *const App, args: []const []const u8) spec.CliError!spec.Invocation {
@@ -290,6 +297,7 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
         .{ .err = "ExportDuplicateName", .kind = "duplicate_name", .message = "another export preset already has that name" },
         .{ .err = "NoMainScene", .kind = "no_main_scene", .message = "the project has no main scene to run" },
         .{ .err = "ChildIndexOutOfRange", .kind = "child_index_out_of_range", .message = "the parent does not have a child at that index" },
+        .{ .err = "Usage", .kind = "usage", .message = "the options given do not fit together or are incomplete; details name the one at fault" },
         .{ .err = "BinaryResourceUnreadable", .kind = "binary_resource_unreadable", .message = "the binary resource's header could not be read" },
     };
     for (mapped) |entry| if (std.mem.eql(u8, name, entry.err)) {

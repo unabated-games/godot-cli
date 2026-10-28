@@ -20,6 +20,8 @@ pub const ActionInfo = struct {
     name: []const u8,
     deadzone: f64,
     event_count: usize,
+    /// Each event as describeEvents words it.
+    events: []const []const u8 = &.{},
 
     pub fn deinit(self: *const ActionInfo, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
@@ -51,6 +53,7 @@ pub fn listActions(allocator: std.mem.Allocator, section: *const project_godot.S
             .name = try allocator.dupe(u8, entry.key),
             .deadzone = deadzone,
             .event_count = event_count,
+            .events = try describeEvents(allocator, entry.value),
         });
     }
 
@@ -161,6 +164,96 @@ fn parseDeadzone(value: []const u8) ?f64 {
     return std.fmt.parseFloat(f64, token) catch null;
 }
 
+/// Each event of an action's value as one line in the intent's own words:
+/// "A (physical)", "Ctrl+S", "mouse left", "joypad start", "joypad left_x
+/// -1.0", with "(device N)" when it is pinned to one device. Trial 42 read
+/// raw Object(...) text to confirm its bindings; this makes list and a dry
+/// run self-checking.
+pub fn describeEvents(allocator: std.mem.Allocator, value: []const u8) Error![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    var index: usize = 0;
+    while (std.mem.indexOfPos(u8, value, index, "Object(")) |start| {
+        const end = findObjectEnd(value, start) orelse break;
+        try out.append(allocator, try describeEvent(allocator, value[start..end]));
+        index = end;
+    }
+    return out.toOwnedSlice(allocator);
+}
+
+/// A scalar field of an `Object(...)` text, in either layout.
+fn objectField(object: []const u8, key: []const u8) ?[]const u8 {
+    var buf: [64]u8 = undefined;
+    const needle = std.fmt.bufPrint(&buf, "\"{s}\":", .{key}) catch return null;
+    const at = std.mem.indexOf(u8, object, needle) orelse return null;
+    const rest = std.mem.trimStart(u8, object[at + needle.len ..], " \t");
+    const stop = std.mem.indexOfAny(u8, rest, ",\n)") orelse rest.len;
+    return std.mem.trim(u8, rest[0..stop], " \t\r");
+}
+
+fn fieldInt(object: []const u8, key: []const u8) i64 {
+    return std.fmt.parseInt(i64, objectField(object, key) orelse return 0, 10) catch 0;
+}
+
+fn fieldTrue(object: []const u8, key: []const u8) bool {
+    return std.mem.eql(u8, objectField(object, key) orelse return false, "true");
+}
+
+fn describeEvent(allocator: std.mem.Allocator, object: []const u8) Error![]const u8 {
+    const inner = object["Object(".len..];
+    const class = std.mem.trim(u8, inner[0 .. std.mem.indexOfAny(u8, inner, ",)") orelse inner.len], " \n");
+    var text: std.ArrayList(u8) = .empty;
+    const modifiers = [_]struct { key: []const u8, label: []const u8 }{
+        .{ .key = "ctrl_pressed", .label = "Ctrl+" },
+        .{ .key = "shift_pressed", .label = "Shift+" },
+        .{ .key = "alt_pressed", .label = "Alt+" },
+        .{ .key = "meta_pressed", .label = "Meta+" },
+    };
+    if (std.mem.eql(u8, class, "InputEventKey")) {
+        for (modifiers) |m| if (fieldTrue(object, m.key)) try text.appendSlice(allocator, m.label);
+        const keycode = fieldInt(object, "keycode");
+        const physical = fieldInt(object, "physical_keycode");
+        const code = if (keycode != 0) keycode else physical;
+        try text.appendSlice(allocator, try keyName(allocator, code));
+        if (keycode == 0 and physical != 0) try text.appendSlice(allocator, " (physical)");
+    } else if (std.mem.eql(u8, class, "InputEventMouseButton")) {
+        for (modifiers) |m| if (fieldTrue(object, m.key)) try text.appendSlice(allocator, m.label);
+        const index = fieldInt(object, "button_index");
+        try text.appendSlice(allocator, "mouse ");
+        try text.appendSlice(allocator, for (mouse_buttons) |b| {
+            if (b.index == index) break b.names[0];
+        } else try allocator.print("button {d}", .{index}));
+    } else if (std.mem.eql(u8, class, "InputEventJoypadButton")) {
+        const index = fieldInt(object, "button_index");
+        try text.appendSlice(allocator, "joypad ");
+        try text.appendSlice(allocator, for (joypad_buttons) |b| {
+            if (b.index == index) break b.names[0];
+        } else try allocator.print("button {d}", .{index}));
+        // The face buttons by position too, since "south" given in an intent
+        // came back as "joypad a" (trial 44).
+        const positions = [_][]const u8{ "south", "east", "west", "north" };
+        if (index >= 0 and index < positions.len) try text.appendSlice(allocator, try allocator.print(" ({s})", .{positions[@intCast(index)]}));
+    } else if (std.mem.eql(u8, class, "InputEventJoypadMotion")) {
+        const axis = fieldInt(object, "axis");
+        try text.appendSlice(allocator, "joypad ");
+        try text.appendSlice(allocator, for (joypad_axes) |a| {
+            if (a.index == axis) break a.names[0];
+        } else try allocator.print("axis {d}", .{axis}));
+        try text.append(allocator, ' ');
+        try text.appendSlice(allocator, objectField(object, "axis_value") orelse "0.0");
+    } else {
+        try text.appendSlice(allocator, class);
+    }
+    const device = fieldInt(object, "device");
+    if (device >= 0 and objectField(object, "device") != null) try text.appendSlice(allocator, try allocator.print(" (device {d})", .{device}));
+    return text.toOwnedSlice(allocator);
+}
+
+fn keyName(allocator: std.mem.Allocator, code: i64) Error![]const u8 {
+    for (named_keys) |key| if (key.code == code) return key.names[0];
+    if (code > 32 and code < 127) return allocator.dupe(u8, &.{@intCast(code)});
+    return allocator.print("keycode {d}", .{code});
+}
+
 fn countOccurrences(haystack: []const u8, needle: []const u8) usize {
     var total: usize = 0;
     var index: usize = 0;
@@ -195,7 +288,7 @@ fn missing(comptime field: []const u8, comptime hint: []const u8) Error {
 }
 
 fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayList(u8), comptime fmt: []const u8, args: anytype) Error!void {
-    const text = try std.fmt.allocPrint(allocator, fmt, args);
+    const text = try allocator.print(fmt, args);
     defer allocator.free(text);
     try out.appendSlice(allocator, text);
 }
@@ -318,8 +411,7 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
         const shift = readBool(event.get("shift")) orelse false;
         const ctrl = readBool(event.get("ctrl")) orelse false;
         const meta = readBool(event.get("meta")) orelse false;
-        return try std.fmt.allocPrint(
-            allocator,
+        return try allocator.print(
             "Object(InputEventKey,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"window_id\":0,\"alt_pressed\":{s},\"shift_pressed\":{s},\"ctrl_pressed\":{s},\"meta_pressed\":{s},\"pressed\":false,\"keycode\":{d},\"physical_keycode\":{d},\"key_label\":0,\"unicode\":{d},\"location\":0,\"echo\":false,\"script\":null)",
             .{
                 readDevice(event),
@@ -351,8 +443,7 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
         // Property order and defaults taken from Godot's own var_to_str of an
         // InputEventMouseButton; device -1 is what the editor stores for an
         // action ("All Devices").
-        return try std.fmt.allocPrint(
-            allocator,
+        return try allocator.print(
             "Object(InputEventMouseButton,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"window_id\":0,\"alt_pressed\":{s},\"shift_pressed\":{s},\"ctrl_pressed\":{s},\"meta_pressed\":{s},\"button_mask\":0,\"position\":Vector2(0, 0),\"global_position\":Vector2(0, 0),\"factor\":1.0,\"button_index\":{d},\"canceled\":false,\"pressed\":false,\"double_click\":false,\"script\":null)",
             .{
                 readDevice(event),
@@ -378,8 +469,7 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
             return error.MissingIntentField;
         };
         const pressed = readBool(event.get("pressed")) orelse false;
-        return try std.fmt.allocPrint(
-            allocator,
+        return try allocator.print(
             "Object(InputEventJoypadButton,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"button_index\":{d},\"pressure\":0.0,\"pressed\":{s},\"script\":null)",
             .{ readDevice(event), button_index, if (pressed) "true" else "false" },
         );
@@ -406,8 +496,7 @@ fn formatEventFromJson(allocator: std.mem.Allocator, event: std.json.ObjectMap) 
             else => return error.InvalidIntent,
         };
         defer allocator.free(axis_text);
-        return try std.fmt.allocPrint(
-            allocator,
+        return try allocator.print(
             "Object(InputEventJoypadMotion,\"resource_local_to_scene\":false,\"resource_name\":\"\",\"device\":{d},\"axis\":{d},\"axis_value\":{s},\"script\":null)",
             .{ readDevice(event), axis, axis_text },
         );
@@ -786,4 +875,43 @@ test "the Object layout follows the project's engine version" {
     try std.testing.expectEqual(ObjectLayout.pretty, objectLayout("4.8"));
     try std.testing.expectEqual(ObjectLayout.pretty, objectLayout("4.10"));
     try std.testing.expectEqual(ObjectLayout.pretty, objectLayout(null));
+}
+
+test "events are described in the intent's words, in either layout" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const one_line =
+        \\{
+        \\"deadzone": 0.5,
+        \\"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":true,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":83,"key_label":0,"unicode":115,"location":0,"echo":false,"script":null)
+        \\, Object(InputEventJoypadMotion,"resource_local_to_scene":false,"resource_name":"","device":0,"axis":0,"axis_value":-1.0,"script":null)
+        \\]
+        \\}
+    ;
+    const described = try describeEvents(allocator, one_line);
+    try std.testing.expectEqual(@as(usize, 2), described.len);
+    try std.testing.expectEqualStrings("Ctrl+S (physical)", described[0]);
+    try std.testing.expectEqualStrings("joypad left_x -1.0 (device 0)", described[1]);
+
+    const pretty =
+        \\{
+        \\"deadzone": 0.5,
+        \\"events": [Object(InputEventMouseButton,
+        \\"resource_local_to_scene": false,
+        \\"device": -1,
+        \\"shift_pressed": true,
+        \\"button_index": 2,
+        \\"script": null
+        \\), Object(InputEventKey,
+        \\"device": -1,
+        \\"keycode": 4194319,
+        \\"physical_keycode": 0,
+        \\"script": null
+        \\)]
+        \\}
+    ;
+    const pretty_described = try describeEvents(allocator, pretty);
+    try std.testing.expectEqualStrings("Shift+mouse right", pretty_described[0]);
+    try std.testing.expectEqualStrings("left", pretty_described[1]);
 }

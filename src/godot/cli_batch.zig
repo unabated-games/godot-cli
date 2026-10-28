@@ -109,7 +109,7 @@ pub fn runBatch(
 
     if (mode == .atomic) {
         for (rollback_paths.items) |path| {
-            const backup_path = try std.fmt.allocPrint(app.allocator, "{s}.godot-cli-batch-backup", .{path});
+            const backup_path = try app.allocator.print("{s}.godot-cli-batch-backup", .{path});
             errdefer app.allocator.free(backup_path);
             try scene_undo.writeSnapshot(app.io, path, backup_path);
             try snapshots.append(app.allocator, .{

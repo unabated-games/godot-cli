@@ -175,7 +175,7 @@ fn renderMarkdown(
 }
 
 fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayList(u8), comptime fmt: []const u8, args: anytype) ExportError!void {
-    const text = try std.fmt.allocPrint(allocator, fmt, args);
+    const text = try allocator.print(fmt, args);
     defer allocator.free(text);
     try out.appendSlice(allocator, text);
 }
@@ -368,7 +368,7 @@ pub const end_marker = "<!-- godot-cli catalog: end -->";
 /// written before the markers, and appended after everything else otherwise.
 fn mergeIntoExisting(allocator: std.mem.Allocator, io: std.Io, output_path: []const u8, digest: []const u8) ExportError![]u8 {
     const existing = std.Io.Dir.cwd().readFileAlloc(io, output_path, allocator, .unlimited) catch {
-        return std.fmt.allocPrint(allocator, "{s}{s}\n", .{ digest, end_marker });
+        return allocator.print("{s}{s}\n", .{ digest, end_marker });
     };
     defer allocator.free(existing);
 

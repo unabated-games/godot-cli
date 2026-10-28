@@ -42,6 +42,10 @@ pub const Preset = struct {
     options_in_presets_file: std.StringHashMapUnmanaged(void) = .empty,
     /// Header line of `[preset.N]` in export_presets.cfg; 0 for a new preset.
     line: usize = 0,
+    /// Header lines of `[preset.N.options]` in export_presets.cfg and in the
+    /// credentials file; 0 where there is none.
+    options_line: usize = 0,
+    credentials_options_line: usize = 0,
     /// Read from past a gap in the numbering, where Godot never looks.
     after_gap: bool = false,
 
@@ -137,10 +141,10 @@ pub fn load(arena: std.mem.Allocator, presets_text: ?[]const u8, credentials_tex
     std.mem.sort(usize, indexes.items, {}, std.sort.asc(usize));
 
     for (indexes.items, 0..) |file_index, position| {
-        const name = try std.fmt.allocPrint(arena, "preset.{d}", .{file_index});
+        const name = try arena.print("preset.{d}", .{file_index});
         const section = doc.find(name).?;
         if (file_index != position) {
-            try result.gaps.append(arena, .{ .key = name, .value = try std.fmt.allocPrint(arena, "{d}", .{section.line}) });
+            try result.gaps.append(arena, .{ .key = name, .value = try arena.print("{d}", .{section.line}) });
         }
         var preset: Preset = .{
             .name = unquote(arena, section.get("name") orelse "\"\""),
@@ -163,7 +167,8 @@ pub fn load(arena: std.mem.Allocator, presets_text: ?[]const u8, credentials_tex
             }
             _ = removeEntry(&preset.main, "runnable");
         }
-        if (doc.find(try std.fmt.allocPrint(arena, "preset.{d}.options", .{file_index}))) |options| {
+        if (doc.find(try arena.print("preset.{d}.options", .{file_index}))) |options| {
+            preset.options_line = options.line;
             for (options.entries.items) |entry| {
                 try putEntry(arena, &preset.options, entry.key, entry.value);
                 try preset.options_in_presets_file.put(arena, entry.key, {});
@@ -172,7 +177,8 @@ pub fn load(arena: std.mem.Allocator, presets_text: ?[]const u8, credentials_tex
         if (credentials.find(name)) |secret_main| {
             try preset.credential_main.appendSlice(arena, secret_main.entries.items);
         }
-        if (credentials.find(try std.fmt.allocPrint(arena, "preset.{d}.options", .{file_index}))) |secret_options| {
+        if (credentials.find(try arena.print("preset.{d}.options", .{file_index}))) |secret_options| {
+            preset.credentials_options_line = secret_options.line;
             for (secret_options.entries.items) |entry| try putEntry(arena, &preset.options, entry.key, entry.value);
         }
         try result.presets.append(arena, preset);
@@ -183,7 +189,7 @@ pub fn load(arena: std.mem.Allocator, presets_text: ?[]const u8, credentials_tex
         if (presetIndexOf(section.name)) |section_index| {
             if (std.mem.indexOfScalar(usize, indexes.items, section_index) != null) continue;
         }
-        try result.stray.append(arena, .{ .key = section.name, .value = try std.fmt.allocPrint(arena, "{d}", .{section.line}) });
+        try result.stray.append(arena, .{ .key = section.name, .value = try arena.print("{d}", .{section.line}) });
     }
     return result;
 }
@@ -265,16 +271,16 @@ pub fn render(arena: std.mem.Allocator, presets: *const Presets, table: *const t
             try public_options.append(arena, entry);
         }
 
-        try main_sections.append(arena, .{ .name = try std.fmt.allocPrint(arena, "preset.{d}", .{index}), .entries = main, .line = 0 });
-        try main_sections.append(arena, .{ .name = try std.fmt.allocPrint(arena, "preset.{d}.options", .{index}), .entries = public_options, .line = 0 });
+        try main_sections.append(arena, .{ .name = try arena.print("preset.{d}", .{index}), .entries = main, .line = 0 });
+        try main_sections.append(arena, .{ .name = try arena.print("preset.{d}.options", .{index}), .entries = public_options, .line = 0 });
 
         var credential_main: std.ArrayList(Entry) = .empty;
         for (table.credential_keys) |key| {
             try credential_main.append(arena, .{ .key = key.name, .value = getEntry(preset.credential_main.items, key.name) orelse key.default });
         }
-        try secret_sections.append(arena, .{ .name = try std.fmt.allocPrint(arena, "preset.{d}", .{index}), .entries = credential_main, .line = 0 });
+        try secret_sections.append(arena, .{ .name = try arena.print("preset.{d}", .{index}), .entries = credential_main, .line = 0 });
         if (secret_options.items.len > 0) {
-            try secret_sections.append(arena, .{ .name = try std.fmt.allocPrint(arena, "preset.{d}.options", .{index}), .entries = secret_options, .line = 0 });
+            try secret_sections.append(arena, .{ .name = try arena.print("preset.{d}.options", .{index}), .entries = secret_options, .line = 0 });
         }
     }
 
@@ -361,7 +367,7 @@ pub fn valueText(
             try labels.appendSlice(arena, choice.label);
             if (kind == .int) try labels.print(arena, " ({s})", .{choice.value});
         }
-        problem.hint = try std.fmt.allocPrint(arena, "one of: {s}", .{labels.items});
+        problem.hint = try arena.print("one of: {s}", .{labels.items});
         return error.InvalidValue;
     }
     switch (kind) {
@@ -373,9 +379,9 @@ pub fn valueText(
             else => {},
         },
         .int => switch (value) {
-            .integer => |i| return std.fmt.allocPrint(arena, "{d}", .{i}),
-            .float => |f| if (@floor(f) == f and @abs(f) < 1e15) return std.fmt.allocPrint(arena, "{d}", .{@as(i64, @intFromFloat(f))}),
-            .string => |s| if (std.fmt.parseInt(i64, s, 10)) |i| return std.fmt.allocPrint(arena, "{d}", .{i}) else |_| {},
+            .integer => |i| return arena.print("{d}", .{i}),
+            .float => |f| if (@floor(f) == f and @abs(f) < 1e15) return arena.print("{d}", .{@as(i64, @intFromFloat(f))}),
+            .string => |s| if (std.fmt.parseInt(i64, s, 10)) |i| return arena.print("{d}", .{i}) else |_| {},
             else => {},
         },
         .float => switch (value) {
@@ -424,7 +430,7 @@ pub fn valueText(
                     };
                     var parts: [4][]const u8 = undefined;
                     for (rgba, 0..) |component, i| parts[i] = lex.formatGodotFloat(arena, component) catch return error.OutOfMemory;
-                    return std.fmt.allocPrint(arena, "Color({s}, {s}, {s}, {s})", .{ parts[0], parts[1], parts[2], parts[3] });
+                    return arena.print("Color({s}, {s}, {s}, {s})", .{ parts[0], parts[1], parts[2], parts[3] });
                 }
                 if (std.mem.startsWith(u8, s, "Color(")) return verbatim(arena, s, problem);
             },
@@ -451,7 +457,7 @@ pub fn valueText(
 fn matchChoice(arena: std.mem.Allocator, kind: types.Kind, choices: []const types.Choice, value: std.json.Value) ValueError!?[]const u8 {
     const given: []const u8 = switch (value) {
         .string => |s| s,
-        .integer => |i| try std.fmt.allocPrint(arena, "{d}", .{i}),
+        .integer => |i| try arena.print("{d}", .{i}),
         else => return null,
     };
     for (choices) |choice| {
@@ -501,7 +507,7 @@ fn dictionaryText(arena: std.mem.Allocator, object: std.json.ObjectMap, problem:
         const item = object.get(key).?;
         const text: []const u8 = switch (item) {
             .string => |s| try quote(arena, s),
-            .integer => |v| try std.fmt.allocPrint(arena, "{d}", .{v}),
+            .integer => |v| try arena.print("{d}", .{v}),
             .float => |v| try floatText(arena, v),
             .bool => |v| if (v) "true" else "false",
             else => {
@@ -536,7 +542,34 @@ pub const Applied = struct {
     /// Secret keys written to the credentials file, by name only.
     secrets: std.ArrayList([]const u8) = .empty,
     messages: std.ArrayList([]const u8) = .empty,
+    /// What changed in presets that already existed, value by value. A
+    /// created preset is new throughout, so it has none.
+    changes: std.ArrayList(Change) = .empty,
 };
+
+/// One value an apply changed. `old` and `new` are the text the file holds
+/// (null where it held none); a secret's are never kept.
+pub const Change = struct {
+    preset: []const u8,
+    /// A [preset.N] key, "options/<name>" for a platform option, or one of
+    /// "platform", "rename" and "runnable".
+    key: []const u8,
+    old: ?[]const u8,
+    new: ?[]const u8,
+    secret: bool = false,
+};
+
+fn recordChange(arena: std.mem.Allocator, applied: *Applied, created: bool, change: Change) !void {
+    if (created) return;
+    if (change.old != null and change.new != null and std.mem.eql(u8, change.old.?, change.new.?)) return;
+    if (change.old == null and change.new == null) return;
+    var kept = change;
+    if (change.secret) {
+        kept.old = null;
+        kept.new = null;
+    }
+    try applied.changes.append(arena, kept);
+}
 
 pub const preset_fields = [_][]const u8{
     "name",                        "platform",                           "rename",                     "runnable",
@@ -582,7 +615,7 @@ pub fn apply(
     var top = intent.object.iterator();
     while (top.next()) |entry| {
         if (!contains(&intent_fields, entry.key_ptr.*)) {
-            return refuse(refusal, .{ .kind = "unknown_field", .field = entry.key_ptr.*, .hint = try std.fmt.allocPrint(arena, "the intent takes: {s}", .{try listText(arena, &intent_fields)}) });
+            return refuse(refusal, .{ .kind = "unknown_field", .field = entry.key_ptr.*, .hint = try arena.print("the intent takes: {s}", .{try listText(arena, &intent_fields)}) });
         }
     }
 
@@ -594,7 +627,7 @@ pub fn apply(
                 .kind = "preset_not_found",
                 .field = "remove",
                 .value = item.string,
-                .hint = try std.fmt.allocPrint(arena, "presets: {s}", .{try presetNames(arena, presets)}),
+                .hint = try arena.print("presets: {s}", .{try presetNames(arena, presets)}),
             });
             const preset = presets.presets.orderedRemove(index);
             if (getEntry(presets.runnable.items, preset.platform)) |named| {
@@ -634,7 +667,7 @@ fn applyOne(
     applied: *Applied,
     refusal: *Refusal,
 ) ApplyError!void {
-    const at = try std.fmt.allocPrint(arena, "presets[{d}]", .{item_index});
+    const at = try arena.print("presets[{d}]", .{item_index});
     if (item != .object) return refuse(refusal, .{ .field = at, .hint = "a preset object with at least a name" });
     const object = item.object;
     var fields = object.iterator();
@@ -642,34 +675,34 @@ fn applyOne(
         if (!contains(&preset_fields, entry.key_ptr.*)) {
             return refuse(refusal, .{
                 .kind = "unknown_field",
-                .field = try std.fmt.allocPrint(arena, "{s}.{s}", .{ at, entry.key_ptr.* }),
-                .hint = try std.fmt.allocPrint(arena, "a preset takes: {s}. Platform settings go under options", .{try listText(arena, &preset_fields)}),
+                .field = try arena.print("{s}.{s}", .{ at, entry.key_ptr.* }),
+                .hint = try arena.print("a preset takes: {s}. Platform settings go under options", .{try listText(arena, &preset_fields)}),
             });
         }
     }
-    const name_value = object.get("name") orelse return refuse(refusal, .{ .field = try std.fmt.allocPrint(arena, "{s}.name", .{at}), .hint = "every preset needs a name; it is how godot --export-release finds it" });
-    if (name_value != .string or name_value.string.len == 0) return refuse(refusal, .{ .field = try std.fmt.allocPrint(arena, "{s}.name", .{at}), .hint = "a non-empty string" });
+    const name_value = object.get("name") orelse return refuse(refusal, .{ .field = try arena.print("{s}.name", .{at}), .hint = "every preset needs a name; it is how godot --export-release finds it" });
+    if (name_value != .string or name_value.string.len == 0) return refuse(refusal, .{ .field = try arena.print("{s}.name", .{at}), .hint = "a non-empty string" });
     const name = name_value.string;
 
     var platform: ?*const types.Platform = null;
     if (object.get("platform")) |given| {
-        if (given != .string) return refuse(refusal, .{ .field = try std.fmt.allocPrint(arena, "{s}.platform", .{at}), .hint = "a platform name" });
+        if (given != .string) return refuse(refusal, .{ .field = try arena.print("{s}.platform", .{at}), .hint = "a platform name" });
         platform = export_options.resolvePlatform(table, given.string) orelse return refuse(refusal, .{
             .kind = "unknown_platform",
-            .field = try std.fmt.allocPrint(arena, "{s}.platform", .{at}),
+            .field = try arena.print("{s}.platform", .{at}),
             .value = given.string,
-            .hint = try std.fmt.allocPrint(arena, "one of: {s}. Godot skips a preset whose platform it does not know and drops it on its next save", .{try platformNames(arena, table)}),
+            .hint = try arena.print("one of: {s}. Godot skips a preset whose platform it does not know and drops it on its next save", .{try platformNames(arena, table)}),
         });
         if (!std.mem.eql(u8, platform.?.name, given.string)) {
-            try applied.messages.append(arena, try std.fmt.allocPrint(arena, "{s}: platform \"{s}\" written as \"{s}\", the name Godot matches", .{ name, given.string, platform.?.name }));
+            try applied.messages.append(arena, try arena.print("{s}: platform \"{s}\" written as \"{s}\", the name Godot matches", .{ name, given.string, platform.?.name }));
         }
     }
 
     const index = presets.find(name) orelse blk: {
         const chosen = platform orelse return refuse(refusal, .{
-            .field = try std.fmt.allocPrint(arena, "{s}.platform", .{at}),
+            .field = try arena.print("{s}.platform", .{at}),
             .value = name,
-            .hint = try std.fmt.allocPrint(arena, "no preset is named \"{s}\", and creating one needs a platform: {s}. Existing presets: {s}", .{ name, try platformNames(arena, table), try presetNames(arena, presets) }),
+            .hint = try arena.print("no preset is named \"{s}\", and creating one needs a platform: {s}. Existing presets: {s}", .{ name, try platformNames(arena, table), try presetNames(arena, presets) }),
         });
         try presets.presets.append(arena, .{
             .name = name,
@@ -697,13 +730,14 @@ fn applyOne(
                         try putEntry(arena, &presets.runnable, p.name, try quote(arena, preset.name));
                     }
                 }
-                try applied.messages.append(arena, try std.fmt.allocPrint(arena, "{s}: platform \"{s}\" corrected to \"{s}\", the name Godot matches; until now Godot skipped this preset", .{ name, preset.platform, p.name }));
+                try applied.messages.append(arena, try arena.print("{s}: platform \"{s}\" corrected to \"{s}\", the name Godot matches; until now Godot skipped this preset", .{ name, preset.platform, p.name }));
+                try recordChange(arena, applied, false, .{ .preset = name, .key = "platform", .old = try quote(arena, preset.platform), .new = try quote(arena, p.name) });
                 preset.platform = p.name;
             } else if (!std.mem.eql(u8, p.name, preset.platform)) {
                 return refuse(refusal, .{
-                    .field = try std.fmt.allocPrint(arena, "{s}.platform", .{at}),
+                    .field = try arena.print("{s}.platform", .{at}),
                     .value = p.name,
-                    .hint = try std.fmt.allocPrint(arena, "\"{s}\" is a {s} preset; a preset cannot change platform. Remove it and create a new one", .{ name, preset.platform }),
+                    .hint = try arena.print("\"{s}\" is a {s} preset; a preset cannot change platform. Remove it and create a new one", .{ name, preset.platform }),
                 });
             }
         }
@@ -712,12 +746,12 @@ fn applyOne(
     if (preset_platform == null and object.get("options") != null and !created) {
         return refuse(refusal, .{
             .kind = "unknown_platform",
-            .field = try std.fmt.allocPrint(arena, "{s}.platform", .{at}),
+            .field = try arena.print("{s}.platform", .{at}),
             .value = preset.platform,
             .hint = if (export_options.resolvePlatform(table, preset.platform)) |meant|
-                try std.fmt.allocPrint(arena, "this preset's platform \"{s}\" is not one Godot matches, so its options cannot be checked; give \"platform\": \"{s}\" in the same entry to correct it", .{ preset.platform, meant.name })
+                try arena.print("this preset's platform \"{s}\" is not one Godot matches, so its options cannot be checked; give \"platform\": \"{s}\" in the same entry to correct it", .{ preset.platform, meant.name })
             else
-                try std.fmt.allocPrint(arena, "this preset's platform \"{s}\" is not one Godot {s} exports to; give a platform in the same entry to correct it", .{ preset.platform, table.minor }),
+                try arena.print("this preset's platform \"{s}\" is not one Godot {s} exports to; give a platform in the same entry to correct it", .{ preset.platform, table.minor }),
         });
     }
 
@@ -725,41 +759,46 @@ fn applyOne(
     for (table.preset_keys) |key| {
         if (std.mem.eql(u8, key.name, "name") or std.mem.eql(u8, key.name, "platform")) continue;
         const given = object.get(key.name) orelse continue;
-        const field = try std.fmt.allocPrint(arena, "{s}.{s}", .{ at, key.name });
+        const field = try arena.print("{s}.{s}", .{ at, key.name });
         var problem: ValueProblem = .{};
         const text = presetKeyText(arena, key, given, &problem) catch |err| switch (err) {
             error.InvalidValue => return refuse(refusal, .{ .kind = "invalid_value", .field = field, .value = try jsonText(arena, given), .hint = problem.hint }),
             error.OutOfMemory => return error.OutOfMemory,
         };
+        try recordChange(arena, applied, created, .{ .preset = name, .key = key.name, .old = preset.mainValue(key.name) orelse key.default, .new = text });
         try putEntry(arena, &preset.main, key.name, text);
     }
     if (object.get("export_files")) |given| {
         var problem: ValueProblem = .{};
-        const text = valueText(arena, .packed_string_array, &.{}, given, &problem) catch return refuse(refusal, .{ .kind = "invalid_value", .field = try std.fmt.allocPrint(arena, "{s}.export_files", .{at}), .hint = "an array of res:// paths" });
+        const text = valueText(arena, .packed_string_array, &.{}, given, &problem) catch return refuse(refusal, .{ .kind = "invalid_value", .field = try arena.print("{s}.export_files", .{at}), .hint = "an array of res:// paths" });
+        try recordChange(arena, applied, created, .{ .preset = name, .key = "export_files", .old = preset.mainValue("export_files"), .new = text });
         try putEntry(arena, &preset.main, "export_files", text);
         const filter = unquote(arena, preset.mainValue("export_filter") orelse "\"all_resources\"");
         if (!filterTakesFiles(filter)) {
-            try applied.messages.append(arena, try std.fmt.allocPrint(arena, "{s}: export_files only counts with export_filter scenes, resources or exclude; this preset's is {s}", .{ name, filter }));
+            try applied.messages.append(arena, try arena.print("{s}: export_files only counts with export_filter scenes, resources or exclude; this preset's is {s}", .{ name, filter }));
         }
     }
     if (object.get("customized_files")) |given| {
         var problem: ValueProblem = .{};
-        const text = valueText(arena, .dictionary, &.{}, given, &problem) catch return refuse(refusal, .{ .kind = "invalid_value", .field = try std.fmt.allocPrint(arena, "{s}.customized_files", .{at}), .hint = "an object of res:// path to strip, keep or remove" });
+        const text = valueText(arena, .dictionary, &.{}, given, &problem) catch return refuse(refusal, .{ .kind = "invalid_value", .field = try arena.print("{s}.customized_files", .{at}), .hint = "an object of res:// path to strip, keep or remove" });
+        try recordChange(arena, applied, created, .{ .preset = name, .key = "customized_files", .old = preset.mainValue("customized_files"), .new = text });
         try putEntry(arena, &preset.main, "customized_files", text);
     }
     if (object.get("script_encryption_key")) |given| {
-        if (given != .string) return refuse(refusal, .{ .field = try std.fmt.allocPrint(arena, "{s}.script_encryption_key", .{at}), .hint = "a string of 64 hex digits" });
-        try putEntry(arena, &preset.credential_main, "script_encryption_key", try quote(arena, given.string));
-        try applied.secrets.append(arena, try std.fmt.allocPrint(arena, "{s}: script_encryption_key", .{name}));
+        if (given != .string) return refuse(refusal, .{ .field = try arena.print("{s}.script_encryption_key", .{at}), .hint = "a string of 64 hex digits" });
+        const text = try quote(arena, given.string);
+        try recordChange(arena, applied, created, .{ .preset = name, .key = "script_encryption_key", .old = getEntry(preset.credential_main.items, "script_encryption_key") orelse "\"\"", .new = text, .secret = true });
+        try putEntry(arena, &preset.credential_main, "script_encryption_key", text);
+        try applied.secrets.append(arena, try arena.print("{s}: script_encryption_key", .{name}));
     }
 
     if (object.get("options")) |options| {
-        if (options != .object) return refuse(refusal, .{ .field = try std.fmt.allocPrint(arena, "{s}.options", .{at}), .hint = "an object of option name to value, e.g. {\"binary_format/embed_pck\": true}" });
+        if (options != .object) return refuse(refusal, .{ .field = try arena.print("{s}.options", .{at}), .hint = "an object of option name to value, e.g. {\"binary_format/embed_pck\": true}" });
         const allow_unknown = if (object.get("allow_unknown_options")) |a| a == .bool and a.bool else false;
         var it = options.object.iterator();
         while (it.next()) |entry| {
             const key = entry.key_ptr.*;
-            const field = try std.fmt.allocPrint(arena, "{s}.options.{s}", .{ at, key });
+            const field = try arena.print("{s}.options.{s}", .{ at, key });
             const known = if (preset_platform) |p| export_options.findOption(p, key) else null;
             var problem: ValueProblem = .{};
             const text = if (known) |o|
@@ -768,7 +807,7 @@ fn applyOne(
                         .kind = "invalid_value",
                         .field = field,
                         .value = try jsonText(arena, entry.value_ptr.*),
-                        .hint = try std.fmt.allocPrint(arena, "{s} takes {s}; its default is {s}", .{ key, problem.hint, o.default }),
+                        .hint = try arena.print("{s} takes {s}; its default is {s}", .{ key, problem.hint, o.default }),
                     }),
                     error.OutOfMemory => return error.OutOfMemory,
                 }
@@ -780,45 +819,55 @@ fn applyOne(
                         .field = field,
                         .value = key,
                         .hint = if (suggestion) |s|
-                            try std.fmt.allocPrint(arena, "{s} has no option {s} in Godot {s}; did you mean {s}? project export options lists them. An addon's own option takes allow_unknown_options: true", .{ preset.platform, key, table.minor, s })
+                            try arena.print("{s} has no option {s} in Godot {s}; did you mean {s}? project export options lists them. An addon's own option takes allow_unknown_options: true", .{ preset.platform, key, table.minor, s })
                         else
-                            try std.fmt.allocPrint(arena, "{s} has no option {s} in Godot {s}; project export options --platform \"{s}\" lists them. An addon's own option takes allow_unknown_options: true", .{ preset.platform, key, table.minor, preset.platform }),
+                            try arena.print("{s} has no option {s} in Godot {s}; project export options --platform \"{s}\" lists them. An addon's own option takes allow_unknown_options: true", .{ preset.platform, key, table.minor, preset.platform }),
                     });
                 }
                 // An addon's option: no table to type it by.
                 break :blk switch (entry.value_ptr.*) {
                     .bool => |b| @as([]const u8, if (b) "true" else "false"),
-                    .integer => |v| try std.fmt.allocPrint(arena, "{d}", .{v}),
+                    .integer => |v| try arena.print("{d}", .{v}),
                     .float => |v| try floatText(arena, v),
                     .string => |s| try quote(arena, s),
                     else => return refuse(refusal, .{ .kind = "invalid_value", .field = field, .hint = "an unknown option takes a boolean, number or string" }),
                 };
             };
+            try recordChange(arena, applied, created, .{
+                .preset = name,
+                .key = try arena.print("options/{s}", .{key}),
+                .old = preset.option(key) orelse if (known) |o| o.default else null,
+                .new = text,
+                .secret = if (known) |o| o.secret else false,
+            });
             try putEntry(arena, &preset.options, key, text);
             if (known) |o| if (o.secret) {
-                try applied.secrets.append(arena, try std.fmt.allocPrint(arena, "{s}: {s}", .{ name, key }));
+                try applied.secrets.append(arena, try arena.print("{s}: {s}", .{ name, key }));
             };
         }
     }
 
     if (object.get("rename")) |rename| {
-        if (rename != .string or rename.string.len == 0) return refuse(refusal, .{ .field = try std.fmt.allocPrint(arena, "{s}.rename", .{at}), .hint = "the new name, a non-empty string" });
-        if (presets.find(rename.string) != null) return refuse(refusal, .{ .kind = "duplicate_name", .field = try std.fmt.allocPrint(arena, "{s}.rename", .{at}), .value = rename.string, .hint = "another preset already has this name" });
+        if (rename != .string or rename.string.len == 0) return refuse(refusal, .{ .field = try arena.print("{s}.rename", .{at}), .hint = "the new name, a non-empty string" });
+        if (presets.find(rename.string) != null) return refuse(refusal, .{ .kind = "duplicate_name", .field = try arena.print("{s}.rename", .{at}), .value = rename.string, .hint = "another preset already has this name" });
         if (getEntry(presets.runnable.items, preset.platform)) |named| {
             if (std.mem.eql(u8, unquote(arena, named), preset.name)) {
                 try putEntry(arena, &presets.runnable, preset.platform, try quote(arena, rename.string));
             }
         }
+        try recordChange(arena, applied, created, .{ .preset = name, .key = "rename", .old = try quote(arena, preset.name), .new = try quote(arena, rename.string) });
         preset.name = rename.string;
     }
 
     if (object.get("runnable")) |runnable| {
-        if (runnable != .bool) return refuse(refusal, .{ .field = try std.fmt.allocPrint(arena, "{s}.runnable", .{at}), .hint = "true or false" });
+        if (runnable != .bool) return refuse(refusal, .{ .field = try arena.print("{s}.runnable", .{at}), .hint = "true or false" });
+        const was_runnable = presets.isRunnable(preset);
+        try recordChange(arena, applied, created, .{ .preset = name, .key = "runnable", .old = if (was_runnable) "true" else "false", .new = if (runnable.bool) "true" else "false" });
         if (runnable.bool) {
             if (getEntry(presets.runnable.items, preset.platform)) |previous| {
                 const previous_name = unquote(arena, previous);
                 if (!std.mem.eql(u8, previous_name, preset.name)) {
-                    try applied.messages.append(arena, try std.fmt.allocPrint(arena, "{s} is now the runnable {s} preset, in place of {s}: a platform has one", .{ preset.name, preset.platform, previous_name }));
+                    try applied.messages.append(arena, try arena.print("{s} is now the runnable {s} preset, in place of {s}: a platform has one", .{ preset.name, preset.platform, previous_name }));
                 }
             }
             try putEntry(arena, &presets.runnable, preset.platform, try quote(arena, preset.name));
@@ -874,7 +923,11 @@ pub const Issue = struct {
     preset: ?[]const u8 = null,
     message: []const u8,
     line: usize = 0,
+    /// The file `line` is in, when it is not export_presets.cfg.
+    file: ?[]const u8 = null,
 };
+
+pub const credentials_file = ".godot/export_credentials.cfg";
 
 /// `exists` answers whether a path names a file: a `res://` path or a
 /// relative one inside the project, an absolute one on this machine.
@@ -892,7 +945,7 @@ pub fn validate(
             .severity = .@"error",
             .kind = "preset_numbering_gap",
             .line = std.fmt.parseInt(usize, gap.value, 10) catch 0,
-            .message = try std.fmt.allocPrint(arena, "[{s}] comes after a gap in the numbering. Godot reads preset.0, preset.1, ... and stops at the first missing one, so it never loads this preset and drops it on its next save. Any project export apply renumbers the presets with no gaps, this one included (an empty intent, {{}}, does only that)", .{gap.key}),
+            .message = try arena.print("[{s}] comes after a gap in the numbering. Godot reads preset.0, preset.1, ... and stops at the first missing one, so it never loads this preset and drops it on its next save. Any project export apply renumbers the presets with no gaps, this one included (an empty intent, {{}}, does only that)", .{gap.key}),
         });
     }
     for (presets.stray.items) |stray| {
@@ -900,14 +953,14 @@ pub fn validate(
             .severity = .warning,
             .kind = "stray_section",
             .line = std.fmt.parseInt(usize, stray.value, 10) catch 0,
-            .message = try std.fmt.allocPrint(arena, "[{s}] is not a section Godot reads from export_presets.cfg; its next save drops it, and so does project export apply", .{stray.key}),
+            .message = try arena.print("[{s}] is not a section Godot reads from export_presets.cfg; its next save drops it, and so does project export apply", .{stray.key}),
         });
     }
 
     for (presets.presets.items, 0..) |*preset, index| {
         for (presets.presets.items[0..index]) |earlier| {
             if (std.mem.eql(u8, earlier.name, preset.name)) {
-                try issues.append(arena, .{ .severity = .@"error", .kind = "duplicate_preset_name", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "two presets are named \"{s}\"; godot --export-release finds a preset by name and takes the first", .{preset.name}) });
+                try issues.append(arena, .{ .severity = .@"error", .kind = "duplicate_preset_name", .preset = preset.name, .line = preset.line, .message = try arena.print("two presets are named \"{s}\"; godot --export-release finds a preset by name and takes the first", .{preset.name}) });
                 break;
             }
         }
@@ -924,30 +977,30 @@ pub fn validate(
                 .preset = preset.name,
                 .line = preset.line,
                 .message = if (suggestion) |s|
-                    try std.fmt.allocPrint(arena, "platform \"{s}\" is not a name Godot matches; it means \"{s}\". Godot skips this preset when it loads the file and drops it on its next save", .{ preset.platform, s.name })
+                    try arena.print("platform \"{s}\" is not a name Godot matches; it means \"{s}\". Godot skips this preset when it loads the file and drops it on its next save", .{ preset.platform, s.name })
                 else
-                    try std.fmt.allocPrint(arena, "platform \"{s}\" is not one Godot {s} exports to ({s}). Godot skips this preset when it loads the file and drops it on its next save, unless an addon adds the platform", .{ preset.platform, table.minor, try platformNames(arena, table) }),
+                    try arena.print("platform \"{s}\" is not one Godot {s} exports to ({s}). Godot skips this preset when it loads the file and drops it on its next save, unless an addon adds the platform", .{ preset.platform, table.minor, try platformNames(arena, table) }),
             });
         }
 
         for ([_][]const u8{ "include_filter", "exclude_filter" }) |key| {
             if (preset.mainValue(key) == null) {
-                try issues.append(arena, .{ .severity = .warning, .kind = "missing_preset_key", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "no {s}; Godot exports anyway but logs an error every time it loads the presets. project export apply writes the full preset", .{key}) });
+                try issues.append(arena, .{ .severity = .warning, .kind = "missing_preset_key", .preset = preset.name, .line = preset.line, .message = try arena.print("no {s}; Godot exports anyway but logs an error every time it loads the presets. project export apply writes the full preset", .{key}) });
             }
         }
         const filter = unquote(arena, preset.mainValue("export_filter") orelse "\"all_resources\"");
         if (!contains(&export_filters, filter)) {
-            try issues.append(arena, .{ .severity = .@"error", .kind = "invalid_value", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "export_filter \"{s}\" is not one Godot reads (all_resources, scenes, resources, exclude, customized); it falls back to exporting everything", .{filter}) });
+            try issues.append(arena, .{ .severity = .@"error", .kind = "invalid_value", .preset = preset.name, .line = preset.line, .message = try arena.print("export_filter \"{s}\" is not one Godot reads (all_resources, scenes, resources, exclude, customized); it falls back to exporting everything", .{filter}) });
         }
         if (filterTakesFiles(filter)) {
             if (preset.mainValue("export_files")) |files_text| {
                 for (try packedStrings(arena, files_text)) |file| {
                     if (std.mem.startsWith(u8, file, "res://") and !exists(ctx, file)) {
-                        try issues.append(arena, .{ .severity = .warning, .kind = "missing_export_file", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "export_files lists {s}, which does not exist; Godot drops it from the list when it loads the presets", .{file}) });
+                        try issues.append(arena, .{ .severity = .warning, .kind = "missing_export_file", .preset = preset.name, .line = preset.line, .message = try arena.print("export_files lists {s}, which does not exist; Godot drops it from the list when it loads the presets", .{file}) });
                     }
                 }
             } else {
-                try issues.append(arena, .{ .severity = .warning, .kind = "missing_preset_key", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "export_filter is {s} but no export_files are listed, so nothing is selected", .{filter}) });
+                try issues.append(arena, .{ .severity = .warning, .kind = "missing_preset_key", .preset = preset.name, .line = preset.line, .message = try arena.print("export_filter is {s} but no export_files are listed, so nothing is selected", .{filter}) });
             }
         }
         const export_path = unquote(arena, preset.mainValue("export_path") orelse "\"\"");
@@ -956,9 +1009,9 @@ pub fn validate(
         } else if (buildFolderInProject(export_path)) |folder| {
             // Godot imports whatever lands in the project, and an
             // all_resources export then packs the last build into the next.
-            const marker = try std.fmt.allocPrint(arena, "{s}/.gdignore", .{folder});
+            const marker = try arena.print("{s}/.gdignore", .{folder});
             if (!exists(ctx, marker)) {
-                try issues.append(arena, .{ .severity = .warning, .kind = "export_path_not_ignored", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "export_path is inside the project, in {s}/, which has no .gdignore: Godot imports what is exported there, and the next export packs it into the game. project export build adds the .gdignore", .{folder}) });
+                try issues.append(arena, .{ .severity = .warning, .kind = "export_path_not_ignored", .preset = preset.name, .line = preset.line, .message = try arena.print("export_path is inside the project, in {s}/, which has no .gdignore: Godot imports what is exported there, and the next export packs it into the game. project export build adds the .gdignore", .{folder}) });
             }
         } else if (std.mem.indexOfAny(u8, export_path, "/\\") == null) {
             try issues.append(arena, .{ .severity = .warning, .kind = "export_path_not_ignored", .preset = preset.name, .line = preset.line, .message = "export_path writes into the project root, where Godot imports what it finds and the next export packs it; use a folder such as build/" });
@@ -971,19 +1024,24 @@ pub fn validate(
         for (preset.main.items) |entry| {
             if (export_options.findKey(table.preset_keys, entry.key) != null) continue;
             if (std.mem.eql(u8, entry.key, "export_files") or std.mem.eql(u8, entry.key, "customized_files") or std.mem.eql(u8, entry.key, "script_encryption_key")) continue;
-            try issues.append(arena, .{ .severity = .warning, .kind = "unknown_preset_key", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "{s} is not a preset key in Godot {s}; the editor drops it on its next save", .{ entry.key, table.minor }) });
+            try issues.append(arena, .{ .severity = .warning, .kind = "unknown_preset_key", .preset = preset.name, .line = preset.line, .message = try arena.print("{s} is not a preset key in Godot {s}; the editor drops it on its next save", .{ entry.key, table.minor }) });
         }
 
         if (checked_platform) |platform| for (preset.options.items) |entry| {
+            // An option read only from the credentials file is reported
+            // there, where its value is, not at the committed file's header.
+            const in_credentials = !preset.options_in_presets_file.contains(entry.key) and preset.credentials_options_line > 0;
+            const at_line = if (in_credentials) preset.credentials_options_line else if (preset.options_line > 0) preset.options_line else preset.line;
+            const at_file: ?[]const u8 = if (in_credentials) credentials_file else null;
             const option = export_options.findOption(platform, entry.key) orelse {
-                try issues.append(arena, .{ .severity = .warning, .kind = "unknown_option", .preset = preset.name, .line = preset.line, .message = if (export_options.nearestOption(platform, entry.key)) |s|
-                    try std.fmt.allocPrint(arena, "{s} has no option {s} in Godot {s} (did you mean {s}?); unless an addon adds it, Godot ignores it", .{ preset.platform, entry.key, table.minor, s })
+                try issues.append(arena, .{ .severity = .warning, .kind = "unknown_option", .preset = preset.name, .line = at_line, .file = at_file, .message = if (export_options.nearestOption(platform, entry.key)) |s|
+                    try arena.print("{s} has no option {s} in Godot {s} (did you mean {s}?); unless an addon adds it, Godot ignores it", .{ preset.platform, entry.key, table.minor, s })
                 else
-                    try std.fmt.allocPrint(arena, "{s} has no option {s} in Godot {s}; unless an addon adds it, Godot ignores it", .{ preset.platform, entry.key, table.minor }) });
+                    try arena.print("{s} has no option {s} in Godot {s}; unless an addon adds it, Godot ignores it", .{ preset.platform, entry.key, table.minor }) });
                 continue;
             };
             if (option.secret and preset.options_in_presets_file.contains(entry.key) and unquote(arena, entry.value).len > 0) {
-                try issues.append(arena, .{ .severity = .warning, .kind = "secret_in_presets_file", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "{s} is a secret and is in export_presets.cfg, which is committed; Godot keeps it in .godot/export_credentials.cfg and moves it there on its next save", .{entry.key}) });
+                try issues.append(arena, .{ .severity = .warning, .kind = "secret_in_presets_file", .preset = preset.name, .line = at_line, .file = at_file, .message = try arena.print("{s} is a secret and is in export_presets.cfg, which is committed; Godot keeps it in .godot/export_credentials.cfg and moves it there on its next save", .{entry.key}) });
             }
             if (option.choices.len > 0) {
                 var matched = false;
@@ -993,23 +1051,23 @@ pub fn validate(
                 if (!matched) {
                     var problem: ValueProblem = .{};
                     _ = valueText(arena, option.kind, option.choices, .{ .string = "\x00" }, &problem) catch {};
-                    try issues.append(arena, .{ .severity = .@"error", .kind = "invalid_value", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "{s} = {s} is not a value Godot offers for it; {s}", .{ entry.key, entry.value, problem.hint }) });
+                    try issues.append(arena, .{ .severity = .@"error", .kind = "invalid_value", .preset = preset.name, .line = at_line, .file = at_file, .message = try arena.print("{s} = {s} is not a value Godot offers for it; {s}", .{ entry.key, entry.value, problem.hint }) });
                 }
                 continue;
             }
             if (!textMatchesKind(arena, option.kind, entry.value)) {
-                try issues.append(arena, .{ .severity = .@"error", .kind = "invalid_value", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "{s} = {s} is not the type Godot stores there (its default is {s})", .{ entry.key, entry.value, option.default }) });
+                try issues.append(arena, .{ .severity = .@"error", .kind = "invalid_value", .preset = preset.name, .line = at_line, .file = at_file, .message = try arena.print("{s} = {s} is not the type Godot stores there (its default is {s})", .{ entry.key, entry.value, option.default }) });
                 continue;
             }
             if (option.kind == .string) {
                 const text = unquote(arena, entry.value);
                 if (std.mem.startsWith(u8, text, "res://") and !exists(ctx, text)) {
-                    try issues.append(arena, .{ .severity = .warning, .kind = "missing_file", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "{s} names {s}, which does not exist", .{ entry.key, text }) });
+                    try issues.append(arena, .{ .severity = .warning, .kind = "missing_file", .preset = preset.name, .line = at_line, .file = at_file, .message = try arena.print("{s} names {s}, which does not exist", .{ entry.key, text }) });
                 } else if (text.len > 0 and isFileOption(entry.key) and !exists(ctx, text)) {
                     // A keystore lives outside the project, often only on
                     // the machine that signs. Its path is a secret's
                     // neighbour, so it is not echoed.
-                    try issues.append(arena, .{ .severity = .warning, .kind = "missing_file", .preset = preset.name, .line = preset.line, .message = try std.fmt.allocPrint(arena, "{s} names a file that does not exist on this machine, so exporting here fails; it may exist where the release is signed", .{entry.key}) });
+                    try issues.append(arena, .{ .severity = .warning, .kind = "missing_file", .preset = preset.name, .line = at_line, .file = at_file, .message = try arena.print("{s} names a file that does not exist on this machine, so exporting here fails; it may exist where the release is signed. It is set in {s}", .{ entry.key, if (in_credentials) credentials_file else "export_presets.cfg" }) });
                 }
             }
         };
@@ -1023,7 +1081,7 @@ pub fn validate(
             if (std.mem.eql(u8, preset.platform, entry.key) and std.mem.eql(u8, preset.name, named)) found = true;
         }
         if (!found) {
-            try issues.append(arena, .{ .severity = .warning, .kind = "runnable_preset_missing", .message = try std.fmt.allocPrint(arena, "[runnable_presets] makes \"{s}\" the runnable {s} preset, but there is no such {s} preset; Godot ignores the line and drops it on its next save", .{ named, entry.key, entry.key }) });
+            try issues.append(arena, .{ .severity = .warning, .kind = "runnable_preset_missing", .message = try arena.print("[runnable_presets] makes \"{s}\" the runnable {s} preset, but there is no such {s} preset; Godot ignores the line and drops it on its next save", .{ named, entry.key, entry.key }) });
         }
     }
     return issues.items;
@@ -1116,7 +1174,7 @@ test "bare presets for every platform come out as the editor's own save, both fi
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     for (export_options.tables) |table| {
-        const dir = try std.fmt.allocPrint(arena, "test_fixtures/export/godot_{s}", .{try std.mem.replaceOwned(u8, arena, table.minor, ".", "_")});
+        const dir = try arena.print("test_fixtures/export/godot_{s}", .{try std.mem.replaceOwned(u8, arena, table.minor, ".", "_")});
         var presets = try load(arena, null, null);
         var intent_text: std.ArrayList(u8) = .empty;
         try intent_text.appendSlice(arena, "{\"presets\": [");
@@ -1129,8 +1187,8 @@ test "bare presets for every platform come out as the editor's own save, both fi
         var refusal: Refusal = .{};
         _ = try apply(arena, &presets, table, intent, &refusal);
         const rendered = try render(arena, &presets, table);
-        try std.testing.expectEqualStrings(try fixture(arena, try std.fmt.allocPrint(arena, "{s}/export_presets.cfg", .{dir})), rendered.presets);
-        try std.testing.expectEqualStrings(try fixture(arena, try std.fmt.allocPrint(arena, "{s}/export_credentials.cfg", .{dir})), rendered.credentials);
+        try std.testing.expectEqualStrings(try fixture(arena, try arena.print("{s}/export_presets.cfg", .{dir})), rendered.presets);
+        try std.testing.expectEqualStrings(try fixture(arena, try arena.print("{s}/export_credentials.cfg", .{dir})), rendered.credentials);
 
         // And the editor's save, read back and written again, is unchanged.
         var reloaded = try load(arena, rendered.presets, rendered.credentials);

@@ -207,7 +207,7 @@ fn resolveBesideManifest(
     }
     while (std.mem.startsWith(u8, rel, "./")) rel = rel[2..];
     while (std.mem.startsWith(u8, rel, "/")) rel = rel[1..];
-    const res_path = try std.fmt.allocPrint(allocator, "res://{s}", .{rel});
+    const res_path = try allocator.print("res://{s}", .{rel});
     if (std.mem.eql(u8, res_path, old_scene)) {
         allocator.free(res_path);
         return null;
@@ -238,7 +238,7 @@ fn retargetMovedExtResources(
         if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
         const path = section.header.getString("path") orelse continue;
         if (path.len <= old_dir.len + 1 or !std.mem.startsWith(u8, path, old_dir) or path[old_dir.len] != '/') continue;
-        const candidate = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ new_dir, path[old_dir.len + 1 ..] });
+        const candidate = try allocator.print("{s}/{s}", .{ new_dir, path[old_dir.len + 1 ..] });
         defer allocator.free(candidate);
         const candidate_fs = (project_config.resPathToFilesystem(allocator, project_root, candidate) catch continue) orelse continue;
         defer allocator.free(candidate_fs);
@@ -344,7 +344,7 @@ fn writeTempProject(
     manifest_scene: []const u8,
     uid: []const u8,
 ) ![]const u8 {
-    const root = try std.fmt.allocPrint(allocator, "zig-out/test-relink-{s}", .{name});
+    const root = try allocator.print("zig-out/test-relink-{s}", .{name});
     errdefer allocator.free(root);
 
     std.Io.Dir.cwd().deleteTree(io, root) catch {};
@@ -357,8 +357,7 @@ fn writeTempProject(
     defer allocator.free(project_file);
     try io_util.writeFileAtomic(io, project_file, "config_version=5\n\n[application]\n\nconfig/name=\"Relink\"\n");
 
-    const scene_text = try std.fmt.allocPrint(
-        allocator,
+    const scene_text = try allocator.print(
         "[gd_scene format=3 uid=\"{s}\"]\n\n[node name=\"Root\" type=\"Node2D\"]\n",
         .{uid},
     );
@@ -367,8 +366,7 @@ fn writeTempProject(
 
     const manifest_path = try std.fs.path.join(allocator, &.{ root, "widget.manifest.json" });
     defer allocator.free(manifest_path);
-    const manifest_text = try std.fmt.allocPrint(
-        allocator,
+    const manifest_text = try allocator.print(
         \\{{
         \\  "catalog_format_version": 2,
         \\  "id": "ui/widget",

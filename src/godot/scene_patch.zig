@@ -84,7 +84,7 @@ pub fn applyPatchJson(
         const summary = applyOneOp(allocator, doc, op_value, options) catch |err| {
             error_details.noteStep(index);
             if (options.strict) return err;
-            const msg = try std.fmt.allocPrint(allocator, "op {d} failed: {s}", .{ index, @errorName(err) });
+            const msg = try allocator.print("op {d} failed: {s}", .{ index, @errorName(err) });
             try results.append(allocator, .{
                 .index = index,
                 .op = try dupOpName(allocator, op_value),
@@ -228,7 +228,7 @@ fn applyOneOp(
         if (options.undo) |recorder| {
             try scene_undo.recordNodeAddUndo(recorder, added.path);
         }
-        return std.fmt.allocPrint(allocator, "added node {s} at {s}", .{ name, added.path });
+        return allocator.print("added node {s} at {s}", .{ name, added.path });
     }
 
     if (std.mem.eql(u8, op_name, "connection_add")) {
@@ -250,7 +250,7 @@ fn applyOneOp(
         if (options.undo) |recorder| {
             try scene_undo.recordConnectionAddUndo(recorder, from, signal, to, method);
         }
-        return std.fmt.allocPrint(allocator, "connected {s} {s} to {s} {s}", .{ from, signal, to, method });
+        return allocator.print("connected {s} {s} to {s} {s}", .{ from, signal, to, method });
     }
 
     if (std.mem.eql(u8, op_name, "connection_remove")) {
@@ -262,7 +262,7 @@ fn applyOneOp(
             try scene_undo.captureConnectionRemoveUndo(recorder, allocator, doc, from, signal, to, method);
         }
         const removed = try scene_connections.remove(allocator, doc, from, signal, to, method);
-        return std.fmt.allocPrint(allocator, "removed {d} connection(s) of {s} {s} to {s}", .{ removed, from, signal, to });
+        return allocator.print("removed {d} connection(s) of {s} {s} to {s}", .{ removed, from, signal, to });
     }
 
     if (std.mem.eql(u8, op_name, "node_remove")) {
@@ -272,7 +272,7 @@ fn applyOneOp(
             try scene_undo.captureRemoveUndoOps(recorder, allocator, doc, path, recursive);
         }
         const removed = try scene_edit.removeNode(allocator, doc, path, recursive);
-        return std.fmt.allocPrint(allocator, "removed {d} node section(s) at {s}", .{ removed, path });
+        return allocator.print("removed {d} node section(s) at {s}", .{ removed, path });
     }
 
     if (std.mem.eql(u8, op_name, "node_rename")) {
@@ -288,7 +288,7 @@ fn applyOneOp(
         if (options.undo) |recorder| {
             try scene_undo.recordNodeRenameUndo(recorder, new_path, old_name);
         }
-        return std.fmt.allocPrint(allocator, "renamed {s} to {s}", .{ path, new_path });
+        return allocator.print("renamed {s} to {s}", .{ path, new_path });
     }
 
     if (std.mem.eql(u8, op_name, "node_reparent")) {
@@ -310,12 +310,12 @@ fn applyOneOp(
         if (options.undo) |recorder| {
             // The undo must address the node where it now lives, and put it
             // back in its old slot rather than last.
-            const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent, target.name });
+            const new_path = try allocator.print("{s}/{s}", .{ parent, target.name });
             defer allocator.free(new_path);
             try scene_undo.recordNodeReparentUndo(recorder, new_path, old_parent, old_index);
         }
-        if (!moved.parent_changed) return std.fmt.allocPrint(allocator, "moved {s} to child {d}", .{ path, moved.index });
-        return std.fmt.allocPrint(allocator, "reparented {s} under {s}", .{ path, parent });
+        if (!moved.parent_changed) return allocator.print("moved {s} to child {d}", .{ path, moved.index });
+        return allocator.print("reparented {s} under {s}", .{ path, parent });
     }
 
     if (std.mem.eql(u8, op_name, "node_set")) {
@@ -342,7 +342,7 @@ fn applyOneOp(
             }
             try applyNodeProperties(allocator, doc, path, props);
             const count = props.object.count();
-            return std.fmt.allocPrint(allocator, "set {d} {s} on {s}", .{ count, if (count == 1) "property" else "properties", path });
+            return allocator.print("set {d} {s} on {s}", .{ count, if (count == 1) "property" else "properties", path });
         }
         const property = try requiredString(op_value.object, "property");
         const value = try requiredPropertyValue(allocator, nodeClass(allocator, doc, path), op_value.object, "value");
@@ -354,7 +354,7 @@ fn applyOneOp(
             }
         }
         try scene_edit.setNodeProperty(allocator, doc, path, property, value);
-        return std.fmt.allocPrint(allocator, "set {s} on {s}", .{ property, path });
+        return allocator.print("set {s} on {s}", .{ property, path });
     }
 
     if (std.mem.eql(u8, op_name, "ext_add")) {
@@ -380,7 +380,7 @@ fn applyOneOp(
             if (scene_uid) |uid| {
                 try section.header.setUidField(allocator, uid);
             }
-            return std.fmt.allocPrint(allocator, "reused ext_resource {s} ({s})", .{ existing_id, path });
+            return allocator.print("reused ext_resource {s} ({s})", .{ existing_id, path });
         }
 
         var added = scene_resources.addExtResourceWithId(allocator, doc, res_type, path, id, scene_uid) catch |err| {
@@ -391,7 +391,7 @@ fn applyOneOp(
         if (options.undo) |recorder| {
             try scene_undo.recordExtRemoveUndo(recorder, added.id);
         }
-        return std.fmt.allocPrint(allocator, "added ext_resource {s} ({s})", .{ added.id, path });
+        return allocator.print("added ext_resource {s} ({s})", .{ added.id, path });
     }
 
     if (std.mem.eql(u8, op_name, "assign_ext")) {
@@ -442,7 +442,7 @@ fn applyOneOp(
             }
         }
 
-        const ext_ref = try std.fmt.allocPrint(allocator, "ExtResource(\"{s}\")", .{added.id});
+        const ext_ref = try allocator.print("ExtResource(\"{s}\")", .{added.id});
         defer allocator.free(ext_ref);
         if (options.undo) |recorder| {
             if (try scene_undo.readNodePropertyRaw(allocator, doc, node_path, property)) |old_value| {
@@ -453,7 +453,7 @@ fn applyOneOp(
         try scene_edit.setNodeProperty(allocator, doc, node_path, property, ext_ref);
 
         const verb = if (reused) "reused" else "added";
-        return std.fmt.allocPrint(allocator, "{s} ext_resource {s} and set {s} on {s}", .{ verb, added.id, property, node_path });
+        return allocator.print("{s} ext_resource {s} and set {s} on {s}", .{ verb, added.id, property, node_path });
     }
 
     if (std.mem.eql(u8, op_name, "ext_remove")) {
@@ -462,7 +462,7 @@ fn applyOneOp(
             try scene_undo.captureExtAddUndo(recorder, allocator, doc, id);
         }
         _ = try scene_resources.removeExtResource(allocator, doc, id);
-        return std.fmt.allocPrint(allocator, "removed ext_resource {s}", .{id});
+        return allocator.print("removed ext_resource {s}", .{id});
     }
 
     if (std.mem.eql(u8, op_name, "sub_add")) {
@@ -493,7 +493,7 @@ fn applyOneOp(
         if (options.undo) |recorder| {
             try scene_undo.recordSubRemoveUndo(recorder, added.id);
         }
-        return std.fmt.allocPrint(allocator, "added sub_resource {s}", .{added.id});
+        return allocator.print("added sub_resource {s}", .{added.id});
     }
 
     if (std.mem.eql(u8, op_name, "sub_remove")) {
@@ -502,7 +502,7 @@ fn applyOneOp(
             try scene_undo.captureSubAddUndo(recorder, allocator, doc, id);
         }
         _ = try scene_resources.removeSubResource(allocator, doc, id);
-        return std.fmt.allocPrint(allocator, "removed sub_resource {s}", .{id});
+        return allocator.print("removed sub_resource {s}", .{id});
     }
 
     if (std.mem.eql(u8, op_name, "instance_add")) {
@@ -540,7 +540,7 @@ fn applyOneOp(
         if (options.undo) |recorder| {
             try scene_undo.recordNodeAddUndo(recorder, added.path);
         }
-        return std.fmt.allocPrint(allocator, "instanced {s} at {s} from {s}", .{ name, added.path, scene_res_path });
+        return allocator.print("instanced {s} at {s} from {s}", .{ name, added.path, scene_res_path });
     }
 
     if (std.mem.eql(u8, op_name, "instance_override")) {
@@ -562,7 +562,7 @@ fn applyOneOp(
             else
                 null;
 
-            const child_path_guess = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ path, name });
+            const child_path_guess = try allocator.print("{s}/{s}", .{ path, name });
             defer allocator.free(child_path_guess);
             if (options.undo) |recorder| {
                 if (try scene_undo.readNodePropertyRaw(allocator, doc, child_path_guess, property)) |old_value| {
@@ -582,7 +582,7 @@ fn applyOneOp(
                 ensure_editable,
             );
             defer allocator.free(child_path);
-            return std.fmt.allocPrint(allocator, "overrode {s}.{s} on instance child {s}", .{ name, property, path });
+            return allocator.print("overrode {s}.{s} on instance child {s}", .{ name, property, path });
         }
 
         if (options.undo) |recorder| {
@@ -592,7 +592,7 @@ fn applyOneOp(
             }
         }
         try scene_instance.setInstanceProperty(allocator, doc, path, property, value);
-        return std.fmt.allocPrint(allocator, "overrode {s} on instance {s}", .{ property, path });
+        return allocator.print("overrode {s} on instance {s}", .{ property, path });
     }
 
     error_details.record(.{ .field = "op", .value = op_name_given, .hint = "ops: node_add, node_remove, node_rename, node_reparent, node_set, instance_add, instance_override, ext_add, ext_remove, sub_add, sub_remove, assign_ext, connection_add, connection_remove; recipe names add_node, connect, instance_catalog, instance_scene, instance_set are accepted as aliases" });
@@ -698,11 +698,11 @@ pub fn numberText(allocator: std.mem.Allocator, class_name: ?[]const u8, propert
     };
     return switch (value) {
         .integer => |i| if (declared_float orelse isFloatProperty(property))
-            try std.fmt.allocPrint(allocator, "{d}.0", .{i})
+            try allocator.print("{d}.0", .{i})
         else
-            try std.fmt.allocPrint(allocator, "{d}", .{i}),
+            try allocator.print("{d}", .{i}),
         .float => |f| if (declared_float == false and @floor(f) == f and @abs(f) < 9.0e15)
-            try std.fmt.allocPrint(allocator, "{d}", .{@as(i64, @intFromFloat(f))})
+            try allocator.print("{d}", .{@as(i64, @intFromFloat(f))})
         else
             variant_value.formatScalarFloat(allocator, f) catch return error.OutOfMemory,
         else => null,
@@ -735,17 +735,17 @@ pub fn rejectRawVariantText(allocator: std.mem.Allocator, property: []const u8, 
     defer parsed.deinit(allocator);
     if (parsed.kind != .raw) return;
 
-    const hint = try std.fmt.allocPrint(allocator, "not valid Variant text; for a string write \"\\\"{s}\\\"\"", .{text});
+    const hint = try allocator.print("not valid Variant text; for a string write \"\\\"{s}\\\"\"", .{text});
     error_details.record(.{ .field = property, .value = text, .hint = hint });
     return error.InvalidPropertyValue;
 }
 
 fn extIdFromHint(allocator: std.mem.Allocator, res_type: []const u8, hint: []const u8) Error![]const u8 {
-    return std.fmt.allocPrint(allocator, "{s}_{s}", .{ res_type, hint });
+    return allocator.print("{s}_{s}", .{ res_type, hint });
 }
 
 fn subIdFromHint(allocator: std.mem.Allocator, res_type: []const u8, hint: []const u8) Error![]const u8 {
-    return std.fmt.allocPrint(allocator, "{s}_{s}", .{ res_type, hint });
+    return allocator.print("{s}_{s}", .{ res_type, hint });
 }
 
 /// Shared with `scene ext add` and `scene instance add` deliberately: the
@@ -1056,8 +1056,12 @@ test "two sub_add ops of one type get different ids instead of colliding" {
     for (ids.items, 0..) |id, i| {
         for (ids.items[i + 1 ..]) |other| try std.testing.expect(!std.mem.eql(u8, id, other));
     }
-    try std.testing.expect(std.mem.endsWith(u8, ids.items[1], "_2"));
-    try std.testing.expect(std.mem.endsWith(u8, ids.items[2], "_3"));
+    // Each draws its own suffix, as the editor does, rather than one
+    // suffix numbered _2 and _3.
+    for (ids.items, 0..) |id, i| {
+        const suffix = id[std.mem.lastIndexOfScalar(u8, id, '_').?..];
+        for (ids.items[i + 1 ..]) |other| try std.testing.expect(!std.mem.endsWith(u8, other, suffix));
+    }
 }
 
 test "an id_hint the caller chose still fails when it collides, naming id_hint" {

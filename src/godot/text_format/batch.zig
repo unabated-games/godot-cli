@@ -34,11 +34,11 @@ pub fn renameExtResourceId(doc: *document.Document, allocator: std.mem.Allocator
     const section = target orelse return null;
     // old_id points into the header field that setStringField is about to
     // replace, so the reference text has to be built before that happens.
-    const old_ref = try std.fmt.allocPrint(allocator, "ExtResource(\"{s}\")", .{old_id});
+    const old_ref = try allocator.print("ExtResource(\"{s}\")", .{old_id});
     try section.header.setStringField(allocator, "id", new_id);
 
     defer allocator.free(old_ref);
-    const new_ref = try std.fmt.allocPrint(allocator, "ExtResource(\"{s}\")", .{new_id});
+    const new_ref = try allocator.print("ExtResource(\"{s}\")", .{new_id});
     defer allocator.free(new_ref);
 
     var rewritten: usize = 0;

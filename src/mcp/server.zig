@@ -91,6 +91,11 @@ pub fn serve(
     options: Options,
 ) !void {
     tools.include_advanced = options.include_advanced;
+    // The server's life is one session: the first write to each scene keeps
+    // a copy of it as it was (scene.sessionSnapshot).
+    var session_buf: [48]u8 = undefined;
+    const now = std.Io.Clock.real.now(io);
+    @import("../commands/scene.zig").session_id = std.fmt.bufPrint(&session_buf, "mcp-{d}", .{now.nanoseconds}) catch "mcp";
     var root_buf: [std.fs.max_path_bytes]u8 = undefined;
     var confinement: tools.Confinement = .{};
     if (options.project_root) |dir_path| {
@@ -220,7 +225,7 @@ fn dispatch(state: *State, arena: std.mem.Allocator, method: []const u8, params:
     if (std.mem.eql(u8, method, "prompts/list")) return listPrompts(arena);
     if (std.mem.eql(u8, method, "prompts/get")) return getPrompt(arena, params);
     if (std.mem.eql(u8, method, "logging/setLevel")) return .{ .result = try baseResult(arena) };
-    return .{ .err = .{ .code = -32601, .message = try std.fmt.allocPrint(arena, "method not found: {s}", .{method}) } };
+    return .{ .err = .{ .code = -32601, .message = try arena.print("method not found: {s}", .{method}) } };
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +316,7 @@ fn callTool(state: *State, arena: std.mem.Allocator, params: ?std.json.ObjectMap
     const name_value = p.get("name") orelse return invalidParams(arena, "tools/call needs a tool name");
     if (name_value != .string) return invalidParams(arena, "tool name must be a string");
     const tool = tools.find(state.tool_list, name_value.string) orelse {
-        return invalidParams(arena, try std.fmt.allocPrint(arena, "unknown tool: {s}", .{name_value.string}));
+        return invalidParams(arena, try arena.print("unknown tool: {s}", .{name_value.string}));
     };
     var arguments: ?std.json.ObjectMap = null;
     if (p.get("arguments")) |a| {
@@ -462,7 +467,7 @@ fn readResource(state: *State, arena: std.mem.Allocator, params: ?std.json.Objec
     } else {
         var data: std.json.ObjectMap = .{};
         try data.put(arena, "uri", .{ .string = uri });
-        return .{ .err = .{ .code = -32602, .message = try std.fmt.allocPrint(arena, "resource not found: {s}", .{uri}), .data = .{ .object = data } } };
+        return .{ .err = .{ .code = -32602, .message = try arena.print("resource not found: {s}", .{uri}), .data = .{ .object = data } } };
     }
 
     var item: std.json.ObjectMap = .{};

@@ -92,7 +92,7 @@ fn sceneRootPath(list: *const node_tree.NodeList) Error![]const u8 {
 
 fn attrToViewportPath(allocator: std.mem.Allocator, root_path: []const u8, attr: []const u8) Error![]const u8 {
     if (std.mem.eql(u8, attr, ".")) return try allocator.dupe(u8, root_path);
-    return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ root_path, attr });
+    return try allocator.print("{s}/{s}", .{ root_path, attr });
 }
 
 fn viewportPathToAttr(allocator: std.mem.Allocator, root_path: []const u8, path: []const u8) Error![]const u8 {
@@ -282,7 +282,7 @@ pub fn rewritePaths(
             if (std.mem.eql(u8, attr, old_prefix)) {
                 try section.header.setStringField(allocator, key, new_prefix);
             } else if (attr.len > old_prefix.len and std.mem.startsWith(u8, attr, old_prefix) and attr[old_prefix.len] == '/') {
-                const rewritten = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ new_prefix, attr[old_prefix.len + 1 ..] });
+                const rewritten = try allocator.print("{s}/{s}", .{ new_prefix, attr[old_prefix.len + 1 ..] });
                 defer allocator.free(rewritten);
                 try section.header.setStringField(allocator, key, rewritten);
             }

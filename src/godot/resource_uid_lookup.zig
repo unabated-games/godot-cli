@@ -91,7 +91,7 @@ pub fn readBinaryUid(allocator: std.mem.Allocator, io: std.Io, fs_path: []const 
 
 /// `<file>.uid`, holding one `uid://...` line.
 pub fn readSidecarUid(allocator: std.mem.Allocator, io: std.Io, fs_path: []const u8) ?[]const u8 {
-    const sidecar_path = std.fmt.allocPrint(allocator, "{s}.uid", .{fs_path}) catch return null;
+    const sidecar_path = allocator.print("{s}.uid", .{fs_path}) catch return null;
     defer allocator.free(sidecar_path);
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, sidecar_path, allocator, .unlimited) catch return null;
     defer allocator.free(bytes);
@@ -137,7 +137,7 @@ pub fn refreshExtResourceUids(
 
 /// The UID in `<file>.import`, where Godot keeps an imported asset's.
 pub fn readImportFileUid(allocator: std.mem.Allocator, io: std.Io, fs_path: []const u8) ?[]const u8 {
-    const import_path = std.fmt.allocPrint(allocator, "{s}.import", .{fs_path}) catch return null;
+    const import_path = allocator.print("{s}.import", .{fs_path}) catch return null;
     defer allocator.free(import_path);
 
     const bytes = std.Io.Dir.cwd().readFileAlloc(io, import_path, allocator, .unlimited) catch return null;

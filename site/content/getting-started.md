@@ -64,7 +64,7 @@ it said.
 
 ## Author a scene
 
-Run these from a Godot project directory, the one holding `project.godot`. From an empty folder, `project new` writes that file the way the project manager would, with the name, the main scene, and the window size:
+Run these from a Godot project directory, the one holding `project.godot`. From an empty folder, `project new` writes that file the way the project manager would, with the name, the main scene, and the window size. Like the project manager, it also writes `icon.svg`, a `.gitignore` that keeps Godot's `.godot/` cache (and the export secrets in it) out of git, and a `.gitattributes`:
 
 ```bash
 godot-cli project new --name MyGame --main-scene res://level.tscn --width 640 --height 360

@@ -33,6 +33,11 @@ pub fn sortNodeSections(allocator: std.mem.Allocator, doc: *document.Document) E
 
     const sorted_indices = try topologicalNodeSectionOrder(allocator, &list);
     defer allocator.free(sorted_indices);
+    // A node parented inside an instanced scene (a path through the instance
+    // that no section here declares) is out of the walk's reach. The file's
+    // own order is then the only one known to be right: five of Godot's demo
+    // scenes crashed here, indexing past the shorter list.
+    if (sorted_indices.len != node_indices.items.len) return;
 
     var already_sorted = true;
     for (node_indices.items, 0..) |old_index, i| {
@@ -83,7 +88,7 @@ pub fn insertIndexForNewChild(
     const parent = node_tree.findByPath(&list, parent_viewport_path) orelse return doc.sections.items.len;
     var insert_at = parent.section_index + 1;
 
-    const parent_prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_viewport_path});
+    const parent_prefix = try allocator.print("{s}/", .{parent_viewport_path});
     defer allocator.free(parent_prefix);
 
     for (list.nodes) |*node| {
@@ -109,7 +114,7 @@ pub fn insertIndexForChildPosition(
     var list = try node_tree.collectNodes(allocator, doc);
     defer list.deinit(allocator);
 
-    const prefix = try std.fmt.allocPrint(allocator, "{s}/", .{parent_viewport_path});
+    const prefix = try allocator.print("{s}/", .{parent_viewport_path});
     defer allocator.free(prefix);
 
     var seen: usize = 0;
@@ -138,7 +143,7 @@ pub fn moveSubtreeAfterReparent(
 
     const root = findBySectionIndex(&list, subtree_root_section_index) orelse return;
 
-    const subtree_prefix = try std.fmt.allocPrint(allocator, "{s}/", .{root.path});
+    const subtree_prefix = try allocator.print("{s}/", .{root.path});
     defer allocator.free(subtree_prefix);
 
     var block: std.ArrayList(usize) = .empty;
@@ -218,9 +223,17 @@ pub fn validateNodeParentOrder(
         const parent_path = try parentViewportPath(allocator, root_path, node.parent);
         defer allocator.free(parent_path);
 
-        if (!declared.contains(parent_path)) {
-            const msg = try std.fmt.allocPrint(
-                allocator,
+        // A parent inside an instanced scene comes from that scene, so it
+        // needs no section of its own here: Godot's demos parent nodes to
+        // GodotBattleBot/Armature/Skeleton3D with the instance declared and
+        // the skeleton never overridden.
+        const inside_instance = for (ordered.items) |other| {
+            if (other.section_index >= node.section_index) continue;
+            if (other.instance == null) continue;
+            if (std.mem.startsWith(u8, parent_path, other.path) and parent_path.len > other.path.len and parent_path[other.path.len] == '/') break true;
+        } else false;
+        if (!declared.contains(parent_path) and !inside_instance) {
+            const msg = try allocator.print(
                 "node '{s}' parent '{s}' is declared later in the file (Godot instantiate: parent path vanished)",
                 .{ node.name, node.parent },
             );
@@ -257,7 +270,7 @@ fn parentViewportPath(allocator: std.mem.Allocator, root_path: []const u8, paren
     if (std.mem.eql(u8, parent_attr, ".") or std.mem.eql(u8, parent_attr, root_name)) {
         return try allocator.dupe(u8, root_path);
     }
-    return try std.fmt.allocPrint(allocator, "/root/{s}/{s}", .{ root_name, parent_attr });
+    return try allocator.print("/root/{s}/{s}", .{ root_name, parent_attr });
 }
 
 fn topologicalNodeSectionOrder(allocator: std.mem.Allocator, list: *const node_tree.NodeList) Error![]usize {

@@ -37,9 +37,42 @@ GODOT="$GODOT" "$repo_root/tools/gen_export_options.sh" > "$work/regen.zig" 2> "
   echo "could not regenerate the table from this engine:"; cat "$work/regen.log"; exit 1;
 }
 zig fmt "$work/regen.zig" >/dev/null
-strip() { grep -v 'godot_version = \|^//!' "$1"; }
+
+# The tables come from the macOS editor. An editor on any other host offers
+# fewer choices for a few options (no App Store, no Xcode tools, a different
+# default codesign tool, and no choice list at all for some), so those options
+# are left out of the comparison there.
+host_only='"export/distribution_type"\|"codesign/codesign"\|"notarization/notarization"\|"application/icon_interpolation"\|"application/export_angle"'
+strip() {
+  if [ "$(uname -s)" = Darwin ]; then
+    grep -v 'godot_version = \|^//!' "$1"
+  else
+    grep -v 'godot_version = \|^//!' "$1" | grep -v "\.name = \($host_only\)"
+  fi
+}
+
+# Orders a version string by patch, then dev < beta < rc < stable, then the
+# prerelease number: "4.7.2.stable" -> "2 4 0", "4.8.beta1" -> "0 2 1".
+version_key() {
+  local v="$1" patch=0 status number=0
+  if [[ "$v" =~ ^[0-9]+\.[0-9]+\.([0-9]+)\. ]]; then patch="${BASH_REMATCH[1]}"; fi
+  status="$(echo "$v" | grep -oE '(dev|beta|rc|stable)[0-9]*' | head -1)"
+  case "$status" in
+    dev*) number="${status#dev}"; status=1 ;;
+    beta*) number="${status#beta}"; status=2 ;;
+    rc*) number="${status#rc}"; status=3 ;;
+    *) status=4 ;;
+  esac
+  printf '%05d %d %05d' "$patch" "$status" "${number:-0}"
+}
+table_version="$(grep -o 'godot_version = "[^"]*"' "$table" | cut -d'"' -f2)"
+
 if diff <(strip "$table") <(strip "$work/regen.zig") > "$work/table.diff"; then
   echo "export option table matches this engine"
+elif [[ "$(version_key "$version")" < "$(version_key "$table_version")" ]]; then
+  echo "export option table differs from this engine, which is older than the table's ('>' is the engine):"
+  head -30 "$work/table.diff"
+  echo "a project's features name only the minor version, so the table follows its newest release"
 else
   echo "export option table differs from this engine ('>' is the engine):"
   head -30 "$work/table.diff"

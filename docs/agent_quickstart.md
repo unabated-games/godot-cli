@@ -38,7 +38,7 @@ Through the MCP server there is no `project-root` argument. A server started wit
 4. Presentation lives on nodes (`anchor_*`, `grow_*`, `theme_override_*`, `custom_minimum_size`), signals in `[connection]` sections (`scene connection add`), resources in `.tres` files (`resource new`). None of them in `_ready()`.
 5. Values are Godot Variant text: `Vector2(1, 2)`, `1.5`, `true`, and a string carries its own quotes, `"\"Paused\""`. A bare word is rejected before anything is written, and so is a field the op or recipe does not take (`id` is not `id_hint`); the failure names the fields it accepts.
 6. Move files with `project move`, never `mv`; a plain move leaves every `res://` reference stale.
-7. Validate after every edit, then run the game and read the frame and the log.
+7. Validate after every edit, then run the game and read the frame and the log. A change with no scene in it, such as the input map, is checked the same way: `project input validate`, then `project run --press <action>@10..30` on a scene that reacts to it (`--scene res://...` when the project has no main scene yet), reading the log. `--press` sends the action itself, not a key or button, so the bindings are what `project input list` reports.
 
 ## Workflow
 
@@ -56,6 +56,7 @@ Through the MCP server there is no `project-root` argument. A server started wit
 # create and build
 godot-cli project new --project-root . --name MyGame --main-scene res://scenes/main.tscn --width 640 --height 360
 godot-cli scene new --output scenes/main.tscn --root-name Main --root-type Node2D --project-root .
+godot-cli scene new --output scenes/test.tscn --root-name Test --root-type Node2D --script scripts/test.gd --project-root .   # script on the root in one call
 godot-cli scene node add scenes/main.tscn --parent /root/Main --name HUD --type Control \
   --property anchors_preset --value 15 --property anchor_right --value 1.0 --property anchor_bottom --value 1.0 --project-root .
 godot-cli scene instance add scenes/main.tscn --parent /root/Main --name Btn --catalog-id ui/button --project-root .
@@ -70,10 +71,12 @@ godot-cli scene apply scenes/main.tscn --patch patch.json --dry-run --project-ro
 # resources, project, files
 godot-cli resource new --output materials/wood.tres --type StandardMaterial3D --property roughness --value 0.8 --project-root .
 godot-cli project settings set --project-root . --section application --key run/main_scene --value res://scenes/main.tscn
-godot-cli project input apply --project-root . --intent intents/wasd_movement.json
+godot-cli project input apply --project-root . --intent intents/wasd_movement.json   # data.actions lists each binding in words, on --dry-run too
+godot-cli project input list --project-root . --json                                  # events: ["A (physical)", "joypad left_x -1.0", ...]
 godot-cli project export options --project-root . --platform Android --filter keystore --json   # option names, defaults, choices
 godot-cli project export apply --project-root . --intent intents/export_desktop_web.json --json  # presets the way the editor writes them
 godot-cli project export build --project-root . --preset Linux --json                            # runs the export; needs Godot's export templates
+godot-cli project export build --project-root . --all --json                                     # every preset, carrying on past a failure
 godot-cli project move --project-root . --from scripts/player.gd --to scripts/hero.gd
 
 # check
@@ -81,6 +84,7 @@ godot-cli scene validate scenes/main.tscn --project-root . --json
 godot-cli scene describe scenes/main.tscn --project-root . --json   # tree with properties, connections, refs, scripts
 godot-cli scene node list scenes/main.tscn --json
 godot-cli scene diff before.tscn scenes/main.tscn --properties --json
+godot-cli scene diff .godot/godot-cli/session/scenes/main.tscn scenes/main.tscn --json   # everything this session changed (MCP, or GODOT_CLI_SESSION set)
 ```
 
 ## Run the game after a change

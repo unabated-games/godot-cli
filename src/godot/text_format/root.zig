@@ -6,3 +6,4 @@ pub const roundtrip = @import("roundtrip.zig");
 pub const batch = @import("batch.zig");
 pub const godot_format = @import("godot_format.zig");
 pub const normalize_properties = @import("normalize_properties.zig");
+pub const property_sort = @import("property_sort.zig");

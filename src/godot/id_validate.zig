@@ -89,6 +89,16 @@ pub const Report = struct {
     }
 };
 
+/// A `[node]` section that overrides a node inside an instanced scene: no
+/// type and no instance of its own, under a parent. Its unique_id is the one
+/// the node has in its own scene, so every copy of the instance repeats it.
+pub fn isInstanceOverride(header: anytype) bool {
+    return std.mem.eql(u8, header.name, "node") and
+        header.getString("type") == null and
+        header.fields.get("instance") == null and
+        header.fields.get("parent") != null;
+}
+
 /// Godot `generate_scene_unique_id` suffix alphabet: a-y and 0-9.
 pub fn isSceneIdSuffixChar(c: u8) bool {
     return (c >= 'a' and c <= 'y') or (c >= '0' and c <= '9');
@@ -347,7 +357,11 @@ pub fn validateDocument(
     errdefer report.deinit(allocator);
 
     var seen_ids = std.StringHashMap(void).init(allocator);
-    defer seen_ids.deinit();
+    defer {
+        var keys = seen_ids.keyIterator();
+        while (keys.next()) |key| allocator.free(key.*);
+        seen_ids.deinit();
+    }
 
     var seen_node_unique_ids = std.AutoHashMap(i64, void).init(allocator);
     defer seen_node_unique_ids.deinit();
@@ -392,7 +406,7 @@ pub fn validateDocument(
                                 allocator,
                                 .warning,
                                 "uid_not_in_cache",
-                                "scene/resource uid is not present in uid_cache.bin",
+                                "scene/resource uid is not in uid_cache.bin yet: usual for a file Godot has not imported since it was made; project import adds it, and the warning goes",
                                 section.line,
                             );
                         }
@@ -401,7 +415,10 @@ pub fn validateDocument(
             }
         }
 
-        if (std.mem.eql(u8, name, "node")) {
+        // An override of a node inside an instance (no type, no instance of
+        // its own) carries the id that node has in its own scene, so every
+        // copy of the instance repeats it; Godot's demos do so throughout.
+        if (std.mem.eql(u8, name, "node") and !isInstanceOverride(&section.header)) {
             if (section.header.getInteger("unique_id")) |unique_id| {
                 if (validateNodeUniqueId(unique_id)) |issue| {
                     try report.add(allocator, issue.severity, issue.kind, issue.message, section.line);
@@ -430,9 +447,17 @@ pub fn validateDocument(
                 try report.add(allocator, issue.severity, issue.kind, issue.message, section.line);
             }
 
-            const gop = try seen_ids.getOrPut(id);
+            // ExtResource("1") and SubResource("1") are different references:
+            // the two kinds keep separate ids, and files Godot saved before
+            // the `Type_xxxxx` ids routinely use "1" for both. One map for
+            // both made 125 of the 533 scenes in Godot's demo projects fail.
+            const keyed = try std.mem.concat(allocator, u8, &.{ name, ":", id });
+            const gop = try seen_ids.getOrPut(keyed);
             if (gop.found_existing) {
-                try report.add(allocator, .err, "duplicate_scene_id", "duplicate scene resource id in file", section.line);
+                allocator.free(keyed);
+                const msg = try allocator.print("two {s} sections have id \"{s}\"", .{ name, id });
+                defer allocator.free(msg);
+                try report.add(allocator, .err, "duplicate_scene_id", msg, section.line);
             }
 
             if (section.header.getString("uid")) |uid_text| {
@@ -452,7 +477,7 @@ pub fn validateDocument(
                                 allocator,
                                 .warning,
                                 "uid_not_in_cache",
-                                "ext_resource uid is not present in uid_cache.bin",
+                                "ext_resource uid is not in uid_cache.bin yet: usual for a file Godot has not imported since it was made, such as a new script; project import adds it, and the warning goes",
                                 section.line,
                             );
                         } else if (section.header.getString("path")) |path| {
@@ -522,8 +547,7 @@ pub fn validateDocument(
     const missing = scene_connections.missingEndpoints(allocator, doc) catch &.{};
     defer if (missing.len != 0) allocator.free(missing);
     for (missing) |endpoint| {
-        const msg = try std.fmt.allocPrint(
-            allocator,
+        const msg = try allocator.print(
             "connection {s}=\"{s}\" names a node that is not in the scene",
             .{ endpoint.field, endpoint.attr },
         );
@@ -534,6 +558,15 @@ pub fn validateDocument(
     try warnControlsUnderNode2D(allocator, doc, &report);
     try checkPropertyTypes(allocator, doc, &report);
     try checkConnectionSignals(allocator, doc, ctx, &report);
+    {
+        // The check reads scripts into scratch memory; the report copies what
+        // it keeps.
+        var scratch = std.heap.ArenaAllocator.init(allocator);
+        defer scratch.deinit();
+        for (try unknownConnectionMethods(scratch.allocator(), doc, ctx)) |note| {
+            try report.add(allocator, .warning, "unknown_method", note.message, note.line);
+        }
+    }
     return report;
 }
 
@@ -583,7 +616,7 @@ fn checkConnectionSignals(allocator: std.mem.Allocator, doc: *const document.Doc
         const path = if (std.mem.eql(u8, from, "."))
             list.nodes[0].path
         else
-            try std.fmt.allocPrint(allocator, "{s}/{s}", .{ list.nodes[0].path, from });
+            try allocator.print("{s}/{s}", .{ list.nodes[0].path, from });
         defer if (!std.mem.eql(u8, from, ".")) allocator.free(path);
 
         const node = node_tree.findByPath(&list, path) orelse continue;
@@ -604,14 +637,152 @@ fn checkConnectionSignals(allocator: std.mem.Allocator, doc: *const document.Doc
             }
         }
 
-        const msg = try std.fmt.allocPrint(
-            allocator,
+        const msg = try allocator.print(
             "{s} does not emit a signal named {s}, and its script does not declare one either, so this connection never fires; check the spelling, or add `signal {s}` to the script",
             .{ node.node_type, signal, signal },
         );
         defer allocator.free(msg);
         try report.add(allocator, .err, "unknown_signal", msg, section.line);
     }
+}
+
+/// Connections whose receiver has no method by that name: not in its
+/// script, nor in what the script extends, nor in its class. Godot loads the
+/// scene and logs "Method not found" each time the signal fires, so a typo
+/// (`_on_sitt`) only shows at run time; trial 41 connected one in a dry run.
+/// Anything the check cannot read (an instanced receiver, a script outside
+/// the project, a class not in the table) is left alone.
+pub fn unknownConnectionMethods(allocator: std.mem.Allocator, doc: *const document.Document, ctx: ValidateContext) ![]WriteNote {
+    const node_tree = @import("node_tree.zig");
+    var found: std.ArrayList(WriteNote) = .empty;
+    var list = node_tree.collectNodes(allocator, doc) catch return found.items;
+    if (list.nodes.len == 0) return found.items;
+
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "connection")) continue;
+        const to = section.header.getString("to") orelse continue;
+        const method = section.header.getString("method") orelse continue;
+        const path = if (std.mem.eql(u8, to, "."))
+            list.nodes[0].path
+        else
+            try allocator.print("{s}/{s}", .{ list.nodes[0].path, to });
+        const node = node_tree.findByPath(&list, path) orelse continue;
+        if (node.instance != null) continue;
+
+        const message = if (scriptOf(doc, node.section_index)) |script_ref| blk: {
+            const res_path = extPathOf(doc, script_ref) orelse continue;
+            const where = scriptChainHasMethod(allocator, ctx, res_path, method) orelse continue;
+            if (where.found) continue;
+            break :blk try allocator.print(
+                "{s} has no method {s}: its script {s}{s} defines none by that name, and {s} has none, so the signal calls nothing and Godot logs \"Method not found\" each time it fires. Check the spelling, or add func {s}() to the script",
+                .{ node.name, method, res_path, if (where.depth > 1) " and the scripts it extends" else "", where.base, method },
+            );
+        } else blk: {
+            const has = class_info.hasMethod(node.node_type, method) orelse continue;
+            if (has) continue;
+            break :blk try allocator.print(
+                "{s} has no method {s}: it has no script, and {s} has none by that name, so the signal calls nothing and Godot logs \"Method not found\" each time it fires. Attach a script that defines it, or connect to a method {s} has",
+                .{ node.name, method, node.node_type, node.node_type },
+            );
+        };
+        try found.append(allocator, .{
+            .key = try allocator.print("{s}|{s}|{s}|{s}", .{ section.header.getString("signal") orelse "", section.header.getString("from") orelse "", to, method }),
+            .message = message,
+            .line = section.line,
+        });
+    }
+    return found.items;
+}
+
+/// The `path` of the ext_resource a value such as `ExtResource("1_abc")`
+/// names.
+fn extPathOf(doc: *const document.Document, ref: []const u8) ?[]const u8 {
+    const open_quote = std.mem.indexOfScalar(u8, ref, '"') orelse return null;
+    const rest = ref[open_quote + 1 ..];
+    const close_quote = std.mem.indexOfScalar(u8, rest, '"') orelse return null;
+    const id = rest[0..close_quote];
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        const section_id = section.header.getString("id") orelse continue;
+        if (std.mem.eql(u8, section_id, id)) return section.header.getString("path");
+    }
+    return null;
+}
+
+const MethodLookup = struct {
+    found: bool,
+    /// The engine class the chain ends in.
+    base: []const u8,
+    /// How many scripts were read.
+    depth: usize,
+};
+
+const ChainTarget = union(enum) { method: []const u8, signal: []const u8 };
+
+fn scriptChainHasMethod(allocator: std.mem.Allocator, ctx: ValidateContext, start: []const u8, method: []const u8) ?MethodLookup {
+    return scriptChainFind(allocator, ctx, start, .{ .method = method });
+}
+
+/// Follow a GDScript and what it extends, by path or by class_name, to an
+/// engine class, looking for `func <method>` or `signal <name>`. Null when a
+/// link cannot be read or the chain ends somewhere the class table does not
+/// cover.
+fn scriptChainFind(allocator: std.mem.Allocator, ctx: ValidateContext, start: []const u8, target: ChainTarget) ?MethodLookup {
+    const root = ctx.project_root orelse return null;
+    const io = ctx.io orelse return null;
+    var res_path = start;
+    var depth: usize = 0;
+    while (depth < 16) : (depth += 1) {
+        if (!std.mem.startsWith(u8, res_path, "res://") or !std.mem.endsWith(u8, res_path, ".gd")) return null;
+        const full = std.fs.path.join(allocator, &.{ root, res_path["res://".len..] }) catch return null;
+        const source = std.Io.Dir.cwd().readFileAlloc(io, full, allocator, .limited(4 * 1024 * 1024)) catch return null;
+        const interface = gdscript_scan.parseScript(allocator, source) catch return null;
+        const here = switch (target) {
+            .method => |method| interface.definesFunction(method),
+            .signal => |signal| for (interface.signals) |declared| {
+                if (std.mem.eql(u8, declared.name, signal)) break true;
+            } else false,
+        };
+        if (here) return .{ .found = true, .base = "", .depth = depth + 1 };
+        // No extends is RefCounted, which no node script can be.
+        if (interface.extends.len == 0) return null;
+        if (std.mem.startsWith(u8, interface.extends, "res://")) {
+            res_path = interface.extends;
+            continue;
+        }
+        if (class_info.findClass(interface.extends) != null) {
+            const has = switch (target) {
+                .method => |method| class_info.hasMethod(interface.extends, method),
+                .signal => |signal| class_info.hasSignal(interface.extends, signal),
+            } orelse return null;
+            return .{ .found = has, .base = interface.extends, .depth = depth + 1 };
+        }
+        res_path = findClassNameScript(allocator, io, root, interface.extends) orelse return null;
+    }
+    return null;
+}
+
+/// The script that declares `class_name <name>`, searched for under the
+/// project root (not .godot/). Null when none or more than one does.
+fn findClassNameScript(allocator: std.mem.Allocator, io: std.Io, root: []const u8, name: []const u8) ?[]const u8 {
+    var dir = std.Io.Dir.cwd().openDir(io, root, .{ .iterate = true }) catch return null;
+    defer dir.close(io);
+    var walker = dir.walk(allocator) catch return null;
+    defer walker.deinit();
+    var match: ?[]const u8 = null;
+    while (walker.next(io) catch return null) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".gd")) continue;
+        if (std.mem.startsWith(u8, entry.path, ".godot")) continue;
+        const source = dir.readFileAlloc(io, entry.path, allocator, .limited(4 * 1024 * 1024)) catch continue;
+        const interface = gdscript_scan.parseScript(allocator, source) catch continue;
+        if (!std.mem.eql(u8, interface.class_name, name)) continue;
+        if (match != null) return null;
+        var res: std.ArrayList(u8) = .empty;
+        res.appendSlice(allocator, "res://") catch return null;
+        for (entry.path) |c| res.append(allocator, if (c == '\\') '/' else c) catch return null;
+        match = res.items;
+    }
+    return match;
 }
 
 fn section_for(doc: *const document.Document, index: usize) ?*const document.Section {
@@ -662,17 +833,15 @@ fn scriptDeclaresSignal(
     const path = res_path orelse return .unreadable;
     if (!std.mem.startsWith(u8, path, "res://")) return .unreadable;
 
-    const full = std.fs.path.join(allocator, &.{ root, path["res://".len..] }) catch return .unreadable;
-    defer allocator.free(full);
-    const source = std.Io.Dir.cwd().readFileAlloc(io, full, allocator, .limited(4 * 1024 * 1024)) catch return .unreadable;
-    defer allocator.free(source);
-
-    var interface = gdscript_scan.parseScript(allocator, source) catch return .unreadable;
-    defer interface.deinit(allocator);
-    for (interface.signals) |declared| {
-        if (std.mem.eql(u8, declared.name, signal)) return .declares;
-    }
-    return .absent;
+    _ = io;
+    _ = root;
+    // The signal may be declared by a script this one extends, as in
+    // Godot's own finite_state_machine demo; follow the chain, which ends in
+    // an engine class whose signals the caller has already checked.
+    var scratch = std.heap.ArenaAllocator.init(allocator);
+    defer scratch.deinit();
+    const found = scriptChainFind(scratch.allocator(), ctx, path, .{ .signal = signal }) orelse return .unreadable;
+    return if (found.found) .declares else .absent;
 }
 
 /// A property whose value is the wrong Variant type for its class passes
@@ -708,6 +877,29 @@ fn isInternalProperty(name: []const u8) bool {
     return false;
 }
 
+/// Properties a class answers through `_set` and `_get` rather than
+/// registering, so the class reference never lists them, though the editor
+/// saves them. Found by sweeping Godot's demo projects; each is in the named
+/// class's `_set` in the engine source.
+const dynamic_properties = [_]struct { class: []const u8, name: []const u8 }{
+    .{ .class = "PhysicalBone3D", .name = "bone_name" },
+    .{ .class = "Bone2D", .name = "auto_calculate_length_and_angle" },
+    .{ .class = "Bone2D", .name = "bone_angle" },
+    .{ .class = "Bone2D", .name = "length" },
+    .{ .class = "AudioListener3D", .name = "current" },
+    .{ .class = "TileMapPattern", .name = "tile_data" },
+    .{ .class = "AnimationNodeBlendTree", .name = "node_connections" },
+    .{ .class = "AnimationNodeStateMachine", .name = "transitions" },
+    .{ .class = "AnimationNodeStateMachine", .name = "graph_offset" },
+};
+
+fn isDynamicProperty(class_name: []const u8, name: []const u8) bool {
+    for (dynamic_properties) |entry| {
+        if (std.mem.eql(u8, entry.name, name) and class_info.descendsFrom(class_name, entry.class)) return true;
+    }
+    return false;
+}
+
 /// Whether a script is attached, whose `@export` vars the class table cannot
 /// know about.
 fn sectionHasScript(section: anytype) bool {
@@ -724,10 +916,51 @@ fn sectionHasScript(section: anytype) bool {
 /// the rest PROPERTY_USAGE_NONE; only `transform` has storage, and
 /// `_validate_property` only ever narrows these. No Node3D subclass in the
 /// class table declares its own property by any of these names.
-fn isUnstoredPlacement(name: []const u8) bool {
+fn isWriteNote(name: []const u8) bool {
     const names = [_][]const u8{ "position", "rotation", "rotation_degrees", "quaternion", "basis", "scale", "global_transform", "global_position", "global_basis", "global_rotation", "global_rotation_degrees" };
     for (names) |candidate| if (std.mem.eql(u8, name, candidate)) return true;
     return false;
+}
+
+fn unstoredPlacementMessage(allocator: std.mem.Allocator, node_type: []const u8, name: []const u8) ![]u8 {
+    return allocator.print(
+        "{s}.{s} is never saved: a 3D node stores its placement as transform, so Godot loads this line and then writes transform in its place on the next save. Set transform as the editor does; Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, x, y, z) places the node at (x, y, z)",
+        .{ node_type, name },
+    );
+}
+
+/// A warning keyed so a write can tell the ones it introduced from ones the
+/// file already had.
+pub const WriteNote = struct {
+    /// `parent|name|property` for a placement, the connection's header for a
+    /// method; stable across a write.
+    key: []const u8,
+    message: []const u8,
+    line: ?usize = null,
+};
+
+/// The property_not_stored warnings `scene validate` would give, one per
+/// node and property, so a write can report the ones it just introduced.
+pub fn unstoredPlacements(allocator: std.mem.Allocator, doc: *const document.Document) ![]WriteNote {
+    var found: std.ArrayList(WriteNote) = .empty;
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "node")) continue;
+        const node_type = section.header.getString("type") orelse continue;
+        if (class_info.findClass(node_type) == null or !class_info.descendsFrom(node_type, "Node3D")) continue;
+        const node_name = section.header.getString("name") orelse "";
+        const parent = section.header.getString("parent") orelse "";
+        for (section.properties.items) |line| {
+            const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+            const name = std.mem.trim(u8, line.raw[0..equals], " \t");
+            if (!isWriteNote(name) or class_info.findProperty(node_type, name) == null) continue;
+            const base = try unstoredPlacementMessage(allocator, node_type, name);
+            try found.append(allocator, .{
+                .key = try allocator.print("{s}|{s}|{s}", .{ parent, node_name, name }),
+                .message = try allocator.print("{s}: {s}", .{ node_name, base }),
+            });
+        }
+    }
+    return found.items;
 }
 
 fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Document, report: *Report) !void {
@@ -763,8 +996,8 @@ fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Documen
                 if (unknown_ok) continue;
                 if (std.mem.indexOfScalar(u8, name, '/') != null) continue;
                 if (isInternalProperty(name)) continue;
-                const msg = try std.fmt.allocPrint(
-                    allocator,
+                if (isDynamicProperty(node_type, name)) continue;
+                const msg = try allocator.print(
                     "{s} has no property {s}, so Godot keeps the line and ignores it: the setting does nothing and nothing reports it. If a script on this node declares it, attach the script and this goes away",
                     .{ node_type, name },
                 );
@@ -772,12 +1005,8 @@ fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Documen
                 try report.add(allocator, .warning, "unknown_property", msg, section.line);
                 continue;
             };
-            if (is_node and isUnstoredPlacement(name) and class_info.descendsFrom(node_type, "Node3D")) {
-                const msg = try std.fmt.allocPrint(
-                    allocator,
-                    "{s}.{s} is never saved: a 3D node stores its placement as transform, so Godot loads this line and then writes transform in its place on the next save. Set transform as the editor does; Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, x, y, z) places the node at (x, y, z)",
-                    .{ node_type, name },
-                );
+            if (is_node and isWriteNote(name) and class_info.descendsFrom(node_type, "Node3D")) {
+                const msg = try unstoredPlacementMessage(allocator, node_type, name);
                 defer allocator.free(msg);
                 try report.add(allocator, .warning, "property_not_stored", msg, section.line);
                 continue;
@@ -789,8 +1018,7 @@ fn checkPropertyTypes(allocator: std.mem.Allocator, doc: *const document.Documen
             const kind = @tagName(value.kind);
             if (class_info.kindFits(property, kind)) continue;
 
-            const msg = try std.fmt.allocPrint(
-                allocator,
+            const msg = try allocator.print(
                 "{s}.{s} is {s}, and this value is {s}: Godot coerces it and the file still loads, so only the running frame shows the damage",
                 .{ node_type, name, property.type_name, kind },
             );
@@ -862,7 +1090,7 @@ test "a binary resource reference is checked against its header, not a hash" {
         .{ .uid = "uid://byggqned6p7ih", .path = "res://resources/mesh_no_uid_godot_saved.res", .stale = false },
     };
     for (cases) |case| {
-        const source = try std.fmt.allocPrint(allocator,
+        const source = try allocator.print(
             \\[gd_scene format=3]
             \\
             \\[ext_resource type="Mesh" uid="{s}" path="{s}" id="1_mesh"]

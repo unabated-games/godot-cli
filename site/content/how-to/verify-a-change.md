@@ -24,7 +24,7 @@ The result names what you need:
 
 | Field | What it is |
 |-------|------------|
-| `frame` | Path of the last PNG. Read it — a run can pass with a wrong layout |
+| `frame` | Path of the last PNG. Read it: a run can pass with a wrong layout |
 | `log`, `log_tail` | The log file, and its last 40 lines inline |
 | `errors`, `error_count` | Every `ERROR` / `SCRIPT ERROR` line with its backtrace |
 | `exit`, `import_exit` | Godot's exit codes for the run and the import pass |
@@ -94,7 +94,7 @@ Assigning `LineEdit.text` emits nothing, which is why this does not do that.
 
 The frame number sits between the last `@` of the node path and the first `=`
 of the text, so an address in the value and an `=` in a password both survive.
-A value can be empty — `%Email@3=` clears the field.
+A value can be empty: `%Email@3=` clears the field.
 
 **Leave a frame or two before the click.** The keys are delivered on the frame
 after they are sent, so a Submit clicked on the same frame sees the old value.
@@ -121,7 +121,7 @@ display server reports no window size, which would leave the root viewport at
 project's own size back before the first click. Layout and input picking then
 match a windowed run, and a `Button` at (960, 540) is pressed at (960, 540).
 What headless cannot give you is a picture, so the layout the click landed on
-is the part still unverified — run with a window when the layout is the
+is the part still unverified. Run with a window when the layout is the
 question.
 
 **A click that cannot reach its target fails the run.** If the node is laid
@@ -131,7 +131,7 @@ that never happened.
 
 **Frames are numbered from 0, presses and clicks from 1.** `--frame-at 20`
 keeps that movie frame as well as the last one, for a mid-run state such as a
-menu part-way through opening. One frame is one physics step in both modes —
+menu part-way through opening. One frame is one physics step in both modes:
 the run pins Godot's frame rate to the project's
 `physics/common/physics_ticks_per_second`, so `--frames 40` is 40 frames on
 any machine and `--click …@20` happens at the same point every time.
@@ -148,10 +148,13 @@ PNGs as textures. Only the last frame is kept unless you pass `--keep-frames`.
 `project.godot`, and Godot's own 1152x648 when the project sets none, so the
 frame shows what a player would see. `--resolution` overrides it.
 
-**A 3D scene needs a camera to show anything.** Without a `Camera3D`, the frame
-is only the clear colour, and the run proves the scene loads, not how it looks.
-The result says so with `no_camera_3d: true`. The `camera_3d` recipe adds one
-aimed at a point.
+**A 3D scene with no camera gets a temporary one.** Without a `Camera3D`, the
+game draws only the clear colour. So the run adds a camera for the capture,
+framing everything visible, and a light if the scene has none. Neither is
+written to the file. The result says so with `no_camera_3d: true` and
+`auto_camera: true`. The frame then shows the scene, not what a player will see:
+the game still has no camera until you add one, and the `camera_3d` recipe adds
+one aimed at a point. `--no-auto-camera` captures what the game itself shows.
 
 **A project with no main scene needs `--scene`.** The run fails at once as
 `no_main_scene`, and the hint gives both fixes: pass `--scene res://...`, or set
@@ -174,7 +177,7 @@ The import pass matters after adding files: Godot assigns UIDs there, and a run
 before it logs `invalid UID … using text path instead`. `--write-movie` needs a
 display; drop it and keep `--headless` for the log alone.
 
-Everything the game prints ends up in the log — `print()`, `push_warning`,
+Everything the game prints ends up in the log: `print()`, `push_warning`,
 `push_error`, and script errors with a GDScript backtrace:
 
 ```text

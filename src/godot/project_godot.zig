@@ -241,7 +241,7 @@ fn appendSlice(list: *std.ArrayList(u8), allocator: std.mem.Allocator, slice: []
 }
 
 fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayList(u8), comptime fmt: []const u8, args: anytype) Error!void {
-    const text = try std.fmt.allocPrint(allocator, fmt, args);
+    const text = try allocator.print(fmt, args);
     defer allocator.free(text);
     try out.appendSlice(allocator, text);
 }
@@ -306,9 +306,9 @@ pub fn formatQuotedString(allocator: std.mem.Allocator, text: []const u8) Error!
 pub fn formatGodotValue(allocator: std.mem.Allocator, value: std.json.Value) Error![]u8 {
     return switch (value) {
         .string => |text| formatQuotedString(allocator, text),
-        .integer => |n| try std.fmt.allocPrint(allocator, "{d}", .{n}),
-        .float => |f| try std.fmt.allocPrint(allocator, "{d}", .{f}),
-        .bool => |b| try std.fmt.allocPrint(allocator, "{s}", .{if (b) "true" else "false"}),
+        .integer => |n| try allocator.print("{d}", .{n}),
+        .float => |f| try allocator.print("{d}", .{f}),
+        .bool => |b| try allocator.print("{s}", .{if (b) "true" else "false"}),
         else => error.InvalidFormat,
     };
 }

@@ -42,7 +42,7 @@ fn collect(
         const path = if (prefix.len == 0)
             try allocator.dupe(u8, child.name)
         else
-            try std.fmt.allocPrint(allocator, "{s} {s}", .{ prefix, child.name });
+            try allocator.print("{s} {s}", .{ prefix, child.name });
 
         try out.append(allocator, .{ .path = path, .command = child, .depth = depth });
         try collect(allocator, child, path, depth + 1, out);

@@ -96,7 +96,7 @@ pub fn getJson(allocator: std.mem.Allocator, arguments: ?std.json.ObjectMap) !st
     if (arguments) |args| {
         if (args.get("task")) |task| {
             if (task == .string and task.string.len != 0) {
-                try messages.append(try textMessage(allocator, try std.fmt.allocPrint(allocator, "Task: {s}", .{task.string})));
+                try messages.append(try textMessage(allocator, try allocator.print("Task: {s}", .{task.string})));
             }
         }
     }

@@ -62,13 +62,13 @@ pub fn generateSceneUniqueId() Error![characters]u8 {
 /// Build a sub-resource id like `StandardMaterial3D_ab12c`.
 pub fn formatSubResourceId(allocator: std.mem.Allocator, class_name: []const u8) ![]u8 {
     const suffix = try generateSceneUniqueId();
-    return std.fmt.allocPrint(allocator, "{s}_{s}", .{ class_name, &suffix });
+    return allocator.print("{s}_{s}", .{ class_name, &suffix });
 }
 
 /// Build an external resource id like `1_ab12c`.
 pub fn formatExtResourceId(allocator: std.mem.Allocator, index: u32) ![]u8 {
     const suffix = try generateSceneUniqueId();
-    return std.fmt.allocPrint(allocator, "{d}_{s}", .{ index, &suffix });
+    return allocator.print("{d}_{s}", .{ index, &suffix });
 }
 
 test "scene unique ids with path hash seed are deterministic" {

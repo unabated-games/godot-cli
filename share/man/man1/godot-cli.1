@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-10-27" "godot-cli 0.27.1" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-10-28" "godot-cli 0.28.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -163,8 +163,11 @@ Inspect and edit Godot scene files
 .SS godot\-cli scene new
 Create a new empty scene file
 .PP
-Writes a minimal gd_scene with a single root node. Use scene
-node add to build the tree.
+Writes a minimal gd_scene with a single root node, and with
+\-\-script a script attached to that root. Use scene node add
+to build the tree. Result data: path, uid, root_name, root_type,
+root_path, script and script_ext_id when a script was given,
+dry_run, summary.
 .TP
 \fB\-\-output\fR \fIpath\fR
 Output .tscn path (required)
@@ -177,6 +180,12 @@ Scene root node type (default: Node)
 .TP
 \fB\-\-no\-uid\fR
 Do not stamp a uid="uid://..." on the header
+.TP
+\fB\-\-script\fR \fIvalue\fR
+Attach this script to the root: res://scripts/main.gd (or a
+path relative to the project root). Adds the ext_resource,
+with its uid when \-\-project\-root finds one, and sets script
+on the root
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root for res:// seed path and id session cache
@@ -196,7 +205,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -277,7 +290,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -325,7 +342,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -392,7 +413,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -440,7 +465,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -578,7 +607,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -628,7 +661,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -679,7 +716,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -739,7 +780,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -795,7 +840,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -879,7 +928,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -933,7 +986,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1017,7 +1074,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1094,7 +1155,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1320,7 +1385,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1461,7 +1530,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1509,7 +1582,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1577,20 +1654,25 @@ Check structure preservation without writing
 Compare a scene to a Godot headless save (semantic match)
 .PP
 Compares the node tree (order, headers, unique_id), each node's
-properties with ext_resource ids read as the paths they name,
-the ext_resource paths, and the scene's and each ext_resource's
-uid wherever both files carry one. Not compared: ext_resource
-ids, which Godot renumbers; load_steps; and sub_resources,
-whose default fields Godot drops. On a mismatch, difference
-names the first one. The Godot save is \-\-reference, or the
-second positional on the command line; over MCP it is the reference
-field (saved, its old name, still works). project resave makes
-one. A match proves Godot writes these properties this way,
-not that the editor would store these properties: resave loads
-and saves the scene without building it, so a line the editor
-would replace (position on a 3D node, saved as transform) survives
-into the copy and still matches. scene validate warns on those
-as property_not_stored; run both.
+properties and their values (ext_resource ids read as the paths
+they name; not their order), the ext_resource paths, and the
+scene's and each ext_resource's uid wherever both files carry
+one. On a mismatch, difference names the first one: properties
+only one side has, or the first value that differs. skipped
+lists every difference in the parts not compared: an ext_resource
+id, a uid only one side has, load_steps, a sub_resource's fields,
+sub_resources in another order (Godot writes each after what
+it refers to), a node's properties in another order (the editor
+writes its class order, as godot\-cli now does; a file written
+elsewhere may not), a connection or other section on one side
+only. A match with an empty skipped means the files agree everywhere;
+the ids and missing uids are expected against a project resave
+copy. The Godot save is \-\-reference, or the second positional
+on the command line; over MCP it is the reference field (saved,
+its old name, still works). project resave makes one the way
+the editor saves, so a match also means the editor would store
+these properties: position on a 3D node fails it, as the editor
+writes transform.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -1656,7 +1738,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1720,7 +1806,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1767,7 +1857,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1816,7 +1910,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1863,7 +1961,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -1956,7 +2058,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -2004,7 +2110,11 @@ scene diff or scene restore later. Put it under .godot/: a
 copy Godot can see carries the scene's uid, and Godot then
 reports a duplicate and may point uid:// references at the
 copy. Nothing under .godot/ is imported, and it is normally
-gitignored
+gitignored. Without it, a session still keeps one: the MCP
+server, or a shell with GODOT_CLI_SESSION set, copies each
+scene to .godot/godot\-cli/session/<its path> before the session's
+first write to it, and says so. A scene the session created
+is kept as scene new wrote it
 .TP
 \fB\-\-id\-session\fR \fIpath\fR
 Path to ext_resource id session cache JSON
@@ -2259,9 +2369,17 @@ Godot project root (directory containing project.godot)
 Create a project.godot in a new or empty folder
 .PP
 Writes the header the project manager writes, config_version=5,
-and [application] config/name, plus the main scene and window
-size when given. Refuses to overwrite an existing project.godot;
-change that with project settings set or project apply.
+and [application] config/name, config/features (the Godot version,
+from \-\-godot\-version or the Godot on the path, and the renderer)
+and config/icon, plus the main scene and window size when given.
+Like the project manager, it also writes icon.svg, a .gitignore
+holding .godot/ and /android/ (.godot/ is Godot's cache, and
+where export secrets go), and a .gitattributes normalizing
+line endings, keeping any that already exist (\-\-no\-icon,
+\-\-no\-vcs to skip them). Refuses to overwrite an existing
+project.godot; change that with project settings set or project
+apply. Result data: path, name, main_scene, icon_written, godot_version,
+renderer, vcs_files_written, dry_run, summary.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Folder to create the project in (default: current directory)
@@ -2283,6 +2401,22 @@ Report what would be written without creating the file
 .TP
 \fB\-\-no\-icon\fR
 Do not write the default icon.svg beside project.godot
+.TP
+\fB\-\-godot\-version\fR \fIvalue\fR
+The Godot version the project is for (4.8, 4.7), written into
+config/features; default the version of the Godot on the path
+.TP
+\fB\-\-renderer\fR \fIvalue\fR
+forward_plus (the default), mobile or gl_compatibility, as
+the project manager offers
+.TP
+\fB\-\-godot\fR \fIpath\fR
+Godot binary; default $GODOT, then godot on PATH, then the
+macOS app bundle
+.TP
+\fB\-\-no\-vcs\fR
+Do not write the .gitignore (ignoring .godot/ and /android/)
+and .gitattributes the project manager writes
 .SS godot\-cli project import
 Run Godot's headless import so new files get UIDs and .import
 data
@@ -2304,25 +2438,29 @@ Godot project root (default: current directory)
 Godot binary; default $GODOT, then godot on PATH, then the
 macOS app bundle
 .SS godot\-cli project resave
-Have Godot load a scene or resource and save a copy, the reference
-for compare\-godot
+Have Godot save a copy of a scene the way the editor would,
+the reference for compare\-godot
 .PP
-Imports (unless \-\-no\-import), then runs Godot headless to
-load the file and save a copy to \-\-output, by default .godot/godot\-cli/resave/<its
-path>, where Godot imports nothing. Never over the file itself.
-The copy is Godot's own writing of the file's content, so scene
-compare\-godot <file> <copy> checks the file against it. That
-check is semantic, not byte for byte: saved to a new path,
-the copy's ext_resource ids are renumbered and its uids left
-out, so compare\-godot leaves those out of the comparison,
-and scene validate checks uids against the files. A byte\-for\-byte
-check would need Godot to save over the file, which this never
-does. Nor does Godot build the scene first, as the editor does
-before a save: a property the editor would store another way
-(position on a 3D node, kept as transform) comes back unchanged,
-and scene validate's property_not_stored warning is what catches
-it. The driver script it runs is written to .godot/godot\-cli/resave.gd.
-Result data: file, output, output_path, exit, summary.
+Imports (unless \-\-no\-import), then has Godot save a copy
+to \-\-output, by default .godot/godot\-cli/resave/<its path>,
+where Godot imports nothing. Never over the file itself. A
+scene is built first, as the editor builds the scene it saves:
+Godot runs headless with the editor hint, instantiates the
+scene in edit state as the edited scene, in a viewport the
+project's size, lets a few frames run, sends the pre\-save
+notification, packs it and saves it with the editor's flags.
+So the copy holds what the editor would store: a 3D node's
+position comes back as transform, properties in the editor's
+order, editor\-only lines such as anchors_preset kept. An AnimationPlayer
+or AnimationTree with reset_on_save has its RESET animation
+applied first, as the editor does. \-\-no\-build loads and
+saves the file as it is instead. scene compare\-godot <file>
+<copy> checks the file against the copy. That check is semantic,
+not byte for byte: saved to a new path, the copy's ext_resource
+ids are renumbered and its uids left out, so compare\-godot
+leaves those out and lists them in skipped. Nothing outside
+\&.godot/ is written. The driver script it runs is .godot/godot\-cli/resave.gd.
+Result data: file, output, output_path, built, exit, summary.
 .TP
 \fIfile\fR
 Scene or resource file (.tscn or .tres)
@@ -2341,6 +2479,11 @@ file's path>, where Godot imports nothing
 \fB\-\-no\-import\fR
 Skip the import that runs first; a project never imported cannot
 load its textures
+.TP
+\fB\-\-no\-build\fR
+Load and save the file as it is, without building the scene
+first: what Godot writes for the file's own content, not what
+the editor would store
 .SS godot\-cli project run
 Run the game for a few frames and capture the last frame and
 the log
@@ -2412,7 +2555,9 @@ repeatable
 Hold an input action over a frame range, e.g. move_right@10..40
 or ui_accept@5; repeatable. Sent as a real InputEventAction
 and as polled action state, so a focused Control and Input.get_vector
-both see it
+both see it. It is the action itself, not a key or button bound
+to it, so it proves code reacting to the action, not the bindings;
+project input list reports those
 .TP
 \fB\-\-click\fR \fIvalue\fR
 Left\-click the centre of a node on a frame, e.g. /root/Main/HUD/PauseButton@20;
@@ -2434,6 +2579,11 @@ at least two frames later
 Give a Control keyboard focus on a frame: <node\-path>@<frame>;
 repeatable. \-\-type focuses the field it types into, so this
 is for watching a focus ring or a tab order
+.TP
+\fB\-\-no\-auto\-camera\fR
+For a 3D scene with no Camera3D, capture what the game would
+show (the clear colour) instead of adding a temporary camera
+that frames the scene
 .TP
 \fB\-\-keep\-cursor\fR
 Leave the synthetic cursor on the last clicked node instead
@@ -2521,6 +2671,12 @@ Apply in memory without writing project.godot
 Input Map actions in project.godot
 .SS godot\-cli project input list
 List input actions
+.PP
+Each action's name, deadzone, event_count, and events: each
+binding as one line in the apply intent's words, such as "A
+(physical)", "Ctrl+S (physical)", "mouse left", "joypad start"
+or "joypad left_x \-1.0", with "(device N)" when it is pinned
+to one device. Result data: path, actions, action_count, summary.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
@@ -2550,7 +2706,14 @@ dpad_down, dpad_left, dpad_right, misc1, paddle1\-4, touchpad,
 misc2\-6; or the JoyButton number. Names are matched without
 case. Joypad axes: left_x/LX, left_y/LY, right_x/RX, right_y/RY,
 trigger_left/LT, trigger_right/RT; or the JoyAxis number. Names
-are matched without case.
+are matched without case. Result data: path, intent, applied_actions,
+actions (each applied action's events in words, as input list
+gives them, on a dry run too, so the bindings can be checked
+before anything is written), added_count, replaced_count, dry_run,
+summary. To check a change that touches only the input map:
+project input validate, then project run with \-\-press <action>@<frames>
+on any scene that reacts to the action (\-\-scene res://...
+when the project has no main scene), and read the log.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)
@@ -2611,7 +2774,10 @@ Section name (e.g. application)
 Setting key (e.g. run/main_scene)
 .TP
 \fB\-\-value\fR \fIvalue\fR
-Plain value (quoted automatically for strings)
+The value: a number, true or false, or Godot's own text for
+a value (Vector2i(640, 360), PackedStringArray("4.8", "Mobile"))
+is written as it is, and anything else is quoted as a string
+(res://scenes/main.tscn)
 .TP
 \fB\-\-raw\fR
 Store \-\-value verbatim (already Godot\-formatted)
@@ -2849,8 +3015,9 @@ Every option the platform's exporter defines in this Godot
 version: name, default, type, choices for an option with a
 fixed set, and whether it is secret. Also the preset keys every
 platform shares (export_path, export_filter, include_filter,
-\&...). Use it to find an option's name before setting it with
-project export apply. Result data: platform, options, preset_keys,
+\&...); filter narrows those too, so preset_keys can be empty.
+Use it to find an option's name before setting it with project
+export apply. Result data: platform, options, preset_keys,
 godot_version, summary.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
@@ -2891,8 +3058,12 @@ platform Godot does not match (Windows) is corrected by giving
 the right one, keeping its settings; presets past a gap in
 the numbering are kept and renumbered; secrets found in export_presets.cfg
 move to the credentials file. Result data: path, credentials_path,
-created, updated, removed, secrets_written and secrets_moved
-(names only), gdignore_created, presets, dry_run, summary.
+created, updated, removed, changes (for each updated preset,
+every value the apply changed as {key, old, new}, keys being
+[preset.N] keys, options/<name>, platform, rename or runnable;
+a secret's values are never shown, only secret: true; anything
+not listed was kept), secrets_written and secrets_moved (names
+only), gdignore_created, presets, dry_run, summary.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)
@@ -2928,9 +3099,13 @@ and packs it into the next), a keystore or template file that
 does not exist on this machine, an option the platform does
 not have, a secret in the committed file, a res:// path that
 does not exist, a runnable entry naming no preset. matches_editor_save
-says whether the editor would leave the file as it is. Exits
-non\-zero when there is an error. Result data: path, exists,
-issues, error_count, warning_count, matches_editor_save, summary.
+says whether the editor would leave the file as it is. Each
+issue names the file and line it is about: an option set only
+in .godot/export_credentials.cfg, such as a keystore path or
+password, points there. Exits non\-zero when there is an error.
+Result data: path, exists, issues (severity, kind, preset,
+message, file, line), error_count, warning_count, matches_editor_save,
+summary.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)
@@ -2949,13 +3124,23 @@ Godot's ERROR lines and the reasons listed under them in errors.
 Result data: preset, platform, mode, output, output_path, exit,
 files (each output file and its size), errors (Godot's ERROR
 lines and their reasons), missing_template, gdignore_created,
-stdout_tail and stderr_tail on failure, summary.
+stdout_tail and stderr_tail on failure, summary. With all instead
+of a preset, every preset is exported in turn to its export_path
+and a failure does not stop the rest: a preset Godot cannot
+find or with no export_path is skipped and says why. Result
+data then: mode, results (one per preset, as above, with ok,
+and failure_kind or skipped), built, failed, summary; it exits
+non\-zero if any preset was not exported.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)
 .TP
 \fB\-\-preset\fR \fIvalue\fR
-The preset to export, by name
+The preset to export, by name (this or all)
+.TP
+\fB\-\-all\fR
+Export every preset to its own export_path, carrying on past
+a failure and reporting each
 .TP
 \fB\-\-output\fR \fIpath\fR
 Output file, relative to the project root or absolute; default

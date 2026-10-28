@@ -68,9 +68,9 @@ pub fn extractSubtreeWithOptions(allocator: std.mem.Allocator, doc: *document.Do
         break :blk after_root + 1;
     };
     const target_rel = node_path[root_prefix_len..];
-    const target_prefix = try std.fmt.allocPrint(allocator, "{s}/", .{target_rel});
+    const target_prefix = try allocator.print("{s}/", .{target_rel});
     defer allocator.free(target_prefix);
-    const viewport_prefix = try std.fmt.allocPrint(allocator, "{s}/", .{node_path});
+    const viewport_prefix = try allocator.print("{s}/", .{node_path});
     defer allocator.free(viewport_prefix);
 
     // Subtree node sections, in file order.
@@ -198,7 +198,7 @@ pub fn extractSubtreeWithOptions(allocator: std.mem.Allocator, doc: *document.Do
                     try remove_indices.append(allocator, index);
                     moved_connections += 1;
                 } else {
-                    try dropped.append(allocator, try std.fmt.allocPrint(allocator, "signal {s} from {s} to {s} method {s}", .{ signal, from, to, method }));
+                    try dropped.append(allocator, try allocator.print("signal {s} from {s} to {s} method {s}", .{ signal, from, to, method }));
                     try remove_indices.append(allocator, index);
                 }
             }
@@ -242,7 +242,7 @@ pub fn extractSubtreeWithOptions(allocator: std.mem.Allocator, doc: *document.Do
 /// Drop resource sections among `ids` that no remaining section refers to.
 fn pruneUnreferenced(allocator: std.mem.Allocator, doc: *document.Document, section_name: []const u8, marker: []const u8, ids: []const []const u8) Error!void {
     for (ids) |id| {
-        const needle = try std.fmt.allocPrint(allocator, "{s}{s}\")", .{ marker, id });
+        const needle = try allocator.print("{s}{s}\")", .{ marker, id });
         defer allocator.free(needle);
         var referenced = false;
         var own_index: ?usize = null;

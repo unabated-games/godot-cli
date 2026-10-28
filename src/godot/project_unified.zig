@@ -75,7 +75,7 @@ fn applySubsection(
     const json_text = try project_json.valueToJson(allocator, value);
     defer allocator.free(json_text);
     try apply_fn(allocator, doc, json_text);
-    const summary = try std.fmt.allocPrint(allocator, "applied {s}", .{name});
+    const summary = try allocator.print("applied {s}", .{name});
     defer allocator.free(summary);
     try appendSection(allocator, out, name, summary);
 }

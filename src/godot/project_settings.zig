@@ -135,7 +135,7 @@ pub fn applyIntentJson(
         while (key_it.next()) |key_entry| {
             const key = key_entry.key_ptr.*;
             const existed = try setSetting(allocator, doc, section_name, key, key_entry.value_ptr.*);
-            const label = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ section_name, key });
+            const label = try allocator.print("{s}/{s}", .{ section_name, key });
             try applied.append(allocator, label);
             if (existed) replaced += 1 else added += 1;
         }

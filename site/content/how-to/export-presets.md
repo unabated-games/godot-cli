@@ -66,6 +66,8 @@ Values are typed by the option. A boolean option takes `true`, a number option t
 
 An `export_path` inside the project, such as `build/windows/game.exe`, gets an empty `.gdignore` in its top folder (`build/`). Without one, Godot imports whatever it finds there as project files, and an `all_resources` export packs the previous build into the next one.
 
+For a preset that already existed, the result's `changes` lists every value the apply changed, old to new, under the preset's name. Anything not listed was kept, so a repair of a teammate's file can be checked without reading it. A secret is listed by name with `"secret": true`, never by value.
+
 Whatever you set, the whole preset is written: every option the platform has, in the editor's order, with its default where you set nothing. Opening the project in the editor then changes nothing. Secret options go to `.godot/export_credentials.cfg`, and the result lists them by name, never by value. Because that file is not committed, set the secrets again on each machine, or in CI. When there is no `.gitignore` that ignores `.godot/`, the command says so: a `git add .` would commit the secrets.
 
 ## Check the file
@@ -93,6 +95,15 @@ These are warnings:
 - a `res://` path that does not exist
 - a runnable entry that names no preset
 
+For an Android preset it also checks this machine, since Godot refuses an Android export for things outside the project. It reads the editor's own settings file and warns when:
+
+- `export/android/java_sdk_path` is not set, or has no `bin/java`
+- `export/android/android_sdk_path` is not set, has no `platform-tools/adb`, or has no `build-tools` with `apksigner`
+- there is no debug keystore, in the preset or in the editor settings, so a debug export fails
+- a release keystore is given in part: Godot wants its path, user and password together, or none of them
+
+Each issue names the `file` and `line` it is about. A setting kept in `.godot/export_credentials.cfg`, such as a keystore path, points there rather than at the committed file.
+
 `matches_editor_save` says whether the editor would leave the file alone. A hand-written preset with only a few options still exports, but the editor fills in the rest the next time it saves. `project export apply --intent-json '{}'` writes that now.
 
 ## Export
@@ -102,6 +113,8 @@ godot-cli project export build --project-root . --preset Windows --json
 ```
 
 This runs `godot --headless --export-release` with the preset. It creates the output folder, and its `.gdignore`, first, and lists each file written and its size. When Godot refuses, `errors` holds its reasons. Those come on the lines after the `ERROR:` header, such as a missing keystore or an Android SDK path not set in the editor's settings. `--debug` uses the debug template, `--pack` writes only the `.pck` or `.zip`, and `--output` overrides `export_path`.
+
+`--all` in place of `--preset` exports every preset to its own `export_path`, one after another. A failure does not stop the rest. `results` has one entry per preset, with `ok` and the same fields a single build returns, and `built` and `failed` list the names. A preset Godot cannot find, or one with no `export_path`, is skipped and says why.
 
 Exporting needs Godot's export templates for the exact engine version. Without them the command fails as `export_templates_missing`, with `missing_template` naming the file Godot looked for. Install them from the editor (Editor > Manage Export Templates), or unpack the `.tpz` from the same Godot release into the folder that path names.
 

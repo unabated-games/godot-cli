@@ -78,7 +78,7 @@ pub fn planFromInput(
         try step_plans.append(allocator, .{
             .index = 0,
             .recipe = try allocator.dupe(u8, "patch"),
-            .summary = try std.fmt.allocPrint(allocator, "passthrough patch ({d} op(s))", .{ops.items.len}),
+            .summary = try allocator.print("passthrough patch ({d} op(s))", .{ops.items.len}),
             .op_count = ops.items.len,
         });
     } else if (root.object.get("steps")) |steps_value| {
@@ -125,7 +125,7 @@ fn expandIntentSteps(
             try step_plans.append(allocator, .{
                 .index = index,
                 .recipe = try allocator.dupe(u8, "op"),
-                .summary = try std.fmt.allocPrint(allocator, "direct op {s}", .{try requiredString(step, "op")}),
+                .summary = try allocator.print("direct op {s}", .{try requiredString(step, "op")}),
                 .op_count = 1,
             });
             continue;
@@ -313,7 +313,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         const parent = try requiredString(step, "parent");
         const name = try requiredString(step, "name");
         const catalog_id = try requiredString(step, "catalog_id");
-        const instance_path = try std.fmt.allocPrint(ops_alloc, "{s}/{s}", .{ parent, name });
+        const instance_path = try ops_alloc.print("{s}/{s}", .{ parent, name });
 
         try ops.append(try makeOpObject(ops_alloc, &[_]Field{
             .{ "op", "instance_add" },
@@ -351,7 +351,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
                 break :blk type_value.string;
             } else "Label";
 
-            const quoted = try std.fmt.allocPrint(ops_alloc, "\"{s}\"", .{text});
+            const quoted = try ops_alloc.print("\"{s}\"", .{text});
             try ops.append(try makeOpObject(ops_alloc, &[_]Field{
                 .{ "op", "instance_override" },
                 .{ "path", instance_path },
@@ -371,10 +371,10 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     if (std.mem.eql(u8, recipe, "static_body_2d")) {
         const parent = try requiredString(step, "parent");
         const name = try requiredString(step, "name");
-        const body_path = try std.fmt.allocPrint(ops_alloc, "{s}/{s}", .{ parent, name });
+        const body_path = try ops_alloc.print("{s}/{s}", .{ parent, name });
         const shape_hint = try shapeIdHint(ops_alloc, step, name);
         defer ops_alloc.free(shape_hint);
-        const shape_ref = try std.fmt.allocPrint(ops_alloc, "SubResource(\"RectangleShape2D_{s}\")", .{shape_hint});
+        const shape_ref = try ops_alloc.print("SubResource(\"RectangleShape2D_{s}\")", .{shape_hint});
         defer ops_alloc.free(shape_ref);
         const size = if (step.get("size")) |v| (if (v == .string) v.string else return error.InvalidIntent) else "Vector2(64, 16)";
 
@@ -420,7 +420,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             if (tex != .string) return error.InvalidIntent;
             var sprite_props: std.json.ObjectMap = .{};
             try sprite_props.put(ops_alloc, "region_enabled", .{ .bool = true });
-            try sprite_props.put(ops_alloc, "region_rect", .{ .string = try std.fmt.allocPrint(ops_alloc, "Rect2(0, 0, {s})", .{std.mem.trim(u8, size[std.mem.indexOfScalar(u8, size, '(').? + 1 .. size.len - 1], " ")}) });
+            try sprite_props.put(ops_alloc, "region_rect", .{ .string = try ops_alloc.print("Rect2(0, 0, {s})", .{std.mem.trim(u8, size[std.mem.indexOfScalar(u8, size, '(').? + 1 .. size.len - 1], " ")}) });
             try sprite_props.put(ops_alloc, "texture_repeat", .{ .integer = 2 });
             var sprite_op = try makeOpObject(ops_alloc, &[_]Field{
                 .{ "op", "node_add" },
@@ -430,7 +430,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             });
             try sprite_op.object.put(ops_alloc, "properties", .{ .object = sprite_props });
             try ops.append(sprite_op);
-            const sprite_path = try std.fmt.allocPrint(ops_alloc, "{s}/Sprite", .{body_path});
+            const sprite_path = try ops_alloc.print("{s}/Sprite", .{body_path});
             try appendAssignExt(ops_alloc, ops, sprite_path, "texture", "Texture2D", tex.string, try defaultExtHint(ops_alloc, tex.string, "texture"));
         }
         // A filled polygon the size of the collision rectangle, so a wall or
@@ -443,7 +443,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             const w = std.fmt.parseFloat(f64, std.mem.trim(u8, inner[0..comma], " ")) catch return error.InvalidIntent;
             const h = std.fmt.parseFloat(f64, std.mem.trim(u8, inner[comma + 1 ..], " ")) catch return error.InvalidIntent;
             var fill_props: std.json.ObjectMap = .{};
-            try fill_props.put(ops_alloc, "polygon", .{ .string = try std.fmt.allocPrint(ops_alloc, "PackedVector2Array({d}, {d}, {d}, {d}, {d}, {d}, {d}, {d})", .{ -w / 2, -h / 2, w / 2, -h / 2, w / 2, h / 2, -w / 2, h / 2 }) });
+            try fill_props.put(ops_alloc, "polygon", .{ .string = try ops_alloc.print("PackedVector2Array({d}, {d}, {d}, {d}, {d}, {d}, {d}, {d})", .{ -w / 2, -h / 2, w / 2, -h / 2, w / 2, h / 2, -w / 2, h / 2 }) });
             try fill_props.put(ops_alloc, "color", .{ .string = try ops_alloc.dupe(u8, color_value.string) });
             var fill_op = try makeOpObject(ops_alloc, &[_]Field{
                 .{ "op", "node_add" },
@@ -460,10 +460,10 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     if (std.mem.eql(u8, recipe, "player_2d")) {
         const parent = try requiredString(step, "parent");
         const name = try requiredString(step, "name");
-        const player_path = try std.fmt.allocPrint(ops_alloc, "{s}/{s}", .{ parent, name });
+        const player_path = try ops_alloc.print("{s}/{s}", .{ parent, name });
         const shape_hint = try shapeIdHint(ops_alloc, step, name);
         defer ops_alloc.free(shape_hint);
-        const shape_ref = try std.fmt.allocPrint(ops_alloc, "SubResource(\"CapsuleShape2D_{s}\")", .{shape_hint});
+        const shape_ref = try ops_alloc.print("SubResource(\"CapsuleShape2D_{s}\")", .{shape_hint});
         defer ops_alloc.free(shape_ref);
 
         {
@@ -510,7 +510,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
         }
 
         if (readBool(step.get("sprite")) orelse true) {
-            const sprite_path = try std.fmt.allocPrint(ops_alloc, "{s}/Sprite", .{player_path});
+            const sprite_path = try ops_alloc.print("{s}/Sprite", .{player_path});
             var sprite_props: std.json.ObjectMap = .{};
             if (step.get("modulate")) |mod_value| {
                 if (mod_value != .string) return error.InvalidIntent;
@@ -558,7 +558,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
                 .{ "name", tilemap_name },
                 .{ "type", "TileMap" },
             }));
-            attach_parent = try std.fmt.allocPrint(ops_alloc, "{s}/{s}", .{ parent, tilemap_name });
+            attach_parent = try ops_alloc.print("{s}/{s}", .{ parent, tilemap_name });
         }
 
         if (step.get("tileset")) |tileset_val| {
@@ -688,7 +688,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
                 try props.put(ops_alloc, "position", .{ .string = try ops_alloc.dupe(u8, pos_value.string) });
             }
             if (readFloat(step.get("zoom"))) |zoom| {
-                const zoom_text = try std.fmt.allocPrint(ops_alloc, "Vector2({d}, {d})", .{ zoom, zoom });
+                const zoom_text = try ops_alloc.print("Vector2({d}, {d})", .{ zoom, zoom });
                 try props.put(ops_alloc, "zoom", .{ .string = zoom_text });
             }
             if (readBool(step.get("enabled")) == false) {
@@ -703,7 +703,7 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
     if (std.mem.eql(u8, recipe, "ui_panel")) {
         const parent = try requiredString(step, "parent");
         const name = try requiredString(step, "name");
-        const panel_path = try std.fmt.allocPrint(ops_alloc, "{s}/{s}", .{ parent, name });
+        const panel_path = try ops_alloc.print("{s}/{s}", .{ parent, name });
 
         try ops.append(try makeOpObject(ops_alloc, &[_]Field{
             .{ "op", "node_add" },
@@ -976,7 +976,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (name != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "player_2d {s} ({d} ops)", .{ name.string, op_count });
+        return allocator.print("player_2d {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "instance_catalog")) {
         const id = step.get("catalog_id") orelse {
@@ -984,7 +984,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (id != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "instance catalog {s} ({d} ops)", .{ id.string, op_count });
+        return allocator.print("instance catalog {s} ({d} ops)", .{ id.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "instance_override") or std.mem.eql(u8, recipe, "instance_set")) {
         const path = step.get("path") orelse {
@@ -992,7 +992,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (path != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "instance_override {s} ({d} ops)", .{ path.string, op_count });
+        return allocator.print("instance_override {s} ({d} ops)", .{ path.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "catalog_button")) {
         const name = step.get("name") orelse {
@@ -1000,7 +1000,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (name != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "catalog_button {s} ({d} ops)", .{ name.string, op_count });
+        return allocator.print("catalog_button {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "camera_2d")) {
         const name = step.get("name") orelse {
@@ -1008,7 +1008,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (name != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "camera_2d {s} ({d} ops)", .{ name.string, op_count });
+        return allocator.print("camera_2d {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "ui_panel")) {
         const name = step.get("name") orelse {
@@ -1016,7 +1016,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (name != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "ui_panel {s} ({d} ops)", .{ name.string, op_count });
+        return allocator.print("ui_panel {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "tilemap_layer")) {
         const name = step.get("name") orelse {
@@ -1024,7 +1024,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (name != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "tilemap_layer {s} ({d} ops)", .{ name.string, op_count });
+        return allocator.print("tilemap_layer {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "audio_player")) {
         const name = step.get("name") orelse {
@@ -1032,7 +1032,7 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (name != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "audio_player {s} ({d} ops)", .{ name.string, op_count });
+        return allocator.print("audio_player {s} ({d} ops)", .{ name.string, op_count });
     }
     if (std.mem.eql(u8, recipe, "assign_ext")) {
         const path = step.get("path") orelse {
@@ -1044,9 +1044,9 @@ fn recipeSummary(allocator: std.mem.Allocator, recipe: []const u8, step: std.jso
             return error.MissingIntentField;
         };
         if (path != .string or property != .string) return error.InvalidIntent;
-        return std.fmt.allocPrint(allocator, "assign_ext {s}.{s} ({d} ops)", .{ path.string, property.string, op_count });
+        return allocator.print("assign_ext {s}.{s} ({d} ops)", .{ path.string, property.string, op_count });
     }
-    return std.fmt.allocPrint(allocator, "{s} ({d} ops)", .{ recipe, op_count });
+    return allocator.print("{s} ({d} ops)", .{ recipe, op_count });
 }
 
 /// A value field that may be a JSON string of Variant text, or a number or
@@ -1169,7 +1169,7 @@ fn shapeIdHint(ops_alloc: std.mem.Allocator, step: std.json.ObjectMap, node_name
         if (value != .string) return error.InvalidIntent;
         return ops_alloc.dupe(u8, value.string);
     }
-    return std.fmt.allocPrint(ops_alloc, "{s}_shape", .{node_name});
+    return ops_alloc.print("{s}_shape", .{node_name});
 }
 
 test "expand player_2d intent" {

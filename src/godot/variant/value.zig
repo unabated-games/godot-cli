@@ -70,23 +70,23 @@ pub const Value = struct {
             .typed_array => if (self.elements) |elements| blk: {
                 const inner = try collection.formatArray(allocator, elements);
                 defer allocator.free(inner);
-                break :blk try std.fmt.allocPrint(allocator, "Array[{s}]({s})", .{ self.string, inner });
+                break :blk try allocator.print("Array[{s}]({s})", .{ self.string, inner });
             } else try formatTypedCollection(allocator, "Array", self.string, self.raw),
             .typed_dictionary => if (self.entries) |entries| blk: {
                 const inner = try collection.formatDictionary(allocator, entries);
                 defer allocator.free(inner);
-                break :blk try std.fmt.allocPrint(allocator, "Dictionary[{s}]({s})", .{ self.string, inner });
+                break :blk try allocator.print("Dictionary[{s}]({s})", .{ self.string, inner });
             } else try formatTypedCollection(allocator, "Dictionary", self.string, self.raw),
             .resource => if (self.string.len == 0)
                 try allocator.dupe(u8, self.raw)
             else blk: {
                 const quoted = try lex.quoteString(allocator, self.string);
                 defer allocator.free(quoted);
-                break :blk try std.fmt.allocPrint(allocator, "Resource({s})", .{quoted});
+                break :blk try allocator.print("Resource({s})", .{quoted});
             },
             .null => try allocator.dupe(u8, "null"),
             .bool => if (self.bool_val) try allocator.dupe(u8, "true") else try allocator.dupe(u8, "false"),
-            .integer => try std.fmt.allocPrint(allocator, "{d}", .{self.integer}),
+            .integer => try allocator.print("{d}", .{self.integer}),
             .float => try formatScalarFloat(allocator, self.float_val),
             .string => try lex.quoteString(allocator, self.string),
             .string_name => try lex.quoteStringName(allocator, self.string),
@@ -109,29 +109,29 @@ pub const Value = struct {
             .node_path => blk: {
                 const quoted = try lex.quoteString(allocator, self.string);
                 defer allocator.free(quoted);
-                break :blk try std.fmt.allocPrint(allocator, "NodePath({s})", .{quoted});
+                break :blk try allocator.print("NodePath({s})", .{quoted});
             },
             .ext_resource => blk: {
                 const quoted = try lex.quoteString(allocator, self.string);
                 defer allocator.free(quoted);
-                break :blk try std.fmt.allocPrint(allocator, "ExtResource({s})", .{quoted});
+                break :blk try allocator.print("ExtResource({s})", .{quoted});
             },
             .sub_resource => blk: {
                 const quoted = try lex.quoteString(allocator, self.string);
                 defer allocator.free(quoted);
-                break :blk try std.fmt.allocPrint(allocator, "SubResource({s})", .{quoted});
+                break :blk try allocator.print("SubResource({s})", .{quoted});
             },
             .rid => if (self.integer == 0 and std.mem.indexOf(u8, self.raw, "RID()") != null)
                 try allocator.dupe(u8, "RID()")
             else
-                try std.fmt.allocPrint(allocator, "RID({d})", .{self.integer}),
+                try allocator.print("RID({d})", .{self.integer}),
             .signal => try allocator.dupe(u8, "Signal()"),
             .callable => try allocator.dupe(u8, "Callable()"),
             .packed_array => blk: {
                 if (self.packed_base64) {
                     const quoted = try lex.quoteString(allocator, self.string);
                     defer allocator.free(quoted);
-                    break :blk try std.fmt.allocPrint(allocator, "PackedByteArray({s})", .{quoted});
+                    break :blk try allocator.print("PackedByteArray({s})", .{quoted});
                 }
                 if (self.elements) |elements| {
                     break :blk try collection.formatPackedElements(allocator, self.packed_name, elements);
@@ -140,7 +140,7 @@ pub const Value = struct {
                 const close = self.raw[self.raw.len - 1];
                 if (close != ')') return try allocator.dupe(u8, self.raw);
                 const args = self.raw[open + 1 .. self.raw.len - 1];
-                break :blk try std.fmt.allocPrint(allocator, "{s}({s})", .{ self.packed_name, args });
+                break :blk try allocator.print("{s}({s})", .{ self.packed_name, args });
             },
             .object => try object.format(allocator, self.string, self.object_properties orelse &.{}),
         };
@@ -150,7 +150,7 @@ pub const Value = struct {
 fn formatTypedCollection(allocator: std.mem.Allocator, prefix: []const u8, signature: []const u8, raw: []const u8) ![]u8 {
     const open = std.mem.indexOfScalar(u8, raw, '(') orelse return try allocator.dupe(u8, raw);
     const suffix = raw[open..];
-    return try std.fmt.allocPrint(allocator, "{s}[{s}]{s}", .{ prefix, signature, suffix });
+    return try allocator.print("{s}[{s}]{s}", .{ prefix, signature, suffix });
 }
 
 fn formatComponents(allocator: std.mem.Allocator, name: []const u8, parts: []const f64) ![]u8 {
@@ -211,7 +211,7 @@ pub fn formatScalarFloat(allocator: std.mem.Allocator, value: f64) ![]u8 {
     if (std.mem.eql(u8, text, "inf") or std.mem.eql(u8, text, "inf_neg") or std.mem.eql(u8, text, "nan")) return text;
     if (std.mem.indexOfScalar(u8, text, '.') != null or std.mem.indexOfScalar(u8, text, 'e') != null) return text;
     defer allocator.free(text);
-    return try std.fmt.allocPrint(allocator, "{s}.0", .{text});
+    return try allocator.print("{s}.0", .{text});
 }
 
 test "scalar floats keep a trailing .0 like the editor, components do not" {

@@ -71,7 +71,7 @@ pub fn addPackedSceneInstance(
     errdefer allocator.free(ext_id);
     ext.deinit(allocator);
 
-    const instance_ref = try std.fmt.allocPrint(allocator, "ExtResource(\"{s}\")", .{ext_id});
+    const instance_ref = try allocator.print("ExtResource(\"{s}\")", .{ext_id});
     errdefer allocator.free(instance_ref);
 
     var header = tag.Tag{ .name = try allocator.dupe(u8, "node"), .fields = .{} };
@@ -90,7 +90,7 @@ pub fn addPackedSceneInstance(
     });
     const section_index = insert_at;
 
-    const new_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ parent.path, node_name });
+    const new_path = try allocator.print("{s}/{s}", .{ parent.path, node_name });
     errdefer allocator.free(new_path);
 
     if (editable) {
@@ -182,7 +182,7 @@ pub fn setInstanceChildOverride(
         try ensureEditableInstance(allocator, doc, instance_path);
     }
 
-    const child_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ instance_path, child_name });
+    const child_path = try allocator.print("{s}/{s}", .{ instance_path, child_name });
     errdefer allocator.free(child_path);
 
     const child_node = node_tree.findByPath(&list, child_path);

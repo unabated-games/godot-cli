@@ -195,7 +195,7 @@ pub fn acceptsJson(opt: spec.OptionSpec) bool {
 fn describe(allocator: std.mem.Allocator, tool: *const Tool, text: []const u8, kind: spec.ValueKind, pinned: bool) ![]const u8 {
     const adapted = try mcpText(allocator, tool, text, pinned);
     if (kind != .path) return adapted;
-    return std.fmt.allocPrint(allocator, "{s}. A path, relative to {s}", .{
+    return allocator.print("{s}. A path, relative to {s}", .{
         adapted,
         if (pinned) "the project root" else "the server's working directory",
     });
@@ -203,7 +203,7 @@ fn describe(allocator: std.mem.Allocator, tool: *const Tool, text: []const u8, k
 
 fn description(allocator: std.mem.Allocator, tool: *const Tool, pinned: bool) ![]const u8 {
     const text = if (tool.command.description) |long|
-        try std.fmt.allocPrint(allocator, "{s}\n\n{s}", .{ tool.command.summary, long })
+        try allocator.print("{s}\n\n{s}", .{ tool.command.summary, long })
     else
         tool.command.summary;
     return mcpText(allocator, tool, text, pinned);
@@ -254,7 +254,7 @@ fn mcpText(allocator: std.mem.Allocator, tool: *const Tool, text: []const u8, pi
 /// "before" copy of a scene to diff against, and 32 kept it in /tmp and went
 /// round the server through the shell.
 fn outsideRootMessage(allocator: std.mem.Allocator, name: []const u8, text: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "argument \"{s}\" resolves outside the project root: {s}. This server reads and writes only inside the project. For a scratch copy, such as a \"before\" version of a scene to diff against, put it under .godot/ in the project: Godot imports nothing there, and .godot/ is normally gitignored", .{ name, text });
+    return allocator.print("argument \"{s}\" resolves outside the project root: {s}. This server reads and writes only inside the project. For a scratch copy, such as a \"before\" version of a scene to diff against, put it under .godot/ in the project: Godot imports nothing there, and .godot/ is normally gitignored", .{ name, text });
 }
 
 fn isFlagChar(c: u8) bool {
@@ -299,7 +299,7 @@ pub fn buildArgv(
     var it = args.iterator();
     while (it.next()) |entry| {
         if (!isKnownArgument(tool, canonicalArgument(tool, entry.key_ptr.*), pinned)) {
-            return .{ .invalid = try std.fmt.allocPrint(allocator, "unknown argument \"{s}\" for tool {s}", .{ entry.key_ptr.*, tool.name }) };
+            return .{ .invalid = try allocator.print("unknown argument \"{s}\" for tool {s}", .{ entry.key_ptr.*, tool.name }) };
         }
     }
 
@@ -312,25 +312,25 @@ pub fn buildArgv(
         const value = optionValue(tool, args, opt.long) orelse continue;
         switch (opt.kind) {
             .flag => switch (value) {
-                .bool => |enabled| if (enabled) try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}", .{opt.long})),
-                else => return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a boolean", .{opt.long}) },
+                .bool => |enabled| if (enabled) try argv.append(allocator, try allocator.print("--{s}", .{opt.long})),
+                else => return .{ .invalid = try allocator.print("argument \"{s}\" must be a boolean", .{opt.long}) },
             },
             .string, .path, .integer => {
                 if (opt.repeatable) {
-                    if (value != .array) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be an array of strings", .{opt.long}) };
+                    if (value != .array) return .{ .invalid = try allocator.print("argument \"{s}\" must be an array of strings", .{opt.long}) };
                     for (value.array.items) |item| {
-                        const text = scalarText(allocator, item) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be an array of strings", .{opt.long}) };
-                        try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}={s}", .{ opt.long, text }));
+                        const text = scalarText(allocator, item) catch return .{ .invalid = try allocator.print("argument \"{s}\" must be an array of strings", .{opt.long}) };
+                        try argv.append(allocator, try allocator.print("--{s}={s}", .{ opt.long, text }));
                     }
                 } else {
                     const text = if (acceptsJson(opt) and (value == .object or value == .array))
                         try jsonText(allocator, value)
                     else
-                        scalarText(allocator, value) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a string", .{opt.long}) };
+                        scalarText(allocator, value) catch return .{ .invalid = try allocator.print("argument \"{s}\" must be a string", .{opt.long}) };
                     if (opt.kind == .path) {
                         if (try outsideRoot(allocator, confinement, text)) return .{ .invalid = try outsideRootMessage(allocator, opt.long, text) };
                     }
-                    try argv.append(allocator, try std.fmt.allocPrint(allocator, "--{s}={s}", .{ opt.long, text }));
+                    try argv.append(allocator, try allocator.print("--{s}={s}", .{ opt.long, text }));
                 }
             },
         }
@@ -343,18 +343,18 @@ pub fn buildArgv(
     for (tool.command.positionals) |arg| {
         if (arg.mcp_hidden) continue;
         const value = argumentValue(args, arg) orelse {
-            if (arg.required) return .{ .invalid = try std.fmt.allocPrint(allocator, "missing required argument \"{s}\"", .{arg.name}) };
+            if (arg.required) return .{ .invalid = try allocator.print("missing required argument \"{s}\"", .{arg.name}) };
             continue;
         };
         if (arg.variadic) {
-            if (value != .array or value.array.items.len == 0) return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a non-empty array of strings", .{arg.name}) };
+            if (value != .array or value.array.items.len == 0) return .{ .invalid = try allocator.print("argument \"{s}\" must be a non-empty array of strings", .{arg.name}) };
             for (value.array.items) |item| {
-                const text = scalarText(allocator, item) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be an array of strings", .{arg.name}) };
+                const text = scalarText(allocator, item) catch return .{ .invalid = try allocator.print("argument \"{s}\" must be an array of strings", .{arg.name}) };
                 if (arg.kind == .path and try outsideRoot(allocator, confinement, text)) return .{ .invalid = try outsideRootMessage(allocator, arg.name, text) };
                 try argv.append(allocator, text);
             }
         } else {
-            const text = scalarText(allocator, value) catch return .{ .invalid = try std.fmt.allocPrint(allocator, "argument \"{s}\" must be a string", .{arg.name}) };
+            const text = scalarText(allocator, value) catch return .{ .invalid = try allocator.print("argument \"{s}\" must be a string", .{arg.name}) };
             if (arg.kind == .path and try outsideRoot(allocator, confinement, text)) return .{ .invalid = try outsideRootMessage(allocator, arg.name, text) };
             try argv.append(allocator, text);
         }
@@ -410,8 +410,8 @@ fn jsonText(allocator: std.mem.Allocator, value: std.json.Value) ![]const u8 {
 fn scalarText(allocator: std.mem.Allocator, value: std.json.Value) ![]const u8 {
     return switch (value) {
         .string => |s| s,
-        .integer => |i| try std.fmt.allocPrint(allocator, "{d}", .{i}),
-        .float => |f| try std.fmt.allocPrint(allocator, "{d}", .{f}),
+        .integer => |i| try allocator.print("{d}", .{i}),
+        .float => |f| try allocator.print("{d}", .{f}),
         .number_string => |s| s,
         else => error.NotScalar,
     };
@@ -424,7 +424,7 @@ pub fn outsideRoot(allocator: std.mem.Allocator, confinement: Confinement, value
     if (std.mem.startsWith(u8, value, "res://") or std.mem.startsWith(u8, value, "uid://")) return false;
     const resolved = try std.fs.path.resolve(allocator, &.{ root, value });
     if (std.mem.eql(u8, resolved, root)) return false;
-    const with_sep = try std.fmt.allocPrint(allocator, "{s}{c}", .{ root, std.fs.path.sep });
+    const with_sep = try allocator.print("{s}{c}", .{ root, std.fs.path.sep });
     return !std.mem.startsWith(u8, resolved, with_sep);
 }
 

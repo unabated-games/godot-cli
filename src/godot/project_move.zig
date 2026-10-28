@@ -54,7 +54,7 @@ pub fn normalizeResPath(allocator: std.mem.Allocator, project_root: []const u8, 
     while (std.mem.startsWith(u8, rel, "./")) rel = rel[2..];
     while (std.mem.startsWith(u8, rel, "/")) rel = rel[1..];
     if (rel.len == 0 or std.mem.startsWith(u8, rel, "..")) return error.InvalidPath;
-    return try std.fmt.allocPrint(allocator, "res://{s}", .{rel});
+    return try allocator.print("res://{s}", .{rel});
 }
 
 /// After the path is retargeted, an id seeded from the old file's name still
@@ -75,7 +75,7 @@ fn renameIdsForMovedFile(allocator: std.mem.Allocator, doc: *document.Document, 
         // Only ids of godot-cli's own `{Type}_{hint}` shape are re-seeded;
         // Godot's `1_ab12c` form names no file and needs no rename.
         if (!std.mem.startsWith(u8, old_id, res_type)) continue;
-        const new_id = try std.fmt.allocPrint(allocator, "{s}_{s}", .{ res_type, stem });
+        const new_id = try allocator.print("{s}_{s}", .{ res_type, stem });
         defer allocator.free(new_id);
         if (try text_batch.renameExtResourceId(doc, allocator, old_id, new_id)) |_| renamed += 1;
     }
@@ -118,9 +118,9 @@ pub fn moveResource(
     // The UID sidecar and import metadata belong to the file and go with it.
     // Counted on a dry run too, so the preview matches the move.
     for ([_][]const u8{ ".uid", ".import" }) |suffix| {
-        const old_side = try std.fmt.allocPrint(allocator, "{s}{s}", .{ from_fs, suffix });
+        const old_side = try allocator.print("{s}{s}", .{ from_fs, suffix });
         defer allocator.free(old_side);
-        const new_side = try std.fmt.allocPrint(allocator, "{s}{s}", .{ to_fs, suffix });
+        const new_side = try allocator.print("{s}{s}", .{ to_fs, suffix });
         defer allocator.free(new_side);
         std.Io.Dir.cwd().access(io, old_side, .{}) catch continue;
         if (!dry_run) std.Io.Dir.cwd().rename(old_side, std.Io.Dir.cwd(), new_side, io) catch continue;
@@ -174,13 +174,13 @@ pub fn moveResource(
         if (project_godot.readFile(allocator, io, project_file)) |loaded| {
             var doc = loaded;
             defer doc.deinit(allocator);
-            const quoted_from = try std.fmt.allocPrint(allocator, "\"{s}\"", .{from});
+            const quoted_from = try allocator.print("\"{s}\"", .{from});
             defer allocator.free(quoted_from);
-            const quoted_to = try std.fmt.allocPrint(allocator, "\"{s}\"", .{to});
+            const quoted_to = try allocator.print("\"{s}\"", .{to});
             defer allocator.free(quoted_to);
-            const star_from = try std.fmt.allocPrint(allocator, "\"*{s}\"", .{from});
+            const star_from = try allocator.print("\"*{s}\"", .{from});
             defer allocator.free(star_from);
-            const star_to = try std.fmt.allocPrint(allocator, "\"*{s}\"", .{to});
+            const star_to = try allocator.print("\"*{s}\"", .{to});
             defer allocator.free(star_to);
             for (doc.sections.items) |*section| {
                 for (section.entries.items) |entry| {

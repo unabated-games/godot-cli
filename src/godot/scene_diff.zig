@@ -141,7 +141,7 @@ pub fn diffDocuments(
 /// A connection is identified by everything Godot writes for it, so a change
 /// to flags or binds shows as a remove plus an add.
 fn connectionKey(allocator: std.mem.Allocator, info: *const scene_connections.ConnectionInfo) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "{s}\x00{s}\x00{s}\x00{s}\x00{d}\x00{s}\x00{d}", .{
+    return allocator.print("{s}\x00{s}\x00{s}\x00{s}\x00{d}\x00{s}\x00{d}", .{
         info.from_path, info.signal, info.to_path, info.method, info.flags, info.binds orelse "", info.unbinds orelse 0,
     });
 }
@@ -482,7 +482,7 @@ fn diffResources(
                 try items.append(allocator, .{ .kind = try allocator.dupe(u8, "changed"), .section = try allocator.dupe(u8, section_name), .key = try allocator.dupe(u8, key), .type_a = try dupeOptional(allocator, type_a), .type_b = try dupeOptional(allocator, type_b), .uid_a = try dupeOptional(allocator, uid_a), .uid_b = try dupeOptional(allocator, uid_b) });
             }
             if (options.include_properties and comptime std.mem.eql(u8, section_name, "sub_resource")) {
-                const address = try std.fmt.allocPrint(allocator, "SubResource(\"{s}\")", .{key});
+                const address = try allocator.print("SubResource(\"{s}\")", .{key});
                 defer allocator.free(address);
                 try diffSectionProperties(allocator, address, section_a, section_b.?, sub_properties);
             }
@@ -490,6 +490,14 @@ fn diffResources(
         for (in_b.keys(), in_b.values()) |key, section_b| {
             if (in_a.get(key) != null) continue;
             try items.append(allocator, .{ .kind = try allocator.dupe(u8, "added"), .section = try allocator.dupe(u8, section_name), .key = try allocator.dupe(u8, key), .type_b = try dupeOptional(allocator, section_b.header.getString("type")), .uid_b = try dupeOptional(allocator, section_b.header.getString("uid")) });
+            // An added sub_resource's values, as an added node's are, so
+            // the diff accounts for every value written (trial 43 had to
+            // read the file for a new PlaneMesh's size).
+            if (options.include_properties and comptime std.mem.eql(u8, section_name, "sub_resource")) {
+                const address = try allocator.print("SubResource(\"{s}\")", .{key});
+                defer allocator.free(address);
+                try diffSectionProperties(allocator, address, null, section_b, sub_properties);
+            }
         }
     }
     return items.toOwnedSlice(allocator);

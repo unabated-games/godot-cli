@@ -60,18 +60,41 @@ godot-cli scene compare-godot scenes/main.tscn scenes/main_godot_saved.tscn --js
 ```
 
 You do not need the editor open to get that reference. `project resave` has
-Godot load the file headless and save a copy under `.godot/godot-cli/resave/`,
-never over the file itself:
+Godot save a copy under `.godot/godot-cli/resave/`, never over the file itself:
 
 ```bash
 godot-cli project resave scenes/main.tscn --project-root . --json
 ```
 
-A match proves the text is what Godot writes for that content. It does not
-prove the editor would keep every line: Godot loads and saves the scene without
-building it, so a property the editor would replace survives. One such line is
-`position` on a 3D node, which the editor stores as `transform`.
-`scene validate` warns about that case as `property_not_stored`.
+It saves a scene the way the editor does. Godot runs headless with the editor
+hint, builds the scene in a viewport the project's size, sends the pre-save
+notification, packs it and saves it. So the copy holds what the editor would
+store, not only what the file says: a 3D node's `position` comes back as
+`transform`, and editor-only lines such as `anchors_preset` are kept. Nothing
+outside `.godot/` is written. `--no-build` loads and saves the file as it is,
+the old behaviour. An `AnimationPlayer` or `AnimationTree` with
+`reset_on_save` has its RESET animation applied first, as the editor does.
+
+A difference names the node and what differs: properties on one side only
+(`here only: position; the Godot save only: transform`), or the first value
+that differs. Two kinds of difference are listed under `skipped` rather than
+failing the match:
+
+- what a save to a new path always changes: ext_resource ids, renumbered, and
+  uids, left out
+- sub_resources in another order, or properties in another order. The editor writes its class order, and so
+  does every godot-cli write, but a file written elsewhere may not; the
+  editor's next save reorders it without changing what it says
+
+An empty `skipped` with a match means the files agree everywhere.
+
+Run over all 396 scenes in Godot's demo projects with Godot 4.8-beta1, it saved
+every scene but the 20 that use C#, which that build cannot load. Of the 343
+that a plain load-and-save also handles, 325 come out the same. The rest differ
+in nodes inside imported `.glb` models, which a reimport assigns afresh, in
+lines an older editor wrote, or in values the scene computes when it is built
+(an IK chain, a pawn a `@tool` script snaps to its grid), which a plain save
+leaves as the file had them.
 
 `scene round-trip <path> --dry-run` is the weaker, faster check: parse the file, write it back, parse again, and confirm the structure survived.
 

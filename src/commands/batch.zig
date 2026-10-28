@@ -47,8 +47,7 @@ fn batchHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try data.put(cli.allocator, "rolled_back", .{ .bool = batch_result.rolled_back });
     try data.put(cli.allocator, "steps", .{ .array = steps_json });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "batch {s}: {d}/{d} step(s) succeeded",
         .{ batch_result.mode, batch_result.succeeded_count, batch_result.step_count },
     );

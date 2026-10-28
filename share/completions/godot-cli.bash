@@ -101,7 +101,7 @@ _godot_cli_options() {
             echo "--referrer --from --id-session --project-root"
             ;;
         'scene new')
-            echo "--output --root-name --root-type --no-uid --project-root --resource-path --no-prepare-save --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
+            echo "--output --root-name --root-type --no-uid --script --project-root --resource-path --no-prepare-save --dry-run --snapshot --id-session --no-id-session --godot-save-format --normalize-properties"
             ;;
         'scene describe')
             echo "--project-root"
@@ -272,16 +272,16 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'project new')
-            echo "--project-root --name --main-scene --width --height --dry-run --no-icon"
+            echo "--project-root --name --main-scene --width --height --dry-run --no-icon --godot-version --renderer --godot --no-vcs"
             ;;
         'project import')
             echo "--project-root --godot"
             ;;
         'project resave')
-            echo "--project-root --godot --output --no-import"
+            echo "--project-root --godot --output --no-import --no-build"
             ;;
         'project run')
-            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click --type --focus --keep-cursor --frame-at --log-lines"
+            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click --type --focus --no-auto-camera --keep-cursor --frame-at --log-lines"
             ;;
         'project show')
             echo "--project-root"
@@ -374,7 +374,7 @@ _godot_cli_options() {
             echo "--project-root"
             ;;
         'project export build')
-            echo "--project-root --preset --output --debug --pack --godot"
+            echo "--project-root --preset --all --output --debug --pack --godot"
             ;;
         'completions')
             echo "--output"

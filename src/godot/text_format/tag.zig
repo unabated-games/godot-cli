@@ -305,6 +305,9 @@ pub fn formatLine(allocator: std.mem.Allocator, header: *const Tag) ![]u8 {
         try out.append(allocator, ' ');
         try out.appendSlice(allocator, entry.key_ptr.*);
         try out.append(allocator, '=');
+        // Godot writes `binds= [...]` with a space (VariantWriter output
+        // appended to " binds= "); `groups=[...]`, built by hand, has none.
+        if (std.mem.eql(u8, entry.key_ptr.*, "binds") and entry.value_ptr.* == .raw) try out.append(allocator, ' ');
         try formatValue(allocator, &out, entry.value_ptr.*);
     }
 
@@ -321,12 +324,7 @@ fn formatValue(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: Val
                 try writeQuoted(allocator, out, s);
             }
         },
-        .raw => |s| {
-            // Godot writes `binds= [...]` with a space; every other bare value
-            // sits directly after the equals sign.
-            if (s.len > 0 and s[0] == '[') try out.append(allocator, ' ');
-            try out.appendSlice(allocator, s);
-        },
+        .raw => |s| try out.appendSlice(allocator, s),
         .integer => |n| {
             var buf: [32]u8 = undefined;
             try out.appendSlice(allocator, try std.fmt.bufPrint(&buf, "{d}", .{n}));

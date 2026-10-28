@@ -1,0 +1,36 @@
+[gd_scene format=3 uid="uid://c4legacyids01"]
+
+[ext_resource type="Script" path="res://main.gd" id="1"]
+[ext_resource type="PackedScene" path="res://row.tscn" id="2_abcde"]
+
+[sub_resource type="BoxMesh" id="1"]
+
+[node name="Main" type="Node3D" unique_id=1515290433]
+script = ExtResource("1")
+
+[node name="Cube" type="MeshInstance3D" parent="." unique_id=224807142 groups=["spin", "visible"]]
+mesh = SubResource("1")
+
+[node name="Notes" type="Label" parent="." unique_id=883130505]
+text = "First line
+
+	Indented after a blank line
+[b]Bold[/b] at the start of a line
+  trailing spaces   "
+
+[node name="RowA" parent="." unique_id=1685402005 instance=ExtResource("2_abcde")]
+
+[node name="Cell" parent="RowA" index="0" unique_id=1665493313]
+visible = false
+
+[node name="RowB" parent="." unique_id=731676835 instance=ExtResource("2_abcde")]
+
+[node name="Cell" parent="RowB" index="0" unique_id=1665493313]
+visible = false
+
+[node name="Marker" type="Marker3D" parent="RowB/Cell/Deep" unique_id=1205361136]
+
+[connection signal="ready" from="." to="." method="_on_ready"]
+
+[editable path="RowA"]
+[editable path="RowB"]

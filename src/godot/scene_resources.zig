@@ -301,6 +301,19 @@ pub fn addExtResourceWithId(
 /// sub-resource of one type in a scene would otherwise generate the id the
 /// first one already has. Three agent trials hit that; one hand-edited the
 /// scene to get past it. Caller owns the result.
+/// Whether a sub_resource already uses the suffix of `id` (the part after
+/// its last underscore).
+fn subSuffixUsed(doc: *const document.Document, id: []const u8) bool {
+    const at = std.mem.lastIndexOfScalar(u8, id, '_') orelse return false;
+    const suffix = id[at..];
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "sub_resource")) continue;
+        const existing = section.header.getString("id") orelse continue;
+        if (std.mem.endsWith(u8, existing, suffix)) return true;
+    }
+    return false;
+}
+
 pub fn generateFreeSubId(
     allocator: std.mem.Allocator,
     doc: *const document.Document,
@@ -308,13 +321,25 @@ pub fn generateFreeSubId(
     res_type: []const u8,
 ) Error![]u8 {
     seedResourceIds(seed_path);
+    // The generator is seeded from the scene's path on every command, so its
+    // first draw is the same each time: a PlaneMesh and a BoxMesh added one
+    // after the other both came out `_5xgho` (trial 45). The editor draws a
+    // new suffix per resource, so keep drawing past any suffix the file's
+    // sub_resources already use.
+    var draws: usize = 0;
+    while (draws < 64) : (draws += 1) {
+        const candidate = try scene_id.formatSubResourceId(allocator, res_type);
+        if (!subSuffixUsed(doc, candidate) and findResourceSectionIndex(doc, "sub_resource", candidate) == null) return candidate;
+        allocator.free(candidate);
+    }
+    seedResourceIds(seed_path);
     const base = try scene_id.formatSubResourceId(allocator, res_type);
     if (findResourceSectionIndex(doc, "sub_resource", base) == null) return base;
     defer allocator.free(base);
 
     var suffix: u32 = 2;
     while (suffix < 1000) : (suffix += 1) {
-        const candidate = try std.fmt.allocPrint(allocator, "{s}_{d}", .{ base, suffix });
+        const candidate = try allocator.print("{s}_{d}", .{ base, suffix });
         if (findResourceSectionIndex(doc, "sub_resource", candidate) == null) return candidate;
         allocator.free(candidate);
     }
@@ -393,7 +418,7 @@ pub fn findReferrers(allocator: std.mem.Allocator, doc: *const document.Document
         .ext => "ExtResource(\"",
         .sub => "SubResource(\"",
     };
-    const needle = try std.fmt.allocPrint(allocator, "{s}{s}", .{ prefix, id });
+    const needle = try allocator.print("{s}{s}", .{ prefix, id });
     defer allocator.free(needle);
 
     for (doc.sections.items, 0..) |section, section_index| {

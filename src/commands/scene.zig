@@ -9,6 +9,7 @@ const catalog_cmd = @import("catalog.zig");
 const uid_cache = @import("../godot/uid_cache.zig");
 const class_info = @import("../godot/class_info.zig");
 const text_format = @import("../godot/text_format/root.zig");
+const write_notes = @import("../godot/write_notes.zig");
 const id_validate = @import("../godot/id_validate.zig");
 const id_session = @import("../godot/id_session.zig");
 const project_config = @import("../godot/project_config.zig");
@@ -124,7 +125,7 @@ fn withoutOption(comptime options: []const spec.OptionSpec, comptime long: []con
 pub const write_snapshot_opt = spec.OptionSpec{
     .long = "snapshot",
     .kind = .path,
-    .description = "Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored",
+    .description = "Before writing, copy the file as it is now to this path, for scene diff or scene restore later. Put it under .godot/: a copy Godot can see carries the scene's uid, and Godot then reports a duplicate and may point uid:// references at the copy. Nothing under .godot/ is imported, and it is normally gitignored. Without it, a session still keeps one: the MCP server, or a shell with GODOT_CLI_SESSION set, copies each scene to .godot/godot-cli/session/<its path> before the session's first write to it, and says so. A scene the session created is kept as scene new wrote it",
 };
 
 /// Where a write's "before" copy goes: --snapshot, or with --auto-snapshot
@@ -153,11 +154,48 @@ pub fn snapshotBeforeWrite(cli: *const app_mod.App, command: *const spec.Command
         if (std.mem.eql(u8, opt.long, write_snapshot_opt.long) and std.mem.eql(u8, opt.description, write_snapshot_opt.description)) declared = true;
     }
     if (!declared or inv.flag("dry-run")) return;
+    // A file that does not exist yet has no "before"; say so rather than
+    // skip the copy in silence (trial 44 passed --snapshot to scene new).
+    if (inv.getOption("snapshot")) |dest| {
+        const exists = inv.positionals.len > 0 and if (std.Io.Dir.cwd().access(cli.io, inv.positionals[0], .{})) |_| true else |_| false;
+        if (!exists) {
+            try write_notes.add(cli.allocator, try cli.allocator.print("nothing was copied to {s}: the file does not exist yet, so there is no before to keep. Its first write after this one can take the snapshot", .{dest}));
+            return;
+        }
+    }
+    try sessionSnapshot(cli, inv);
     const dest = (try snapshotPath(cli, inv)) orelse return;
     scene_undo.writeSnapshot(cli.io, inv.positionals[0], dest) catch |err| {
         error_details.record(.{ .field = "snapshot", .value = dest, .hint = "the file could not be copied there, so nothing was changed" });
         return err;
     };
+}
+
+/// The session a write belongs to: the MCP server sets one for its whole
+/// life; on the command line, GODOT_CLI_SESSION names one.
+pub var session_id: ?[]const u8 = null;
+
+/// The scene as it was before a session's first write to it, kept at
+/// .godot/godot-cli/session/<its res:// path>, so scene diff can show what a
+/// session changed with no --snapshot asked for in advance (trial 37's ask).
+/// A `.session` file beside the copy names the session that took it; a new
+/// session takes a new copy.
+fn sessionSnapshot(cli: *const app_mod.App, inv: *const spec.Invocation) !void {
+    if (inv.positionals.len == 0) return;
+    const id = session_id orelse (cli.environ.getAlloc(cli.allocator, "GODOT_CLI_SESSION") catch return);
+    if (id.len == 0) return;
+    const root = projectRootFrom(inv) orelse return;
+    const source = inv.positionals[0];
+    if (!std.mem.endsWith(u8, source, ".tscn") and !std.mem.endsWith(u8, source, ".tres")) return;
+    const res = (try project_config.filesystemToResPath(cli.allocator, root, source)) orelse return;
+    const copy = try std.fs.path.join(cli.allocator, &.{ root, ".godot", "godot-cli", "session", res["res://".len..] });
+    const marker = try std.mem.concat(cli.allocator, u8, &.{ copy, ".session" });
+    const recorded = std.Io.Dir.cwd().readFileAlloc(cli.io, marker, cli.allocator, .limited(4096)) catch "";
+    if (std.mem.eql(u8, std.mem.trim(u8, recorded, " \n"), id)) return;
+    // A scene that does not exist yet has no "before"; the next write takes it.
+    scene_undo.writeSnapshot(cli.io, source, copy) catch return;
+    io_util.writeFileAtomic(cli.io, marker, id) catch return;
+    try write_notes.add(cli.allocator, try cli.allocator.print("first change to this scene in this session: it is kept as it was at {s}, so scene diff {s} {s} shows everything the session has changed in it", .{ copy, copy, source }));
 }
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
@@ -214,7 +252,37 @@ fn prepareSaveOptions(cli: *const app_mod.App, inv: *const spec.Invocation, outp
     return prepared;
 }
 
+/// Report each 3D placement property (position on a Node3D, ...) the write
+/// adds that the file did not already have: Godot never stores those, so
+/// the line is lost on the next editor save. scene validate says the same,
+/// but trial 37 only found out by validating after the write.
+/// The same for a connection the write adds whose receiver has no method by
+/// that name (trial 41 connected `_on_sitt` in a dry run unwarned), when
+/// --project-root lets the scripts be read.
+fn noteWriteIssues(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8, doc: *const text_format.document.Document) !void {
+    const ctx: id_validate.ValidateContext = .{ .project_root = projectRootFrom(inv), .io = cli.io };
+    const after = try std.mem.concat(cli.allocator, id_validate.WriteNote, &.{
+        try id_validate.unstoredPlacements(cli.allocator, doc),
+        try id_validate.unknownConnectionMethods(cli.allocator, doc, ctx),
+    });
+    if (after.len == 0) return;
+    const before: []const id_validate.WriteNote = blk: {
+        const on_disk = text_format.document.parseFile(cli.allocator, cli.io, output_path) catch break :blk &.{};
+        break :blk try std.mem.concat(cli.allocator, id_validate.WriteNote, &.{
+            try id_validate.unstoredPlacements(cli.allocator, &on_disk),
+            try id_validate.unknownConnectionMethods(cli.allocator, &on_disk, ctx),
+        });
+    };
+    for (after) |note| {
+        const known = for (before) |old| {
+            if (std.mem.eql(u8, old.key, note.key)) break true;
+        } else false;
+        if (!known) try write_notes.add(cli.allocator, note.message);
+    }
+}
+
 fn writeWithPrepare(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8, doc: *text_format.document.Document) !void {
+    try noteWriteIssues(cli, inv, output_path, doc);
     // With a project root the ext_resource uids can be checked against what
     // the project actually has, which repairs a component copied in from
     // another project.
@@ -249,8 +317,7 @@ fn loadCacheOptional(
     return uid_cache.loadFromFile(cli.allocator, cli.io, cache_path) catch |err| switch (err) {
         error.Io => null,
         else => {
-            note.* = try std.fmt.allocPrint(
-                cli.allocator,
+            note.* = try cli.allocator.print(
                 "{s} could not be read ({s}), so uid:// references were not checked against it; everything else was. Running the project once, or opening it in the editor, rewrites the cache",
                 .{ cache_path, @errorName(err) },
             );
@@ -304,8 +371,7 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind_for_comman
     }
     try data.put(cli.allocator, "unknown_classes", .{ .array = unknown_json });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "{s}: {d} issue(s), {d} error(s)",
         .{ kind, report.issues.items.len, countErrors(&report) },
     );
@@ -315,8 +381,7 @@ fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind_for_comman
     if (setup.cache_note) |note| try messages.append(cli.allocator, note);
     if (report.unknown_classes.items.len != 0) {
         const names = try std.mem.join(cli.allocator, ", ", report.unknown_classes.items);
-        const note = try std.fmt.allocPrint(
-            cli.allocator,
+        const note = try cli.allocator.print(
             "property types and signal names were not checked on {s}: not in the class table, which is generated from Godot {s}. A class from a script's class_name, or an addon, is expected here; a core class is not, and means the table is behind your engine",
             .{ names, class_info.godot_version },
         );
@@ -464,18 +529,18 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     const section = doc.sections.items[section_index];
     const summary = if (pairs.len == 1)
-        try std.fmt.allocPrint(
-            cli.allocator,
+        try cli.allocator.print(
             "updated {s} property {s} on section line {d}",
             .{ kind, pairs[0].name, section.line },
         )
     else
-        try std.fmt.allocPrint(
-            cli.allocator,
+        try cli.allocator.print(
             "updated {d} {s} properties on section line {d}",
             .{ pairs.len, kind, section.line },
         );
@@ -518,8 +583,7 @@ fn loadCacheOrExplain(cli: *const app_mod.App, root: []const u8) !uid_cache.Cach
         else => {},
     };
     return uid_cache.loadFromFile(cli.allocator, cli.io, cache_path) catch |err| {
-        const hint = try std.fmt.allocPrint(
-            cli.allocator,
+        const hint = try cli.allocator.print(
             "Godot writes this file; delete it and run the project once, or open the project in the editor, to rebuild it. Other commands do not need it: scene validate skips only its checks against the cache, and says so",
             .{},
         );
@@ -549,7 +613,7 @@ fn uidCacheListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
         try arr.append(.{ .object = row });
     }
 
-    const msg = try std.fmt.allocPrint(cli.allocator, "{d} uid cache entries", .{cache.entries.items.len});
+    const msg = try cli.allocator.print("{d} uid cache entries", .{cache.entries.items.len});
     return .{
         .data = .{ .array = arr },
         .messages = try cli.allocator.dupe([]const u8, &.{msg}),
@@ -640,8 +704,7 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
         try data.put(cli.allocator, "issues", .{ .array = issues });
     }
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "{s}: {d} sections",
         .{ kind, doc.sections.items.len },
     );
@@ -657,6 +720,7 @@ fn inspectHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const u8
 /// ext_resource uid refresh, then the save preparation, with the id session
 /// read but not saved. A dry run that shows text must show a write's text.
 fn prepareInMemory(cli: *const app_mod.App, inv: *const spec.Invocation, output_path: []const u8, doc: *text_format.document.Document) !void {
+    try noteWriteIssues(cli, inv, output_path, doc);
     if (!inv.flag("no-prepare-save")) {
         if (projectRootFrom(inv)) |root| {
             _ = resource_uid_lookup.refreshExtResourceUids(cli.allocator, cli.io, root, doc) catch 0;
@@ -722,11 +786,11 @@ fn normalizeHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []const 
 
     const summary = if (changed)
         (if (inv.flag("dry-run"))
-            try std.fmt.allocPrint(cli.allocator, "checked {s}: a save would change it", .{output_path})
+            try cli.allocator.print("checked {s}: a save would change it", .{output_path})
         else
-            try std.fmt.allocPrint(cli.allocator, "normalized {s}: the save changed it", .{output_path}))
+            try cli.allocator.print("normalized {s}: the save changed it", .{output_path}))
     else
-        try std.fmt.allocPrint(cli.allocator, "{s} is already written the way a save writes it", .{output_path});
+        try cli.allocator.print("{s} is already written the way a save writes it", .{output_path});
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = output_path });
     try data.put(cli.allocator, "kind", .{ .string = kind });
@@ -830,8 +894,7 @@ fn sceneNodeListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
     try data.put(cli.allocator, "path", .{ .string = path_copy });
     try data.put(cli.allocator, "nodes", .{ .array = nodes });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "{d} node(s) in {s}",
         .{ list.nodes.len, path },
     );
@@ -850,7 +913,7 @@ fn missingNode(cli: *const app_mod.App, list: *const node_tree.NodeList, field: 
     for (list.nodes) |*node| {
         if (node.instance == null) continue;
         if (node_path.len > node.path.len and std.mem.startsWith(u8, node_path, node.path) and node_path[node.path.len] == '/') {
-            const hint = try std.fmt.allocPrint(cli.allocator, "{s} is inside the instanced scene {s}; override it with the instance_override patch op (path {s}, child {s}), which marks the instance editable", .{ node_path, node.instance_path orelse node.instance.?, node.path, node_path[node.path.len + 1 ..] });
+            const hint = try cli.allocator.print("{s} is inside the instanced scene {s}; override it with the instance_override patch op (path {s}, child {s}), which marks the instance editable", .{ node_path, node.instance_path orelse node.instance.?, node.path, node_path[node.path.len + 1 ..] });
             error_details.record(.{ .field = field, .value = node_path, .hint = hint });
             return error.NodeNotFound;
         }
@@ -921,7 +984,7 @@ fn sceneNodeGetHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     const node_section = doc.sections.items[node.section_index];
     try data.put(cli.allocator, "properties", .{ .array = try variant.property_line.buildPropertiesJson(cli.allocator, node_section.properties.items) });
 
-    const summary = try std.fmt.allocPrint(cli.allocator, "{s} ({s})", .{ node.name, node.path });
+    const summary = try cli.allocator.print("{s} ({s})", .{ node.name, node.path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{
@@ -952,6 +1015,8 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -960,7 +1025,7 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     if (uid_text) |uid| try data.put(cli.allocator, "uid", .{ .string = uid });
     try data.put(cli.allocator, "property_count", .{ .integer = @intCast(property_pairs.len) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "created {s} resource {s}", .{ resource_type, output_path });
+    const summary = try cli.allocator.print("created {s} resource {s}", .{ resource_type, output_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
@@ -989,8 +1054,35 @@ fn sceneNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     defer doc.deinit(cli.allocator);
     const uid_text = try stampHeaderUid(cli, inv, &doc);
 
+    // A script on the root in the same call: trial 42 needed scene new,
+    // scene ext add and scene set-property for a one-node test scene.
+    var messages: std.ArrayList([]const u8) = .empty;
+    var script_id: ?[]const u8 = null;
+    const script_res: ?[]const u8 = if (inv.getOption("script")) |given|
+        if (std.mem.startsWith(u8, given, "res://")) given else try cli.allocator.print("res://{s}", .{std.mem.trimStart(u8, given, "./")})
+    else
+        null;
+    if (script_res) |res_path| {
+        const seed_path = try saveSeedPath(cli, inv, output_path);
+        var script_uid: ?[]const u8 = null;
+        if (projectRootFrom(inv)) |project_root| {
+            script_uid = try resource_uid_lookup.resolveExtResourceUid(cli.allocator, cli.io, project_root, res_path);
+            const fs_path = try std.fs.path.join(cli.allocator, &.{ project_root, res_path["res://".len..] });
+            if (std.Io.Dir.cwd().access(cli.io, fs_path, .{})) |_| {} else |_| {
+                try messages.append(cli.allocator, try cli.allocator.print("{s} does not exist yet; Godot reports the scene broken until it does", .{res_path}));
+            }
+        }
+        var added = try scene_resources.addExtResource(cli.allocator, &doc, seed_path, "Script", res_path);
+        if (script_uid) |uid| try doc.sections.items[added.section_index].header.setUidField(cli.allocator, uid);
+        script_id = try cli.allocator.dupe(u8, added.id);
+        added.deinit(cli.allocator);
+        try scene_edit.setNodeProperty(cli.allocator, &doc, try cli.allocator.print("/root/{s}", .{root_name}), "script", try cli.allocator.print("ExtResource(\"{s}\")", .{script_id.?}));
+    }
+
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -998,12 +1090,19 @@ fn sceneNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (uid_text) |uid| try data.put(cli.allocator, "uid", .{ .string = uid });
     try data.put(cli.allocator, "root_name", .{ .string = try cli.allocator.dupe(u8, root_name) });
     try data.put(cli.allocator, "root_type", .{ .string = try cli.allocator.dupe(u8, root_type) });
-    try data.put(cli.allocator, "root_path", .{ .string = try std.fmt.allocPrint(cli.allocator, "/root/{s}", .{root_name}) });
+    try data.put(cli.allocator, "root_path", .{ .string = try cli.allocator.print("/root/{s}", .{root_name}) });
+    if (script_res) |res_path| {
+        try data.put(cli.allocator, "script", .{ .string = res_path });
+        try data.put(cli.allocator, "script_ext_id", .{ .string = script_id.? });
+    }
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "created scene {s}", .{output_path});
+    const summary = if (script_res) |res_path|
+        try cli.allocator.print("created scene {s} with {s} on its root", .{ output_path, res_path })
+    else
+        try cli.allocator.print("created scene {s}", .{output_path});
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
-    return .{ .data = .{ .object = data }, .messages = &.{} };
+    return .{ .data = .{ .object = data }, .messages = messages.items };
 }
 
 fn sceneRefsHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
@@ -1019,7 +1118,7 @@ fn sceneRefsHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, path) });
     try data.put(cli.allocator, "refs", .{ .array = refs });
-    const summary = try std.fmt.allocPrint(cli.allocator, "{d} ext_resource(s) in {s}", .{ list.refs.len, path });
+    const summary = try cli.allocator.print("{d} ext_resource(s) in {s}", .{ list.refs.len, path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1076,12 +1175,13 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     if (inv.flag("dry-run")) {
+        try noteWriteIssues(cli, inv, output_path, &doc);
         if (try dryRunSectionText(cli, &doc, added.path)) |text| try data.put(cli.allocator, "section_text", .{ .string = text });
     }
     const summary = if (index) |at|
-        try std.fmt.allocPrint(cli.allocator, "added {s} at {s}, as child {d}", .{ node_name, added.path, at })
+        try cli.allocator.print("added {s} at {s}, as child {d}", .{ node_name, added.path, at })
     else
-        try std.fmt.allocPrint(cli.allocator, "added {s} at {s}", .{ node_name, added.path });
+        try cli.allocator.print("added {s} at {s}", .{ node_name, added.path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1100,6 +1200,8 @@ fn sceneNodeRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1108,7 +1210,7 @@ fn sceneNodeRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     try data.put(cli.allocator, "removed_count", .{ .integer = @intCast(removed) });
     try data.put(cli.allocator, "recursive", .{ .bool = inv.flag("recursive") });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "removed {d} node section(s) from {s}", .{ removed, node_path });
+    const summary = try cli.allocator.print("removed {d} node section(s) from {s}", .{ removed, node_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(script_refs.len) });
 
@@ -1201,8 +1303,7 @@ fn sceneDescribeHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
             if (!exists) unresolved += 1;
         }
     }
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "{d} node(s), {d} connection(s), {d} external reference(s){s}, {d} script(s) in {s}",
         .{ node_count, connection_count, refs.refs.len, if (unresolved != 0) " with some missing" else "", script_count, path },
     );
@@ -1227,7 +1328,7 @@ fn sceneConnectionListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spe
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, path) });
     try data.put(cli.allocator, "connection_count", .{ .integer = @intCast(connections.items.len) });
     try data.put(cli.allocator, "connections", .{ .array = rows });
-    const summary = try std.fmt.allocPrint(cli.allocator, "{d} connection(s) in {s}", .{ connections.items.len, path });
+    const summary = try cli.allocator.print("{d} connection(s) in {s}", .{ connections.items.len, path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
@@ -1263,8 +1364,7 @@ fn ensureEditableForEndpoint(
 
     const marked = try scene_instance.ensureEditable(cli.allocator, doc, instance.path);
     if (marked) {
-        try messages.append(cli.allocator, try std.fmt.allocPrint(
-            cli.allocator,
+        try messages.append(cli.allocator, try cli.allocator.print(
             "{s} is inside the instance at {s}, so the instance is now marked editable ([editable path=…]), which is what the editor does before you can connect one of its children",
             .{ endpoint, instance.path },
         ));
@@ -1281,7 +1381,7 @@ fn instanceHasChild(cli: *const app_mod.App, project_root: []const u8, res_path:
     var list = node_tree.collectNodes(cli.allocator, &doc) catch return null;
     defer list.deinit(cli.allocator);
     if (list.nodes.len == 0) return null;
-    const wanted = std.fmt.allocPrint(cli.allocator, "{s}/{s}", .{ list.nodes[0].path, inner_path }) catch return null;
+    const wanted = cli.allocator.print("{s}/{s}", .{ list.nodes[0].path, inner_path }) catch return null;
     return node_tree.findByPath(&list, wanted) != null;
 }
 
@@ -1317,6 +1417,8 @@ fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1328,7 +1430,7 @@ fn sceneConnectionAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec
     try data.put(cli.allocator, "method", .{ .string = try cli.allocator.dupe(u8, method) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(section_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "{s} {s} {s} to {s} {s}", .{ if (inv.flag("dry-run")) "would connect" else "connected", from, signal, to, method });
+    const summary = try cli.allocator.print("{s} {s} {s} to {s} {s}", .{ if (inv.flag("dry-run")) "would connect" else "connected", from, signal, to, method });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = messages.items };
 }
@@ -1347,13 +1449,15 @@ fn sceneConnectionRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !s
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
     try data.put(cli.allocator, "removed_count", .{ .integer = @intCast(removed) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "removed {d} connection(s) of {s} {s} to {s}", .{ removed, from, signal, to });
+    const summary = try cli.allocator.print("removed {d} connection(s) of {s} {s} to {s}", .{ removed, from, signal, to });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
@@ -1373,6 +1477,8 @@ fn sceneNodeRenameHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1381,7 +1487,7 @@ fn sceneNodeRenameHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Re
     try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, new_path) });
     try data.put(cli.allocator, "name", .{ .string = try cli.allocator.dupe(u8, new_name) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "renamed {s} to {s}", .{ node_path, new_path });
+    const summary = try cli.allocator.print("renamed {s} to {s}", .{ node_path, new_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(script_refs.len) });
 
@@ -1400,7 +1506,7 @@ fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     // Gathered before the edit, while the node is still where scripts expect
     // it. A %Name reference resolves through the owner, which a reparent
     // inside the scene leaves alone, so only path references are at risk.
-    const verb = try std.fmt.allocPrint(cli.allocator, "moved under {s}", .{new_parent});
+    const verb = try cli.allocator.print("moved under {s}", .{new_parent});
     const script_refs = try scriptRefMessages(cli, inv, &doc, node_path, verb, .paths_only);
     const moved = scene_edit.reparentNodeWithOptions(cli.allocator, &doc, node_path, new_parent, .{ .index = index }) catch |err| switch (err) {
         error.ChildIndexOutOfRange => return childIndexOutOfRange(cli.allocator, inv.getOption("index").?, new_parent, try scene_edit.childCount(cli.allocator, &doc, new_parent, node_path)),
@@ -1410,6 +1516,8 @@ fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     // The same parent means no path changed, so nothing that named the node
@@ -1418,16 +1526,16 @@ fn sceneNodeReparentHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     const leaf = if (std.mem.lastIndexOfScalar(u8, node_path, '/')) |slash| node_path[slash + 1 ..] else node_path;
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, output_path) });
-    try data.put(cli.allocator, "node_path", .{ .string = try std.fmt.allocPrint(cli.allocator, "{s}/{s}", .{ new_parent, leaf }) });
+    try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.print("{s}/{s}", .{ new_parent, leaf }) });
     try data.put(cli.allocator, "old_path", .{ .string = try cli.allocator.dupe(u8, node_path) });
     try data.put(cli.allocator, "parent", .{ .string = try cli.allocator.dupe(u8, new_parent) });
     try data.put(cli.allocator, "parent_changed", .{ .bool = moved.parent_changed });
     try data.put(cli.allocator, "index", .{ .integer = @intCast(moved.index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
     const summary = if (moved.parent_changed)
-        try std.fmt.allocPrint(cli.allocator, "reparented {s} under {s}, as child {d}", .{ node_path, new_parent, moved.index })
+        try cli.allocator.print("reparented {s} under {s}, as child {d}", .{ node_path, new_parent, moved.index })
     else
-        try std.fmt.allocPrint(cli.allocator, "{s} already had that parent; moved it to child {d}", .{ node_path, moved.index });
+        try cli.allocator.print("{s} already had that parent; moved it to child {d}", .{ node_path, moved.index });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     try data.put(cli.allocator, "script_refs", .{ .integer = @intCast(messages.len) });
 
@@ -1453,6 +1561,8 @@ fn sceneNodeMoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
     const output_path = inv.getOption("output") orelse input_path;
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1460,7 +1570,7 @@ fn sceneNodeMoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resu
     try data.put(cli.allocator, "node_path", .{ .string = try cli.allocator.dupe(u8, node_path) });
     try data.put(cli.allocator, "index", .{ .integer = @intCast(moved.index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "moved {s} to child {d} of its parent", .{ node_path, moved.index }) });
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.print("moved {s} to child {d} of its parent", .{ node_path, moved.index }) });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
@@ -1470,7 +1580,7 @@ fn indexOption(inv: *const spec.Invocation) !?i64 {
 }
 
 fn childIndexOutOfRange(allocator: std.mem.Allocator, given: []const u8, parent: []const u8, others: usize) error{ ChildIndexOutOfRange, OutOfMemory } {
-    const hint = try std.fmt.allocPrint(allocator, "{s} has {d} other children, so --index takes 0 to {d}, or -1 to -{d} counting from the end", .{ parent, others, others, others + 1 });
+    const hint = try allocator.print("{s} has {d} other children, so --index takes 0 to {d}, or -1 to -{d} counting from the end", .{ parent, others, others, others + 1 });
     error_details.record(.{ .field = "index", .value = given, .hint = hint });
     return error.ChildIndexOutOfRange;
 }
@@ -1513,6 +1623,8 @@ fn sceneExtAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1522,7 +1634,7 @@ fn sceneExtAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     try data.put(cli.allocator, "resource_path", .{ .string = try cli.allocator.dupe(u8, res_path) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "added ext_resource {s} ({s})", .{ added.id, res_path });
+    const summary = try cli.allocator.print("added ext_resource {s} ({s})", .{ added.id, res_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1547,7 +1659,7 @@ fn sceneExtRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
             var data: std.json.ObjectMap = .{};
             try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
             try data.put(cli.allocator, "referrers", .{ .array = try referrersToJson(cli.allocator, referrers) });
-            const summary = try std.fmt.allocPrint(cli.allocator, "ext_resource {s} is still referenced", .{resource_id});
+            const summary = try cli.allocator.print("ext_resource {s} is still referenced", .{resource_id});
             try data.put(cli.allocator, "summary", .{ .string = summary });
             return .{
                 .data = .{ .object = data },
@@ -1560,6 +1672,8 @@ fn sceneExtRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1567,7 +1681,7 @@ fn sceneExtRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
     try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(removed_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "removed ext_resource {s}", .{resource_id});
+    const summary = try cli.allocator.print("removed ext_resource {s}", .{resource_id});
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1608,6 +1722,8 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1616,7 +1732,7 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     try data.put(cli.allocator, "type", .{ .string = try cli.allocator.dupe(u8, res_type) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "added sub_resource {s}", .{added.id});
+    const summary = try cli.allocator.print("added sub_resource {s}", .{added.id});
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1641,7 +1757,7 @@ fn sceneSubRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
             var data: std.json.ObjectMap = .{};
             try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
             try data.put(cli.allocator, "referrers", .{ .array = try referrersToJson(cli.allocator, referrers) });
-            const summary = try std.fmt.allocPrint(cli.allocator, "sub_resource {s} is still referenced", .{resource_id});
+            const summary = try cli.allocator.print("sub_resource {s} is still referenced", .{resource_id});
             try data.put(cli.allocator, "summary", .{ .string = summary });
             return .{
                 .data = .{ .object = data },
@@ -1654,6 +1770,8 @@ fn sceneSubRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
 
     if (!inv.flag("dry-run")) {
         try writeWithPrepare(cli, inv, output_path, &doc);
+    } else {
+        try noteWriteIssues(cli, inv, output_path, &doc);
     }
 
     var data: std.json.ObjectMap = .{};
@@ -1661,7 +1779,7 @@ fn sceneSubRemoveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Res
     try data.put(cli.allocator, "id", .{ .string = try cli.allocator.dupe(u8, resource_id) });
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(removed_index) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "removed sub_resource {s}", .{resource_id});
+    const summary = try cli.allocator.print("removed sub_resource {s}", .{resource_id});
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -1703,8 +1821,7 @@ fn validateBatchHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []co
     try data.put(cli.allocator, "file_count", .{ .integer = @intCast(inv.positionals.len) });
     try data.put(cli.allocator, "error_count", .{ .integer = @intCast(total_errors) });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "{s}: validated {d} file(s), {d} error(s)",
         .{ kind, inv.positionals.len, total_errors },
     );
@@ -1753,8 +1870,7 @@ fn retargetExtHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     try data.put(cli.allocator, "files_changed", .{ .integer = @intCast(files_changed) });
     try data.put(cli.allocator, "retargeted_count", .{ .integer = @intCast(total_retargeted) });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
+    const summary = try cli.allocator.print(
         "retargeted {d} ext_resource path(s) in {d} file(s)",
         .{ total_retargeted, files_changed },
     );
@@ -1842,11 +1958,21 @@ fn compareGodotHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []con
     try data.put(cli.allocator, "kind", .{ .string = kind });
     try data.put(cli.allocator, "matches_godot_save", .{ .bool = match });
     if (difference) |text| try data.put(cli.allocator, "difference", .{ .string = text });
+    // What the comparison left out, listed, so a match need not be followed
+    // by a diff of the files to learn whether they agree everywhere.
+    const skipped = try text_format.roundtrip.skippedGodotSaveDifferences(cli.allocator, &original, &reference);
+    var skipped_json = std.json.Array.init(cli.allocator);
+    for (skipped) |text| try skipped_json.append(.{ .string = text });
+    try data.put(cli.allocator, "skipped", .{ .array = skipped_json });
 
-    const summary = try std.fmt.allocPrint(
-        cli.allocator,
-        "{s}: {s} vs Godot reference {s}",
-        .{ if (match) "matches" else "differs from", input_path, reference_path },
+    const summary = try cli.allocator.print(
+        "{s}: {s} vs Godot reference {s}{s}",
+        .{
+            if (match) "matches" else "differs from",
+            input_path,
+            reference_path,
+            if (skipped.len == 0) "; nothing left out of the comparison differs" else try cli.allocator.print("; {d} difference(s) in parts not compared, listed in skipped", .{skipped.len}),
+        },
     );
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
@@ -1945,13 +2071,14 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     try data.put(cli.allocator, "section_index", .{ .integer = @intCast(added.section_index) });
     try data.put(cli.allocator, "editable", .{ .bool = added.editable });
     if (inv.flag("dry-run")) {
+        try noteWriteIssues(cli, inv, output_path, &doc);
         if (try dryRunSectionText(cli, &doc, added.path)) |text| try data.put(cli.allocator, "section_text", .{ .string = text });
     }
     if (catalog_id) |id| {
         try data.put(cli.allocator, "catalog_id", .{ .string = try cli.allocator.dupe(u8, id) });
     }
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "instanced {s} at {s} from {s}", .{ node_name, added.path, scene_res_path });
+    const summary = try cli.allocator.print("instanced {s} at {s} from {s}", .{ node_name, added.path, scene_res_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -2042,7 +2169,7 @@ fn sceneRecipesHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     const cli = appFrom(ctx);
     var data: std.json.ObjectMap = .{};
     try data.put(cli.allocator, "recipes", try scene_plan.recipesJson(cli.allocator));
-    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "{d} recipes", .{scene_plan.recipes.len}) });
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.print("{d} recipes", .{scene_plan.recipes.len}) });
     return .{ .data = .{ .object = data } };
 }
 
@@ -2062,12 +2189,12 @@ fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const
     var out: std.ArrayList(ScriptHit) = .empty;
     const root_prefix_end = (std.mem.indexOfScalarPos(u8, node_path, "/root/".len, '/') orelse return out.items) + 1;
     const rel = node_path[root_prefix_end..];
-    const dollar = try std.fmt.allocPrint(cli.allocator, "${s}", .{rel});
-    const quoted = try std.fmt.allocPrint(cli.allocator, "\"{s}", .{rel});
+    const dollar = try cli.allocator.print("${s}", .{rel});
+    const quoted = try cli.allocator.print("\"{s}", .{rel});
     // The node's own name, for a `%Unique` reference that does not spell the
     // whole path.
     const leaf = if (std.mem.lastIndexOfScalar(u8, rel, '/')) |slash| rel[slash + 1 ..] else rel;
-    const unique = try std.fmt.allocPrint(cli.allocator, "%{s}", .{leaf});
+    const unique = try cli.allocator.print("%{s}", .{leaf});
     for (doc.sections.items) |section| {
         if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
         const kind = section.header.getString("type") orelse continue;
@@ -2096,7 +2223,7 @@ fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const
 fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const []const u8 {
     var out: std.ArrayList([]const u8) = .empty;
     for (try scriptReferencesToNode(cli, root, doc, node_path, true)) |hit| {
-        try out.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ hit.res_path, hit.line_no, hit.text }));
+        try out.append(cli.allocator, try cli.allocator.print("{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ hit.res_path, hit.line_no, hit.text }));
     }
     return out.items;
 }
@@ -2147,8 +2274,7 @@ fn scriptRefMessages(cli: *const app_mod.App, inv: *const spec.Invocation, doc: 
     const include_unique = scope == .paths_and_unique_name and nodeIsUnique(cli, doc, node_path);
     const hits = scriptReferencesToNode(cli, root, doc, node_path, include_unique) catch return &.{};
     for (hits) |hit| {
-        try out.append(cli.allocator, try std.fmt.allocPrint(
-            cli.allocator,
+        try out.append(cli.allocator, try cli.allocator.print(
             "{s}:{d} still names this node ({s}); it {s}, so the reference no longer resolves",
             .{ hit.res_path, hit.line_no, hit.text, verb },
         ));
@@ -2185,7 +2311,7 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     // --output is a project-relative path: it names the res:// path of the new
     // scene, and the file goes under the project root when one is given.
     const output_rel = std.mem.trimStart(u8, if (std.mem.startsWith(u8, output_path, "res://")) output_path["res://".len..] else output_path, "./");
-    const scene_res_path = try std.fmt.allocPrint(cli.allocator, "res://{s}", .{output_rel});
+    const scene_res_path = try cli.allocator.print("res://{s}", .{output_rel});
     const output_fs = if (projectRootFrom(inv)) |root| try std.fs.path.join(cli.allocator, &.{ root, output_rel }) else output_rel;
     if (std.fs.path.dirname(output_fs)) |parent| std.Io.Dir.cwd().createDirPath(cli.io, parent) catch {};
 
@@ -2200,12 +2326,12 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
 
     var messages: std.ArrayList([]const u8) = .empty;
     for (extracted.retargeted_methods) |method| {
-        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "a connection was re-pointed at the new scene's root, which now needs `func {s}()` in a script on {s}; the parent scene is no longer part of that wiring", .{ method, scene_res_path }));
+        try messages.append(cli.allocator, try cli.allocator.print("a connection was re-pointed at the new scene's root, which now needs `func {s}()` in a script on {s}; the parent scene is no longer part of that wiring", .{ method, scene_res_path }));
     }
     for (extracted.dropped_connections) |dropped| {
-        try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "connection {s} crossed the boundary and was dropped; re-create it with scene connection add, which marks the instance editable when the endpoint is a node inside it, or add a signal to the new scene's root and connect the instance itself, which is the shape Godot expects", .{dropped}));
+        try messages.append(cli.allocator, try cli.allocator.print("connection {s} crossed the boundary and was dropped; re-create it with scene connection add, which marks the instance editable when the endpoint is a node inside it, or add a signal to the new scene's root and connect the instance itself, which is the shape Godot expects", .{dropped}));
     }
-    try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{scene_res_path}));
+    try messages.append(cli.allocator, try cli.allocator.print("scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{scene_res_path}));
 
     // Scripts left in the source that reach into the moved subtree by path
     // now cross an instance boundary; list them so the follow-up is a
@@ -2246,9 +2372,9 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
                         var manifest = manifest_const;
                         manifest.deinit(cli.allocator);
                         catalog_registered = true;
-                    } else |err| try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "both scenes were written but the catalog entry {s} could not be updated ({s}); run catalog add --update", .{ id, @errorName(err) }));
+                    } else |err| try messages.append(cli.allocator, try cli.allocator.print("both scenes were written but the catalog entry {s} could not be updated ({s}); run catalog add --update", .{ id, @errorName(err) }));
                 } else {
-                    try messages.append(cli.allocator, try std.fmt.allocPrint(cli.allocator, "both scenes were written but the catalog entry {s} could not be created ({s}); run catalog add", .{ id, @errorName(first_err) }));
+                    try messages.append(cli.allocator, try cli.allocator.print("both scenes were written but the catalog entry {s} could not be created ({s}); run catalog add", .{ id, @errorName(first_err) }));
                 }
             }
         }
@@ -2276,7 +2402,7 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     }
     try data.put(cli.allocator, "written", .{ .array = written });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "moved {d} node(s) from {s} into {s} and instanced it at {s}", .{ extracted.moved_nodes, node_path, output_path, added.path }) });
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.print("moved {d} node(s) from {s} into {s} and instanced it at {s}", .{ extracted.moved_nodes, node_path, output_path, added.path }) });
     return .{ .data = .{ .object = data }, .messages = try messages.toOwnedSlice(cli.allocator) };
 }
 
@@ -2356,7 +2482,7 @@ fn scenePlanHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         try data.put(cli.allocator, "preview_op_count", .{ .integer = @intCast(planned.preview.?.applied_count) });
     }
     try data.put(cli.allocator, "op_count", .{ .integer = @intCast(op_count) });
-    const summary = try std.fmt.allocPrint(cli.allocator, "planned {d} patch op(s)", .{op_count});
+    const summary = try cli.allocator.print("planned {d} patch op(s)", .{op_count});
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -2483,7 +2609,7 @@ fn sceneApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result 
         try data.put(cli.allocator, "preview_diff", .{ .object = diff_map });
     }
     if (preview_sections) |sections| try data.put(cli.allocator, "preview_sections", .{ .array = sections });
-    const summary = try std.fmt.allocPrint(cli.allocator, "applied {d} patch op(s) to {s}", .{ applied.applied_count, output_path });
+    const summary = try cli.allocator.print("applied {d} patch op(s) to {s}", .{ applied.applied_count, output_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -2526,9 +2652,9 @@ fn sceneDiffHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
 
     const total_diffs = diff.nodes.len + diff.properties.len + diff.connections.len + diff.resources.len;
     const summary = if (diff.identical)
-        try std.fmt.allocPrint(cli.allocator, "{s} and {s} are identical", .{ path_a, path_b })
+        try cli.allocator.print("{s} and {s} are identical", .{ path_a, path_b })
     else
-        try std.fmt.allocPrint(cli.allocator, "{d} difference(s) between {s} and {s}", .{ total_diffs, path_a, path_b });
+        try cli.allocator.print("{d} difference(s) between {s} and {s}", .{ total_diffs, path_a, path_b });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -2557,7 +2683,7 @@ fn sceneTemplateListHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     try data.put(cli.allocator, "templates_root", .{ .string = try cli.allocator.dupe(u8, templatesRootFrom(cli, inv)) });
     try data.put(cli.allocator, "count", .{ .integer = @intCast(items.items.len) });
     try data.put(cli.allocator, "templates", .{ .array = items });
-    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "{d} built-in template(s)", .{items.items.len}) });
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.print("{d} built-in template(s)", .{items.items.len}) });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
@@ -2587,7 +2713,7 @@ fn sceneTemplateShowHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     if (inv.flag("content")) {
         try data.put(cli.allocator, "content", .{ .string = try cli.allocator.dupe(u8, bytes) });
     }
-    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "template {s}: {d} node(s), {d} section(s)", .{ template_id, show.node_count, show.section_count }) });
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.print("template {s}: {d} node(s), {d} section(s)", .{ template_id, show.node_count, show.section_count }) });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
@@ -2633,7 +2759,7 @@ fn sceneTemplateCopyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
     try data.put(cli.allocator, "rename_count", .{ .integer = @intCast(renames.len) });
     try data.put(cli.allocator, "property_set_count", .{ .integer = @intCast(property_sets.len) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    try data.put(cli.allocator, "summary", .{ .string = try std.fmt.allocPrint(cli.allocator, "copied template {s} to {s}", .{ template_id, output_path }) });
+    try data.put(cli.allocator, "summary", .{ .string = try cli.allocator.print("copied template {s} to {s}", .{ template_id, output_path }) });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
@@ -2651,7 +2777,7 @@ fn sceneRestoreHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, target_path) });
     try data.put(cli.allocator, "snapshot", .{ .string = try cli.allocator.dupe(u8, snapshot_path) });
     try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
-    const summary = try std.fmt.allocPrint(cli.allocator, "restored {s} from {s}", .{ target_path, snapshot_path });
+    const summary = try cli.allocator.print("restored {s} from {s}", .{ target_path, snapshot_path });
     try data.put(cli.allocator, "summary", .{ .string = summary });
 
     return .{ .data = .{ .object = data }, .messages = &.{} };
@@ -2868,6 +2994,7 @@ pub fn sceneCommands() spec.CommandSpec {
         .{ .long = "root-name", .kind = .string, .description = "Scene root node name (default: Root)" },
         .{ .long = "root-type", .kind = .string, .description = "Scene root node type (default: Node)" },
         .{ .long = "no-uid", .kind = .flag, .description = "Do not stamp a uid=\"uid://...\" on the header" },
+        .{ .long = "script", .kind = .string, .description = "Attach this script to the root: res://scripts/main.gd (or a path relative to the project root). Adds the ext_resource, with its uid when --project-root finds one, and sets script on the root" },
     } ++ withoutOption(&save_options, "output");
     const refs_options = [_]spec.OptionSpec{
         project_root_opt,
@@ -2908,7 +3035,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "new",
                 .summary = "Create a new empty scene file",
-                .description = "Writes a minimal gd_scene with a single root node. Use scene node add to build the tree.",
+                .description = "Writes a minimal gd_scene with a single root node, and with --script a script attached to that root. Use scene node add to build the tree. Result data: path, uid, root_name, root_type, root_path, script and script_ext_id when a script was given, dry_run, summary.",
                 .options = scene_new_options,
                 .handler = sceneNewHandler,
             },
@@ -3217,7 +3344,7 @@ pub fn sceneCommands() spec.CommandSpec {
             .{
                 .name = "compare-godot",
                 .summary = "Compare a scene to a Godot headless save (semantic match)",
-                .description = "Compares the node tree (order, headers, unique_id), each node's properties with ext_resource ids read as the paths they name, the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. Not compared: ext_resource ids, which Godot renumbers; load_steps; and sub_resources, whose default fields Godot drops. On a mismatch, difference names the first one. The Godot save is --reference, or the second positional on the command line; over MCP it is the reference field (saved, its old name, still works). project resave makes one. A match proves Godot writes these properties this way, not that the editor would store these properties: resave loads and saves the scene without building it, so a line the editor would replace (position on a 3D node, saved as transform) survives into the copy and still matches. scene validate warns on those as property_not_stored; run both.",
+                .description = "Compares the node tree (order, headers, unique_id), each node's properties and their values (ext_resource ids read as the paths they name; not their order), the ext_resource paths, and the scene's and each ext_resource's uid wherever both files carry one. On a mismatch, difference names the first one: properties only one side has, or the first value that differs. skipped lists every difference in the parts not compared: an ext_resource id, a uid only one side has, load_steps, a sub_resource's fields, sub_resources in another order (Godot writes each after what it refers to), a node's properties in another order (the editor writes its class order, as godot-cli now does; a file written elsewhere may not), a connection or other section on one side only. A match with an empty skipped means the files agree everywhere; the ids and missing uids are expected against a project resave copy. The Godot save is --reference, or the second positional on the command line; over MCP it is the reference field (saved, its old name, still works). project resave makes one the way the editor saves, so a match also means the editor would store these properties: position on a 3D node fails it, as the editor writes transform.",
                 .options = &compare_godot_options,
                 .handler = sceneCompareGodotHandler,
                 .positionals = &pos.file_and_reference,

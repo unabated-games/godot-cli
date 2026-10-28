@@ -47,7 +47,7 @@ fn normalizePropertyLine(allocator: std.mem.Allocator, raw: []const u8) Error!Ou
 
     if (std.mem.eql(u8, split.value_text, formatted)) return .preserved;
 
-    const line = try std.fmt.allocPrint(allocator, "{s} = {s}", .{ split.name, formatted });
+    const line = try allocator.print("{s} = {s}", .{ split.name, formatted });
     return .{ .rewritten = line };
 }
 

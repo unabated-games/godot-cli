@@ -10,6 +10,7 @@ const document = @import("document.zig");
 const godot_format = @import("godot_format.zig");
 const node_section_order = @import("../node_section_order.zig");
 const tag = @import("tag.zig");
+const property_sort = @import("property_sort.zig");
 
 pub const SaveOptions = struct {
     /// Path used to seed `Resource::seed_scene_unique_id` (typically `res://…` or save target).
@@ -19,6 +20,8 @@ pub const SaveOptions = struct {
     update_load_steps: bool = true,
     assign_node_unique_ids: bool = true,
     sort_node_sections: bool = true,
+    /// Put each section's properties in the order Godot's save writes them.
+    sort_properties: bool = true,
     id_session: ?*id_session.Session = null,
     godot_save_format: bool = false,
 };
@@ -37,6 +40,7 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     if (options.sort_ext_resources) {
         try sortResourceSections(allocator, doc);
         try sortExtResourceSections(allocator, doc);
+        try sortSubResourceSections(allocator, doc);
     }
     if (options.update_load_steps) {
         try updateLoadSteps(allocator, doc);
@@ -47,6 +51,9 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     if (options.sort_node_sections) {
         try node_section_order.sortNodeSections(allocator, doc);
     }
+    if (options.sort_properties) {
+        try property_sort.sortDocument(allocator, doc);
+    }
     if (options.id_session) |session| {
         try recordExtResourceIds(allocator, doc, options.seed_path, session);
     }
@@ -55,23 +62,20 @@ pub fn prepareDocument(allocator: std.mem.Allocator, doc: *document.Document, op
     }
 }
 
+/// ExtResource and SubResource ids are separate namespaces: a file Godot
+/// saved before the `Type_xxxxx` ids routinely has an ext_resource "1" and a
+/// sub_resource "1". With one set for both, every write renamed the second,
+/// and 132 of the 396 scenes in Godot's demo projects changed on a save.
 fn assignSceneIds(allocator: std.mem.Allocator, doc: *document.Document, options: SaveOptions) !void {
-    var used_ids = std.StringHashMap(void).init(allocator);
-    defer {
-        var it = used_ids.keyIterator();
-        while (it.next()) |key| allocator.free(key.*);
-        used_ids.deinit();
-    }
-
-    var remap = std.StringHashMap([]const u8).init(allocator);
-    defer {
-        var it = remap.iterator();
-        while (it.next()) |entry| {
-            allocator.free(entry.key_ptr.*);
-            allocator.free(entry.value_ptr.*);
-        }
-        remap.deinit();
-    }
+    var used_ext = IdSet.init(allocator);
+    defer freeIdSet(allocator, &used_ext);
+    var used_sub = IdSet.init(allocator);
+    defer freeIdSet(allocator, &used_sub);
+    var ext_remap = Remap.init(allocator);
+    defer freeRemap(allocator, &ext_remap);
+    var sub_remap = Remap.init(allocator);
+    defer freeRemap(allocator, &sub_remap);
+    const used_ids = &used_ext;
 
     var ext_index: u32 = 1;
     for (doc.sections.items) |*section| {
@@ -84,7 +88,7 @@ fn assignSceneIds(allocator: std.mem.Allocator, doc: *document.Document, options
         if (options.id_session) |session| {
             if (ext_path) |path| {
                 if (session.getExtId(options.seed_path, path)) |cached| {
-                    if (!used_ids.contains(cached)) cached_id = cached;
+                    if (!used_ext.contains(cached)) cached_id = cached;
                 }
             }
         }
@@ -92,19 +96,19 @@ fn assignSceneIds(allocator: std.mem.Allocator, doc: *document.Document, options
         const new_id = if (cached_id) |cached|
             try allocator.dupe(u8, cached)
         else
-            try resolveExtResourceId(allocator, existing, ext_index, &used_ids);
+            try resolveExtResourceId(allocator, existing, ext_index, used_ids);
         defer allocator.free(new_id);
         ext_index += 1;
 
         if (existing) |old_id| {
             if (!std.mem.eql(u8, old_id, new_id)) {
-                try putRemap(allocator, &remap, old_id, new_id);
+                try putRemap(allocator, &ext_remap, old_id, new_id);
             }
         }
 
         try section.header.setStringField(allocator, "id", new_id);
         const owned = try allocator.dupe(u8, new_id);
-        const gop = try used_ids.getOrPut(owned);
+        const gop = try used_ext.getOrPut(owned);
         if (gop.found_existing) allocator.free(owned);
     }
 
@@ -113,24 +117,42 @@ fn assignSceneIds(allocator: std.mem.Allocator, doc: *document.Document, options
 
         const type_name = section.header.getString("type") orelse "Resource";
         const existing = section.header.getString("id");
-        const new_id = try resolveSubResourceId(allocator, type_name, existing, &used_ids);
+        const new_id = try resolveSubResourceId(allocator, type_name, existing, &used_sub);
         defer allocator.free(new_id);
 
         if (existing) |old_id| {
             if (!std.mem.eql(u8, old_id, new_id)) {
-                try putRemap(allocator, &remap, old_id, new_id);
+                try putRemap(allocator, &sub_remap, old_id, new_id);
             }
         }
 
         try section.header.setStringField(allocator, "id", new_id);
         const owned = try allocator.dupe(u8, new_id);
-        const gop = try used_ids.getOrPut(owned);
+        const gop = try used_sub.getOrPut(owned);
         if (gop.found_existing) allocator.free(owned);
     }
 
-    if (remap.count() > 0) {
-        try applyIdRemap(allocator, doc, &remap);
+    if (ext_remap.count() > 0 or sub_remap.count() > 0) {
+        try applyIdRemap(allocator, doc, &ext_remap, &sub_remap);
     }
+}
+
+const IdSet = std.StringHashMap(void);
+const Remap = std.StringHashMap([]const u8);
+
+fn freeIdSet(allocator: std.mem.Allocator, set: *IdSet) void {
+    var it = set.keyIterator();
+    while (it.next()) |key| allocator.free(key.*);
+    set.deinit();
+}
+
+fn freeRemap(allocator: std.mem.Allocator, remap: *Remap) void {
+    var it = remap.iterator();
+    while (it.next()) |entry| {
+        allocator.free(entry.key_ptr.*);
+        allocator.free(entry.value_ptr.*);
+    }
+    remap.deinit();
 }
 
 fn putRemap(allocator: std.mem.Allocator, remap: *std.StringHashMap([]const u8), old_id: []const u8, new_id: []const u8) !void {
@@ -155,11 +177,11 @@ fn resolveExtResourceId(
 ) ![]u8 {
     if (existing) |id| {
         if (!used.contains(id)) return try allocator.dupe(u8, id);
-        const prefix = idPrefix(id) orelse try std.fmt.allocPrint(allocator, "{d}_", .{index});
+        const prefix = idPrefix(id) orelse try allocator.print("{d}_", .{index});
         defer if (idPrefix(id) == null) allocator.free(prefix);
         return generateUniqueId(allocator, prefix, used);
     }
-    const prefix = try std.fmt.allocPrint(allocator, "{d}_", .{index});
+    const prefix = try allocator.print("{d}_", .{index});
     defer allocator.free(prefix);
     return generateUniqueId(allocator, prefix, used);
 }
@@ -172,11 +194,11 @@ fn resolveSubResourceId(
 ) ![]u8 {
     if (existing) |id| {
         if (!used.contains(id)) return try allocator.dupe(u8, id);
-        const prefix = idPrefix(id) orelse try std.fmt.allocPrint(allocator, "{s}_", .{type_name});
+        const prefix = idPrefix(id) orelse try allocator.print("{s}_", .{type_name});
         defer if (idPrefix(id) == null) allocator.free(prefix);
         return generateUniqueId(allocator, prefix, used);
     }
-    const prefix = try std.fmt.allocPrint(allocator, "{s}_", .{type_name});
+    const prefix = try allocator.print("{s}_", .{type_name});
     defer allocator.free(prefix);
     return generateUniqueId(allocator, prefix, used);
 }
@@ -189,16 +211,30 @@ fn idPrefix(id: []const u8) ?[]const u8 {
 fn generateUniqueId(allocator: std.mem.Allocator, prefix: []const u8, used: *std.StringHashMap(void)) ![]u8 {
     while (true) {
         const suffix = try scene_id.generateSceneUniqueId();
-        const id = try std.fmt.allocPrint(allocator, "{s}{s}", .{ prefix, &suffix });
+        const id = try allocator.print("{s}{s}", .{ prefix, &suffix });
         if (!used.contains(id)) return id;
         allocator.free(id);
     }
 }
 
-fn applyIdRemap(allocator: std.mem.Allocator, doc: *document.Document, remap: *const std.StringHashMap([]const u8)) !void {
+fn applyIdRemap(allocator: std.mem.Allocator, doc: *document.Document, ext_remap: *const Remap, sub_remap: *const Remap) !void {
     const patterns = [_][]const u8{ "ExtResource(\"", "SubResource(\"" };
 
     for (doc.sections.items) |*section| {
+        // A node's `instance=ExtResource("...")` names an ext_resource too.
+        if (section.header.getRaw("instance")) |instance| {
+            const prefix = "ExtResource(\"";
+            if (std.mem.startsWith(u8, instance, prefix)) {
+                const rest = instance[prefix.len..];
+                if (std.mem.indexOfScalar(u8, rest, '"')) |end| {
+                    if (ext_remap.get(rest[0..end])) |new_id| {
+                        const text = try allocator.print("ExtResource(\"{s}\")", .{new_id});
+                        defer allocator.free(text);
+                        try section.header.setRawField(allocator, "instance", text);
+                    }
+                }
+            }
+        }
         for (section.properties.items, 0..) |prop, prop_index| {
             var changed = false;
             var out: std.ArrayList(u8) = .empty;
@@ -223,6 +259,7 @@ fn applyIdRemap(allocator: std.mem.Allocator, doc: *document.Document, remap: *c
                 const old_id = prop.raw[id_start..id_end];
 
                 try out.appendSlice(allocator, prop.raw[match.start..id_start]);
+                const remap = if (std.mem.eql(u8, match.prefix, patterns[0])) ext_remap else sub_remap;
                 if (remap.get(old_id)) |new_id| {
                     try out.appendSlice(allocator, new_id);
                     changed = true;
@@ -306,6 +343,84 @@ fn sortResourceSections(allocator: std.mem.Allocator, doc: *document.Document) !
     }
     doc.sections.deinit(allocator);
     doc.sections = reordered;
+}
+
+/// Put sub_resources in the order Godot's save reaches them: walking the
+/// nodes in file order (or a .tres's [resource]), each node's properties in
+/// order and each resource's sorted by name, a sub_resource is written after
+/// the sub_resources it refers to.
+/// godot-cli kept the order they were added, so a material added before a
+/// second mesh sat where Godot's save does not put it (trial 46). One no
+/// section refers to stays where it was, after the rest.
+fn sortSubResourceSections(allocator: std.mem.Allocator, doc: *document.Document) !void {
+    var slots: std.ArrayList(usize) = .empty;
+    defer slots.deinit(allocator);
+    var by_id: std.StringHashMapUnmanaged(usize) = .empty;
+    defer by_id.deinit(allocator);
+    for (doc.sections.items, 0..) |section, index| {
+        if (!std.mem.eql(u8, section.header.name, "sub_resource")) continue;
+        try slots.append(allocator, index);
+        if (section.header.getString("id")) |id| try by_id.put(allocator, id, index);
+    }
+    if (slots.items.len < 2) return;
+
+    var order: std.ArrayList(usize) = .empty;
+    defer order.deinit(allocator);
+    var visited: std.AutoHashMapUnmanaged(usize, void) = .empty;
+    defer visited.deinit(allocator);
+    for (doc.sections.items) |*section| {
+        const name = section.header.name;
+        if (!std.mem.eql(u8, name, "node") and !std.mem.eql(u8, name, "resource")) continue;
+        try visitSubReferences(allocator, doc, section, &by_id, &visited, &order);
+    }
+    for (slots.items) |index| {
+        if (!visited.contains(index)) try order.append(allocator, index);
+    }
+    if (std.mem.eql(usize, order.items, slots.items)) return;
+
+    var moved = try allocator.alloc(document.Section, order.items.len);
+    defer allocator.free(moved);
+    for (order.items, 0..) |index, i| moved[i] = doc.sections.items[index];
+    for (slots.items, 0..) |slot, i| doc.sections.items[slot] = moved[i];
+}
+
+fn visitSubReferences(
+    allocator: std.mem.Allocator,
+    doc: *const document.Document,
+    section: *const document.Section,
+    by_id: *const std.StringHashMapUnmanaged(usize),
+    visited: *std.AutoHashMapUnmanaged(usize, void),
+    order: *std.ArrayList(usize),
+) !void {
+    const prefix = "SubResource(\"";
+    // Inside a resource Godot walks the properties sorted by name
+    // (ResourceFormatSaverTextInstance::_find_resources sorts the list); a
+    // node's come in the order the scene packs them, which is file order.
+    const props = try allocator.dupe(document.PropertyLine, section.properties.items);
+    defer allocator.free(props);
+    if (!std.mem.eql(u8, section.header.name, "node")) {
+        std.mem.sort(document.PropertyLine, props, {}, struct {
+            fn less(_: void, a: document.PropertyLine, b: document.PropertyLine) bool {
+                return std.mem.lessThan(u8, keyOf(a.raw), keyOf(b.raw));
+            }
+            fn keyOf(raw: []const u8) []const u8 {
+                return raw[0 .. std.mem.indexOf(u8, raw, " = ") orelse raw.len];
+            }
+        }.less);
+    }
+    for (props) |prop| {
+        var cursor: usize = 0;
+        while (std.mem.indexOfPos(u8, prop.raw, cursor, prefix)) |at| {
+            const start = at + prefix.len;
+            const end = std.mem.indexOfScalarPos(u8, prop.raw, start, '"') orelse break;
+            cursor = end;
+            const index = by_id.get(prop.raw[start..end]) orelse continue;
+            if (visited.contains(index)) continue;
+            try visited.put(allocator, index, {});
+            try visitSubReferences(allocator, doc, &doc.sections.items[index], by_id, visited, order);
+            try order.append(allocator, index);
+        }
+    }
 }
 
 fn sortExtResourceSections(allocator: std.mem.Allocator, doc: *document.Document) !void {
@@ -439,6 +554,16 @@ fn assignNodeUniqueIds(allocator: std.mem.Allocator, doc: *document.Document, se
 
     for (doc.sections.items, 0..) |section, index| {
         if (!std.mem.eql(u8, section.header.name, "node")) continue;
+
+        // An override of a node inside an instance keeps the id that node
+        // has in its own scene, repeated across copies, and one it lacks is
+        // not this file's to invent.
+        if (id_validate.isInstanceOverride(&section.header)) {
+            if (section.header.getInteger("unique_id")) |unique_id| {
+                if (id_validate.validateNodeUniqueId(unique_id) == null) try used.put(@intCast(unique_id), {});
+            }
+            continue;
+        }
 
         if (section.header.getInteger("unique_id")) |unique_id| {
             if (id_validate.validateNodeUniqueId(unique_id) == null) {
@@ -581,4 +706,67 @@ test "remaps property references when duplicate ext id is repaired" {
     const first = doc.sections.items[1].header.getString("id").?;
     const second = doc.sections.items[2].header.getString("id").?;
     try std.testing.expect(!std.mem.eql(u8, first, second));
+}
+
+test "a scene Godot saved comes back from a save byte for byte" {
+    // The shapes Godot's demo projects showed a save mangling or crashing on:
+    // a multi-line text with blank, indented and `[`-led lines; an
+    // ext_resource and a sub_resource both "1"; two copies of an instance
+    // whose overrides repeat one unique_id; a node parented inside an
+    // instance; groups; consecutive [editable] lines.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const writer = @import("writer.zig");
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test_fixtures/godot_saved/legacy_ids_and_overrides.tscn", allocator, .unlimited);
+
+    var doc = try document.parseBytes(allocator, bytes);
+    try std.testing.expectEqualStrings(bytes, try writer.writeDocument(allocator, &doc));
+
+    try prepareDocument(allocator, &doc, .{ .seed_path = "res://legacy.tscn" });
+    try std.testing.expectEqualStrings(bytes, try writer.writeDocument(allocator, &doc));
+
+    const report = try id_validate.validateDocument(allocator, &doc, .{});
+    for (report.issues.items) |issue| {
+        std.debug.print("unexpected issue: {s}: {s}\n", .{ issue.kind, issue.message });
+    }
+    try std.testing.expectEqual(@as(usize, 0), report.issues.items.len);
+}
+
+test "sub_resources go in the order Godot's save reaches them" {
+    // From Godot's soft_body_physics demo: inside a resource the save walks
+    // properties sorted by name, so color_ramp's Gradient precedes noise's
+    // FastNoiseLite; each resource follows what it refers to.
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    const writer = @import("writer.zig");
+    var doc = try document.parseBytes(allocator,
+        \\[gd_scene format=3]
+        \\
+        \\[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_m"]
+        \\albedo_texture = SubResource("NoiseTexture2D_t")
+        \\
+        \\[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_t"]
+        \\noise = SubResource("FastNoiseLite_n")
+        \\color_ramp = SubResource("Gradient_g")
+        \\
+        \\[sub_resource type="FastNoiseLite" id="FastNoiseLite_n"]
+        \\
+        \\[sub_resource type="Gradient" id="Gradient_g"]
+        \\
+        \\[sub_resource type="BoxMesh" id="BoxMesh_unused"]
+        \\
+        \\[node name="Body" type="MeshInstance3D" unique_id=1]
+        \\material_override = SubResource("StandardMaterial3D_m")
+        \\
+    );
+    try sortSubResourceSections(allocator, &doc);
+    const text = try writer.writeDocument(allocator, &doc);
+    const g = std.mem.indexOf(u8, text, "Gradient_g\"]").?;
+    const n = std.mem.indexOf(u8, text, "FastNoiseLite_n\"]").?;
+    const t = std.mem.indexOf(u8, text, "NoiseTexture2D_t\"]").?;
+    const m = std.mem.indexOf(u8, text, "StandardMaterial3D_m\"]").?;
+    const unused = std.mem.indexOf(u8, text, "BoxMesh_unused\"]").?;
+    try std.testing.expect(g < n and n < t and t < m and m < unused);
 }

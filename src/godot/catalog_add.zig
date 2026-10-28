@@ -106,7 +106,7 @@ pub fn defaultManifestPath(allocator: std.mem.Allocator, scene_fs_path: []const 
     if (std.mem.lastIndexOfScalar(u8, stem, '.')) |dot| {
         if (std.ascii.eqlIgnoreCase(stem[dot..], ".tscn")) stem = stem[0..dot];
     }
-    return std.fmt.allocPrint(allocator, "{s}{s}", .{ stem, catalog_scan.manifest_json_suffix });
+    return allocator.print("{s}{s}", .{ stem, catalog_scan.manifest_json_suffix });
 }
 
 const ExistingProse = struct {
@@ -155,7 +155,7 @@ fn normalizeScenePath(allocator: std.mem.Allocator, project_root: []const u8, sc
     while (std.mem.startsWith(u8, rel, "./")) rel = rel[2..];
     while (std.mem.startsWith(u8, rel, "/")) rel = rel[1..];
     if (rel.len == 0 or std.mem.startsWith(u8, rel, "..")) return error.InvalidScenePath;
-    return try std.fmt.allocPrint(allocator, "res://{s}", .{rel});
+    return try allocator.print("res://{s}", .{rel});
 }
 
 pub fn addManifest(
@@ -338,7 +338,7 @@ fn appendFmt(
     comptime fmt: []const u8,
     args: anytype,
 ) Error!void {
-    const text = try std.fmt.allocPrint(allocator, fmt, args);
+    const text = try allocator.print(fmt, args);
     defer allocator.free(text);
     try out.appendSlice(allocator, text);
 }
