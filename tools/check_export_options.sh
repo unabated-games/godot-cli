@@ -42,7 +42,7 @@ zig fmt "$work/regen.zig" >/dev/null
 # fewer choices for a few options (no App Store, no Xcode tools, a different
 # default codesign tool, and no choice list at all for some), so those options
 # are left out of the comparison there.
-host_only='"export/distribution_type"\|"codesign/codesign"\|"notarization/notarization"\|"application/icon_interpolation"\|"application/export_angle"'
+host_only='"export/distribution_type"\|"codesign/codesign"\|"notarization/notarization"\|"application/icon_interpolation"\|"application/export_angle"\|"application/export_d3d12"'
 strip() {
   if [ "$(uname -s)" = Darwin ]; then
     grep -v 'godot_version = \|^//!' "$1"
