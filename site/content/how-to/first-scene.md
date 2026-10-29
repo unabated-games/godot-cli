@@ -58,7 +58,14 @@ Ids are generated the way Godot generates them. To get a predictable one, use a 
 
 ## External files
 
-Scripts, textures, and other scenes are `ext_resource` entries. `scene ext add` registers one, but the usual case is registering and assigning in a single step, which the `assign_ext` patch op does:
+Scripts, textures, and other scenes are `ext_resource` entries. A script on a new scene's root can be attached as the scene is made:
+
+```bash
+godot-cli scene new --output scenes/main.tscn --root-name Main --root-type Node2D \
+  --script scripts/main.gd --project-root .
+```
+
+`scene ext add` registers one, but the usual case is registering and assigning in a single step, which the `assign_ext` patch op does:
 
 ```json
 {

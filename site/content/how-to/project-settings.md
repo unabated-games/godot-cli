@@ -33,7 +33,7 @@ godot-cli project settings list --project-root . --json
 godot-cli project settings get --project-root . --section application --key config/name --json
 ```
 
-Strings are quoted for you. Pass `--raw` when the value is already Godot-formatted, such as a `Vector2(...)` or a boolean.
+A number, `true` or `false`, and Godot's own text for a value, such as `Vector2i(640, 360)` or `PackedStringArray("4.8", "Mobile")`, are written as they are. Anything else is quoted as a string, as `res://main.tscn` is above. `--raw` stores the text exactly as given.
 
 `project settings validate --project-root .` checks that `res://` paths in settings point at files that exist, which catches a main scene that was renamed.
 
@@ -57,7 +57,10 @@ Input actions are the fiddliest part of the file, so they are described as an in
 
 ```bash
 godot-cli project input apply --project-root . --intent input.json --json
+godot-cli project input list --project-root . --json
 ```
+
+Both say what each binding is in words, so a binding can be checked without reading `Object(...)` text: `"A (physical)"`, `"Ctrl+S (physical)"`, `"mouse left"`, `"joypad a (south)"`, `"joypad left_x -1.0"`, with `"(device 0)"` when it is pinned to one controller. `apply` returns them under `actions` on a `--dry-run` too, before anything is written.
 
 ```
 applied 4 input action(s) (4 added, 0 replaced)

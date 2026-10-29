@@ -118,11 +118,13 @@ that costs a debugging session is a value of the wrong type:
       frame shows the damage
 ```
 
-Property types and signal names come from a table generated out of Godot's own
-`doc/classes` XML (716 classes, 4422 properties, 397 signals), so `pressd` for
-`pressed` is caught before the run, not during it. The checks stay quiet about
-anything the table does not cover: theme overrides, `metadata/*`, a script's
-exported variables, and connections from a scripted node.
+Property types, signal names and method names come from a table generated out
+of Godot's own `doc/classes` XML (718 classes, 4422 properties, 399 signals,
+4350 methods), so `pressd` for `pressed` is caught before the run, not during
+it. With `--project-root`, a scripted node's scripts are read too, along with
+the scripts they extend, so a connection to `_on_sitt` where the script defines
+`_on_sit` is caught as well. The checks stay quiet about anything they cannot
+read: theme overrides, `metadata/*`, and a script's exported variables.
 
 ## It knows what you have already built
 
@@ -152,7 +154,7 @@ Godot's own controls are in the catalog too, marked as documentation only, so an
 
 An agent gets the whole loop, not just the writes: author with one call, check
 with `scene validate`, then run the game and read the frame and the log. It can
-also work on a project that already exists — `scene extract` pulls a subtree
+also work on a project that already exists: `scene extract` pulls a subtree
 into its own scene the way *Save Branch as Scene* does, and `project move`
 relocates a file while rewriting every `res://` reference to it.
 
