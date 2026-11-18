@@ -123,8 +123,10 @@ of Godot's own `doc/classes` XML (718 classes, 4422 properties, 399 signals,
 4350 methods), so `pressd` for `pressed` is caught before the run, not during
 it. With `--project-root`, a scripted node's scripts are read too, along with
 the scripts they extend, so a connection to `_on_sitt` where the script defines
-`_on_sit` is caught as well. The checks stay quiet about anything they cannot
-read: theme overrides, `metadata/*`, and a script's exported variables.
+`_on_sit` is caught as well, and so is `max_helth = 50` on a node whose script
+declares `max_health`, or a theme override the class has no item for. The
+checks stay quiet about anything they cannot read: `metadata/*`, C# scripts,
+and a script that answers properties itself.
 
 ## It knows what you have already built
 

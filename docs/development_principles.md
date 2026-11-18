@@ -41,7 +41,7 @@ Use runtime `instantiate()` only when the **game** must create entities dynamica
 
 Scripts under `test_fixtures/project/*.gd` (e.g. `save_rich_fixtures.gd`) run Godot headless to **generate reference saves for CLI tests**. That is test infrastructure — not the workflow agents or game code should follow. Hand-authored or godot-cli-produced `.tscn` files are the references; Godot runtime packing is only used to produce golden files when needed.
 
-See also [ABOUT.md — North star](ABOUT.md#north-star-editor-like-scene-authoring) and [scene_authoring_roadmap.md](scene_authoring_roadmap.md).
+See also [ABOUT.md — North star](ABOUT.md#north-star-editor-like-scene-authoring) and [scene_authoring_roadmap.md](history/scene_authoring_roadmap.md).
 
 ---
 

@@ -1,6 +1,8 @@
 # Mini roadmap (post Phase 6)
 
-Context: Phases 1–6 in [id_generation_plan.md](id_generation_plan.md) are complete. The Variant type system lives under `src/godot/variant/` and is wired into `scene set-property`, `resource set-property`, `inspect` (JSON), and `normalize --normalize-properties`.
+> **Finished, and kept for the record.** Every item here has shipped, and some of what it says has since changed: the MCP server shipped in 0.8.0, and CI runs on every push. Open work is in [BACKLOG.md](../BACKLOG.md); what shipped is in the [changelog](../../CHANGELOG.md).
+
+Context: Phases 1–6 in [id_generation_plan.md](../id_generation_plan.md) are complete. The Variant type system lives under `src/godot/variant/` and is wired into `scene set-property`, `resource set-property`, `inspect` (JSON), and `normalize --normalize-properties`.
 
 This roadmap is ordered by priority for MCP/LLM agent use. Implement one item at a time; each should ship with tests and CLI JSON output.
 
@@ -17,7 +19,7 @@ This roadmap is ordered by priority for MCP/LLM agent use. Implement one item at
 | 5 | Fixture and CI hardening | **done** | `test_fixtures/project/rich_variants.tscn`, `.github/workflows/ci.yml` |
 | 6 | Thin MCP server | **deferred** | CLI-first; see [scene_authoring_roadmap.md](scene_authoring_roadmap.md) |
 | 7 | Scene authoring (LLM) | **done** | Phases A–H in [scene_authoring_roadmap.md](scene_authoring_roadmap.md) |
-| 8 | Batch CLI + Phase I polish | **done** | [agent_batch_commands.md](agent_batch_commands.md), `godot-cli batch` |
+| 8 | Batch CLI + Phase I polish | **done** | [agent_batch_commands.md](../agent_batch_commands.md), `godot-cli batch` |
 
 **Start next session at scene authoring Phase I extensions** or MCP if needed ([roadmap](scene_authoring_roadmap.md)).
 
@@ -123,7 +125,7 @@ godot-cli scene node get path/to/main.tscn /root/Player --json
 - Build paths from `parent` attribute: `"."` = section's local name under root; `"Parent/Child"` style as in Godot saves.
 - `node get`: filter by path or by `--node-name` + optional parent.
 - Register commands in `src/commands.zig` under `scene` → `node` → `list` / `get`.
-- Follow [development_principles.md](development_principles.md) (handler returns `Result`, `--json` envelope).
+- Follow [development_principles.md](../development_principles.md) (handler returns `Result`, `--json` envelope).
 - Tests: `test_fixtures/project/sample.tscn` — expect Root + Collision nodes.
 
 ### Done when
@@ -218,7 +220,7 @@ Each form has parse + format tests derived from Godot-saved fixture strings.
 
 ## 6. Thin MCP server (optional) — **deferred**
 
-CLI + `--json` / `--request` is sufficient for agents; revisit only if a client requires MCP registration. See [ABOUT.md](ABOUT.md).
+CLI + `--json` / `--request` is sufficient for agents; revisit only if a client requires MCP registration. See [ABOUT.md](../ABOUT.md).
 
 ---
 
@@ -226,13 +228,13 @@ CLI + `--json` / `--request` is sufficient for agents; revisit only if a client 
 
 Full plan: **[scene_authoring_roadmap.md](scene_authoring_roadmap.md)** (Phases A–I)
 
-Batch workflows: **[agent_batch_commands.md](agent_batch_commands.md)**
+Batch workflows: **[agent_batch_commands.md](../agent_batch_commands.md)**
 
 ---
 
 ## 8. Batch CLI (multi-step agent workflows) — **done**
 
-`godot-cli batch --file workflow.json` runs multiple subcommands in one invocation with `stop` / `continue` / `atomic` failure modes. See [agent_batch_commands.md](agent_batch_commands.md).
+`godot-cli batch --file workflow.json` runs multiple subcommands in one invocation with `stop` / `continue` / `atomic` failure modes. See [agent_batch_commands.md](../agent_batch_commands.md).
 
 ---
 
@@ -250,11 +252,11 @@ Batch workflows: **[agent_batch_commands.md](agent_batch_commands.md)**
 
 | Doc / path | Purpose |
 |------------|---------|
-| [id_generation_plan.md](id_generation_plan.md) | Completed phases 1–6 |
-| [development_principles.md](development_principles.md) | CLI/JSON contracts |
-| [ABOUT.md](ABOUT.md) | Project overview |
+| [id_generation_plan.md](../id_generation_plan.md) | Completed phases 1–6 |
+| [development_principles.md](../development_principles.md) | CLI/JSON contracts |
+| [ABOUT.md](../ABOUT.md) | Project overview |
 | [scene_authoring_roadmap.md](scene_authoring_roadmap.md) | LLM scene authoring plan |
-| [mcp_tools.json](mcp_tools.json) | JSON request shapes for every command |
+| [mcp_tools.json](../mcp_tools.json) | JSON request shapes for every command |
 | `src/godot/variant/` | Variant parse/format |
 | `src/godot/text_format/document.zig` | Scene document model |
 | `src/commands/scene.zig` | Inspect, set-property, normalize handlers |

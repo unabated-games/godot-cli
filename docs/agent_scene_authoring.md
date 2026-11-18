@@ -653,7 +653,7 @@ Every `properties` value, `node_set` value, and `instance_override` value is God
                "hint": "not valid Variant text; for a string write \"\\\"Paused\\\"\"" } } }
 ```
 
-`scene validate` checks the value against the property's type on the node's class, so `visible = Vector2(1, 2)` or `text = 5` is an error (`property_type_mismatch`) rather than something Godot silently coerces and only the frame reveals. It checks connections the same way: a signal the emitter's class does not emit is `unknown_signal`. Both are conservative — a class or property the table does not carry (a `theme_override_*` entry, `metadata/*`, a script's exports) and a connection from a scripted node are left alone, so a correct scene is never flagged.
+`scene validate` checks the value against the property's type on the node's class, so `visible = Vector2(1, 2)` or `text = 5` is an error (`property_type_mismatch`) rather than something Godot silently coerces and only the frame reveals. It checks connections the same way: a signal the emitter's class does not emit is `unknown_signal`. With `--project-root` it also reads a scripted node's script (and the scripts it extends) and an instanced scene's root, so a misspelled export is `unknown_property`, and a theme override the class has no item for is `unknown_theme_override`; each suggests the name meant. All of these are conservative: a class the table does not carry, `metadata/*`, and a script it cannot read (C#, one with `_set` or `_get_property_list`) are left alone, so a correct scene is never flagged.
 
 Place a 3D node with `transform`: `"transform": "Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)"` puts it at (6, 0, 0). The first nine numbers are the basis row by row, so the first three are its first row, and the last three are the position; that is the order Godot writes (`m3.rows[i][j]` in `variant_parser.cpp`), and it matters as soon as the node is rotated. The `camera_3d` and `place_3d` recipes work the matrix out for you: give `position` and `look_at` as points (`[x, y, z]` or `"Vector3(x, y, z)"`), and the node's -Z faces the point, as `Node3D.look_at` turns it. A 3D node never saves `position`, `rotation` or `scale`: Godot loads them, then writes `transform` in their place on its next save, so `scene validate` warns `property_not_stored` for them. A `Node2D` is the other way round: it stores `position`, `rotation` and `scale`, and no `transform`.
 
@@ -947,6 +947,6 @@ Runtime `instantiate()` **is** correct for gameplay systems that spawn entities 
 |-----|---------|
 | [ABOUT.md](ABOUT.md) | Project overview and north star |
 | [development_principles.md](development_principles.md) | JSON envelope, scene philosophy |
-| [scene_authoring_roadmap.md](scene_authoring_roadmap.md) | Implementation phases |
+| [scene_authoring_roadmap.md](history/scene_authoring_roadmap.md) | Implementation phases |
 | [catalog_design.md](catalog_design.md) | Manifests and builtins |
 | [mcp_tools.json](mcp_tools.json) | Machine-readable command catalog |

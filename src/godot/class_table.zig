@@ -4924,7 +4924,7 @@ pub const classes = [_]Class{
         .methods = &.{ "add_point", "clear_points", "get_point_count", "get_point_position", "remove_point", "set_point_position" },
     },
     .{
-        .name = "Line3D",
+        .name = "LineBase3D",
         .inherits = "GeometryInstance3D",
         .properties = &.{},
         .signals = &.{},
@@ -8199,7 +8199,7 @@ pub const classes = [_]Class{
     },
     .{
         .name = "Trail3D",
-        .inherits = "Line3D",
+        .inherits = "LineBase3D",
         .properties = &.{
             .{ .name = "color", .type_name = "Color", .kinds = &.{"color"} },
             .{ .name = "color_gradient", .type_name = "Gradient", .kinds = &.{ "ext_resource", "sub_resource", "resource", "null" } },

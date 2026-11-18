@@ -264,6 +264,8 @@ fn noteWriteIssues(cli: *const app_mod.App, inv: *const spec.Invocation, output_
     const after = try std.mem.concat(cli.allocator, id_validate.WriteNote, &.{
         try id_validate.unstoredPlacements(cli.allocator, doc),
         try id_validate.unknownConnectionMethods(cli.allocator, doc, ctx),
+        try id_validate.unknownScriptProperties(cli.allocator, doc, ctx),
+        try id_validate.unknownThemeOverrides(cli.allocator, doc, ctx),
     });
     if (after.len == 0) return;
     const before: []const id_validate.WriteNote = blk: {
@@ -271,6 +273,8 @@ fn noteWriteIssues(cli: *const app_mod.App, inv: *const spec.Invocation, output_
         break :blk try std.mem.concat(cli.allocator, id_validate.WriteNote, &.{
             try id_validate.unstoredPlacements(cli.allocator, &on_disk),
             try id_validate.unknownConnectionMethods(cli.allocator, &on_disk, ctx),
+            try id_validate.unknownScriptProperties(cli.allocator, &on_disk, ctx),
+            try id_validate.unknownThemeOverrides(cli.allocator, &on_disk, ctx),
         });
     };
     for (after) |note| {
@@ -2220,10 +2224,43 @@ fn scriptReferencesToNode(cli: *const app_mod.App, root: []const u8, doc: *const
     return out.items;
 }
 
-fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8) ![]const []const u8 {
+/// Script lines that reach below the extracted node: `$HUD/Label`,
+/// `get_node("HUD/Label")`, or `%Label` for a unique node that moved with
+/// it. A line naming the extracted node itself (`$StartButton.hide()`) is
+/// left out: the instance keeps that path, so it resolves as before. Trial
+/// 47 was told two such lines now crossed a boundary.
+fn scriptReferencesInto(cli: *const app_mod.App, root: []const u8, doc: *const text_format.document.Document, node_path: []const u8, moved: *const text_format.document.Document) ![]const []const u8 {
     var out: std.ArrayList([]const u8) = .empty;
-    for (try scriptReferencesToNode(cli, root, doc, node_path, true)) |hit| {
-        try out.append(cli.allocator, try cli.allocator.print("{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ hit.res_path, hit.line_no, hit.text }));
+    const root_prefix_end = (std.mem.indexOfScalarPos(u8, node_path, "/root/".len, '/') orelse return out.items) + 1;
+    const rel = node_path[root_prefix_end..];
+    const dollar = try cli.allocator.print("${s}/", .{rel});
+    const quoted = try cli.allocator.print("\"{s}/", .{rel});
+    // Unique names below the moved root: `%Name` reached them from anywhere
+    // in the old scene, and reaches nothing now.
+    var uniques: std.ArrayList([]const u8) = .empty;
+    for (moved.sections.items, 0..) |section, index| {
+        if (!std.mem.eql(u8, section.header.name, "node") or section.header.getString("parent") == null) continue;
+        for (section.properties.items) |line| {
+            if (!std.mem.startsWith(u8, line.raw, "unique_name_in_owner = true")) continue;
+            const name = moved.sections.items[index].header.getString("name") orelse continue;
+            try uniques.append(cli.allocator, try cli.allocator.print("%{s}", .{name}));
+        }
+    }
+    for (doc.sections.items) |section| {
+        if (!std.mem.eql(u8, section.header.name, "ext_resource")) continue;
+        if (!std.mem.eql(u8, section.header.getString("type") orelse continue, "Script")) continue;
+        const res_path = section.header.getString("path") orelse continue;
+        const fs_path = (project_config.resPathToFilesystem(cli.allocator, root, res_path) catch null) orelse continue;
+        const text = std.Io.Dir.cwd().readFileAlloc(cli.io, fs_path, cli.allocator, .limited(4 * 1024 * 1024)) catch continue;
+        var line_no: usize = 0;
+        var lines = std.mem.splitScalar(u8, text, '\n');
+        while (lines.next()) |line| {
+            line_no += 1;
+            var hit = std.mem.indexOf(u8, line, dollar) != null or std.mem.indexOf(u8, line, quoted) != null;
+            for (uniques.items) |unique| hit = hit or namesNode(line, unique);
+            if (!hit) continue;
+            try out.append(cli.allocator, try cli.allocator.print("{s}:{d} reaches into the extracted subtree ({s}); it now crosses an instance boundary", .{ res_path, line_no, std.mem.trim(u8, line, " \t\r") }));
+        }
     }
     return out.items;
 }
@@ -2291,6 +2328,10 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
 
     var doc = try text_format.document.parseFile(cli.allocator, cli.io, input_path);
     defer doc.deinit(cli.allocator);
+    // Where the node sat among its siblings, so the instance goes back in its
+    // place, as Save Branch as Scene leaves it; trial 47 found it appended
+    // last and spent a `scene node move` putting it back.
+    const original_index = scene_edit.childIndexOf(cli.allocator, &doc, node_path) catch null;
 
     var extracted = scene_extract.extractSubtreeWithOptions(cli.allocator, &doc, node_path, .{
         .retarget_dropped = inv.flag("retarget-dropped-connections"),
@@ -2323,6 +2364,9 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     // that by hand).
     var added = try scene_instance.addPackedSceneInstance(cli.allocator, &doc, seed_path, extracted.parent_path, extracted.name, scene_res_path, uid_text, inv.flag("editable"));
     defer added.deinit(cli.allocator);
+    if (original_index) |index| {
+        _ = scene_edit.moveNode(cli.allocator, &doc, node_path, @intCast(index)) catch {};
+    }
 
     var messages: std.ArrayList([]const u8) = .empty;
     for (extracted.retargeted_methods) |method| {
@@ -2331,14 +2375,16 @@ fn sceneExtractHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     for (extracted.dropped_connections) |dropped| {
         try messages.append(cli.allocator, try cli.allocator.print("connection {s} crossed the boundary and was dropped; re-create it with scene connection add, which marks the instance editable when the endpoint is a node inside it, or add a signal to the new scene's root and connect the instance itself, which is the shape Godot expects", .{dropped}));
     }
-    try messages.append(cli.allocator, try cli.allocator.print("scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{scene_res_path}));
-
     // Scripts left in the source that reach into the moved subtree by path
     // now cross an instance boundary; list them so the follow-up is a
-    // checklist rather than a hunt.
+    // checklist rather than a hunt. Without a project root they cannot be
+    // read, so the general warning stands in.
     if (projectRootFrom(inv)) |root| {
-        const refs = try scriptReferencesInto(cli, root, &doc, node_path);
+        const refs = try scriptReferencesInto(cli, root, &doc, node_path, &extracted.new_doc);
+        if (refs.len > 0) try messages.append(cli.allocator, try cli.allocator.print("scripts that reach below {s} with $ or % paths now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}", .{ extracted.name, scene_res_path }));
         for (refs) |ref| try messages.append(cli.allocator, ref);
+    } else {
+        try messages.append(cli.allocator, try cli.allocator.print("scripts that reached into the subtree with $ or % paths from outside it now cross an instance boundary; update them, and move handlers for the subtree's own signals into a script on {s}. Pass --project-root to have them listed", .{scene_res_path}));
     }
 
     var catalog_registered = false;

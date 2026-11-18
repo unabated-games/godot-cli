@@ -35,6 +35,8 @@ scene text.
 Validation reads the file the way the engine would — a property whose value is
 the wrong type for its class, or a connection to a signal the class does not
 emit, is an error rather than something that only shows up when you press Play.
+A misspelled script export or theme override, which Godot drops without a
+word, is a warning that names the property meant.
 And a change can be checked by running it:
 
 ```bash
@@ -137,7 +139,7 @@ your diff.
 
 Scene authoring, the component catalog, `project.godot` editing, and batch
 workflows are all implemented; see the
-[scene authoring roadmap](docs/scene_authoring_roadmap.md) for how they fit
+[scene authoring roadmap](docs/history/scene_authoring_roadmap.md) for how they fit
 together.
 
 ## Building

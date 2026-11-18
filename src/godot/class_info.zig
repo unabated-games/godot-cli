@@ -4,12 +4,13 @@
 //!
 //! Every lookup is conservative on purpose. A class the table does not carry
 //! (a script class, or one from a newer engine) and a property it does not
-//! declare (a `theme_override_*` entry, a script's exported variable, a
-//! `metadata/*` key) both answer "no opinion" rather than "wrong", because a
+//! declare (a script's exported variable, a `metadata/*` key) both answer
+//! "no opinion" rather than "wrong", because a
 //! false report on a correct scene costs more than a missed one.
 
 const std = @import("std");
 const table = @import("class_table.zig");
+const theme_overrides = @import("theme_overrides.zig");
 
 pub const godot_version = table.godot_version;
 
@@ -96,6 +97,24 @@ pub fn descendsFrom(class_name: []const u8, ancestor: []const u8) bool {
 
 /// Whether a value that parsed as `kind` is acceptable for the property.
 /// A property whose type carries no check accepts anything.
+/// The theme override properties an instance of the class offers
+/// (`theme_override_colors/font_color`, ...), inherited ones included,
+/// sorted. Null when the engine lists none for it: not a Control or a
+/// Window, or a class it cannot instance.
+pub fn themeOverrides(class_name: []const u8) ?[]const []const u8 {
+    var low: usize = 0;
+    var high: usize = theme_overrides.classes.len;
+    while (low < high) {
+        const mid = low + (high - low) / 2;
+        switch (std.mem.order(u8, theme_overrides.classes[mid].class, class_name)) {
+            .lt => low = mid + 1,
+            .gt => high = mid,
+            .eq => return theme_overrides.classes[mid].overrides,
+        }
+    }
+    return null;
+}
+
 pub fn kindFits(property: table.Property, kind: []const u8) bool {
     if (property.kinds.len == 0) return true;
     for (property.kinds) |accepted| {

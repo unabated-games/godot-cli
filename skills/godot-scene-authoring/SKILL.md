@@ -42,7 +42,7 @@ Work from the Godot project root (`project.godot`). Pass `--json` on every comma
 3. Project catalog ids are instanced with `--catalog-id`, and a scene with no catalog entry by its path with `--scene res://...`; `godot/...` builtins are plain nodes.
 4. Presentation on nodes, signals as `[connection]` sections (`scene connection add`), resources as `.tres` (`resource new`).
 5. Values are Variant text; strings carry their own quotes (`"\"Paused\""`).
-6. Files move with `project move`, never `mv`.
+6. Files move with `project move`, never `mv`. Repeat `--from` to move several into a `--to` folder ending in `/`, or pass a folder to move it whole.
 7. Export presets are written with `project export apply` (option names from `project export options --platform <p>`), never by editing `export_presets.cfg`; `project export build --preset <name>` runs the export.
 8. Validate after every edit; run the game and read the frame and the log before reporting done. An input-map change has no scene to validate: `project input validate`, then `project run --press <action>@10..30` on a scene that reacts to it (`--scene res://...` if there is no main scene), and read the log. `--press` sends the action itself, so the bindings are what `project input list` reports. Validate type-checks property values against the node's class and connections against the signals it emits, so a wrong type or a misspelled signal fails there rather than at run time.
 

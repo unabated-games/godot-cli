@@ -8,6 +8,8 @@ const project_config = @import("project_config.zig");
 const document = @import("text_format/document.zig");
 const class_info = @import("class_info.zig");
 const gdscript_scan = @import("gdscript_scan.zig");
+const edit_distance = @import("edit_distance.zig");
+const lex = @import("variant/lex.zig");
 const node_section_order = @import("node_section_order.zig");
 const scene_connections = @import("scene_connections.zig");
 const resource_uid_lookup = @import("resource_uid_lookup.zig");
@@ -566,6 +568,12 @@ pub fn validateDocument(
         for (try unknownConnectionMethods(scratch.allocator(), doc, ctx)) |note| {
             try report.add(allocator, .warning, "unknown_method", note.message, note.line);
         }
+        for (try unknownScriptProperties(scratch.allocator(), doc, ctx)) |note| {
+            try report.add(allocator, .warning, "unknown_property", note.message, note.line);
+        }
+        for (try unknownThemeOverrides(scratch.allocator(), doc, ctx)) |note| {
+            try report.add(allocator, .warning, "unknown_theme_override", note.message, note.line);
+        }
     }
     return report;
 }
@@ -692,6 +700,325 @@ pub fn unknownConnectionMethods(allocator: std.mem.Allocator, doc: *const docume
         });
     }
     return found.items;
+}
+
+/// A GDScript the check can read: a `res://` file, or a built-in script's
+/// source, which the scene carries in a GDScript sub_resource.
+const ScriptStart = union(enum) {
+    path: []const u8,
+    source: []const u8,
+
+    fn key(self: ScriptStart) []const u8 {
+        return switch (self) {
+            inline else => |text| text,
+        };
+    }
+
+    fn describe(self: ScriptStart) []const u8 {
+        return switch (self) {
+            .path => |path| path,
+            .source => "its built-in script",
+        };
+    }
+};
+
+/// A node's `script` line: none, a GDScript the check can read, or something
+/// it cannot (C#, a missing resource).
+const ScriptRef = union(enum) { none, script: ScriptStart, unreadable };
+
+fn scriptRefOf(allocator: std.mem.Allocator, doc: *const document.Document, section: *const document.Section) ScriptRef {
+    const value = propertyValueOf(section, "script") orelse return .none;
+    if (std.mem.eql(u8, value, "null")) return .none;
+    if (std.mem.startsWith(u8, value, "SubResource(")) {
+        const id = quotedArgument(value) orelse return .unreadable;
+        for (doc.sections.items) |*sub| {
+            if (!std.mem.eql(u8, sub.header.name, "sub_resource")) continue;
+            if (!std.mem.eql(u8, sub.header.getString("id") orelse continue, id)) continue;
+            if (!std.mem.eql(u8, sub.header.getString("type") orelse "", "GDScript")) return .unreadable;
+            const text = propertyValueOf(sub, "script/source") orelse return .unreadable;
+            const source = lex.parseQuotedString(allocator, text) catch return .unreadable;
+            return .{ .script = .{ .source = source } };
+        }
+        return .unreadable;
+    }
+    if (!std.mem.startsWith(u8, value, "ExtResource(")) return .unreadable;
+    const path = extPathOf(doc, value) orelse return .unreadable;
+    if (!std.mem.startsWith(u8, path, "res://") or !std.mem.endsWith(u8, path, ".gd")) return .unreadable;
+    return .{ .script = .{ .path = path } };
+}
+
+fn propertyValueOf(section: *const document.Section, name: []const u8) ?[]const u8 {
+    for (section.properties.items) |line| {
+        const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+        if (!std.mem.eql(u8, std.mem.trim(u8, line.raw[0..equals], " \t"), name)) continue;
+        return std.mem.trim(u8, line.raw[equals + 1 ..], " \t\r\n");
+    }
+    return null;
+}
+
+/// `x` from `SubResource("x")`.
+fn quotedArgument(value: []const u8) ?[]const u8 {
+    const open_quote = std.mem.indexOfScalar(u8, value, '"') orelse return null;
+    const rest = value[open_quote + 1 ..];
+    const close_quote = std.mem.indexOfScalar(u8, rest, '"') orelse return null;
+    return rest[0..close_quote];
+}
+
+/// The class and script an instanced scene gives the node that instances
+/// it: its root's, following the root's own `instance=` when that scene
+/// inherits another. Null when a link cannot be read.
+const InstancedRoot = struct { class: []const u8, script: ?ScriptStart };
+
+fn instancedRoot(allocator: std.mem.Allocator, ctx: ValidateContext, res_path: []const u8, depth: usize) ?InstancedRoot {
+    if (depth > 8) return null;
+    const root = ctx.project_root orelse return null;
+    const io = ctx.io orelse return null;
+    if (!std.mem.startsWith(u8, res_path, "res://") or !std.mem.endsWith(u8, res_path, ".tscn")) return null;
+    const full = std.fs.path.join(allocator, &.{ root, res_path["res://".len..] }) catch return null;
+    const doc = allocator.create(document.Document) catch return null;
+    doc.* = document.parseFile(allocator, io, full) catch return null;
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "node")) continue;
+        const own: ?ScriptStart = switch (scriptRefOf(allocator, doc, section)) {
+            .none => null,
+            .script => |script| script,
+            .unreadable => return null,
+        };
+        if (section.header.getString("type")) |class| return .{ .class = class, .script = own };
+        const inherited = extPathOf(doc, section.header.getString("instance") orelse return null) orelse return null;
+        var base = instancedRoot(allocator, ctx, inherited, depth + 1) orelse return null;
+        if (own) |script| base.script = script;
+        return base;
+    }
+    return null;
+}
+
+/// Every member variable a GDScript and the scripts it extends declare. Null
+/// when a link cannot be read, the chain ends in a class the table does not
+/// carry, or a script answers properties itself (`_set`,
+/// `_get_property_list`), since then any name may be real.
+const ChainVariables = struct { names: []const []const u8, depth: usize };
+
+fn scriptChainVariables(allocator: std.mem.Allocator, ctx: ValidateContext, start: ScriptStart) ?ChainVariables {
+    const root = ctx.project_root orelse return null;
+    const io = ctx.io orelse return null;
+    var names: std.ArrayList([]const u8) = .empty;
+    var next = start;
+    var depth: usize = 0;
+    while (depth < 16) : (depth += 1) {
+        const source = switch (next) {
+            .source => |text| text,
+            .path => |res_path| blk: {
+                if (!std.mem.startsWith(u8, res_path, "res://") or !std.mem.endsWith(u8, res_path, ".gd")) return null;
+                const full = std.fs.path.join(allocator, &.{ root, res_path["res://".len..] }) catch return null;
+                break :blk std.Io.Dir.cwd().readFileAlloc(io, full, allocator, .limited(4 * 1024 * 1024)) catch return null;
+            },
+        };
+        const interface = gdscript_scan.parseScript(allocator, source) catch return null;
+        if (interface.definesFunction("_set") or interface.definesFunction("_get_property_list")) return null;
+        names.appendSlice(allocator, interface.variables) catch return null;
+        if (interface.extends.len == 0) return null;
+        if (std.mem.startsWith(u8, interface.extends, "res://")) {
+            next = .{ .path = interface.extends };
+            continue;
+        }
+        if (class_info.findClass(interface.extends) != null) return .{ .names = names.items, .depth = depth + 1 };
+        next = .{ .path = findClassNameScript(allocator, io, root, interface.extends) orelse return null };
+    }
+    return null;
+}
+
+/// Property lines on a scripted or instanced node that neither the node's
+/// class nor its script declares. Godot's loader calls `set` and ignores
+/// whether it took (`packed_scene.cpp`, SceneState::instantiate), so the
+/// value never reaches the node, nothing is logged, and the editor's next
+/// save drops the line. `max_helth = 50` on an instanced health bar used to
+/// pass validate, since a script's variables were out of its sight; with
+/// the project root it reads the script and what it extends, and an
+/// instanced scene's root. Anything it cannot read is left alone.
+pub fn unknownScriptProperties(allocator: std.mem.Allocator, doc: *const document.Document, ctx: ValidateContext) ![]WriteNote {
+    var found: std.ArrayList(WriteNote) = .empty;
+    if (ctx.project_root == null or ctx.io == null) return found.items;
+    var chains: std.StringHashMapUnmanaged(?ChainVariables) = .empty;
+
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "node")) continue;
+        const own = scriptRefOf(allocator, doc, section);
+        if (own == .unreadable) continue;
+        var class: []const u8 = undefined;
+        var script: ?ScriptStart = null;
+        var instanced_from: ?[]const u8 = null;
+        if (section.header.getString("type")) |node_type| {
+            // A plain node is checkProperty's; only a script widens it.
+            if (own != .script) continue;
+            class = node_type;
+            script = own.script;
+        } else if (section.header.getString("instance")) |instance| {
+            const scene_path = extPathOf(doc, instance) orelse continue;
+            const base = instancedRoot(allocator, ctx, scene_path, 0) orelse continue;
+            class = base.class;
+            script = if (own == .script) own.script else base.script;
+            instanced_from = scene_path;
+        } else continue; // an override inside an instance, typed elsewhere
+
+        if (class_info.findClass(class) == null) continue;
+        var variables: []const []const u8 = &.{};
+        var chain_depth: usize = 0;
+        if (script) |start| {
+            const entry = try chains.getOrPut(allocator, start.key());
+            if (!entry.found_existing) entry.value_ptr.* = scriptChainVariables(allocator, ctx, start);
+            const chain = entry.value_ptr.* orelse continue;
+            variables = chain.names;
+            chain_depth = chain.depth;
+        }
+
+        const node_name = section.header.getString("name") orelse "";
+        const parent = section.header.getString("parent") orelse "";
+        for (section.properties.items) |line| {
+            const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+            const name = std.mem.trim(u8, line.raw[0..equals], " \t");
+            if (name.len == 0 or std.mem.eql(u8, name, "script")) continue;
+            if (std.mem.indexOfScalar(u8, name, '/') != null) continue;
+            if (isInternalProperty(name) or isDynamicProperty(class, name)) continue;
+            if (class_info.findProperty(class, name) != null) continue;
+            if (containsName(variables, name)) continue;
+
+            var candidates: std.ArrayList([]const u8) = .empty;
+            try candidates.appendSlice(allocator, variables);
+            var current = class;
+            var hops: usize = 0;
+            while (class_info.findClass(current)) |info| : (hops += 1) {
+                if (hops > 64) break;
+                for (info.properties) |property| try candidates.append(allocator, property.name);
+                if (info.inherits.len == 0) break;
+                current = info.inherits;
+            }
+            const suggestion = if (edit_distance.closest(name, candidates.items)) |near|
+                try allocator.print(" Did you mean {s}?", .{near})
+            else
+                "";
+
+            const class_text = if (instanced_from) |scene_path|
+                try allocator.print("{s} (the root of {s})", .{ class, scene_path })
+            else
+                class;
+            const owner = if (script) |start|
+                try allocator.print("neither {s} nor {s}{s} declares", .{ class_text, start.describe(), if (chain_depth > 1) " and the scripts it extends" else "" })
+            else
+                try allocator.print("{s} does not have and no script adds", .{class_text});
+            try found.append(allocator, .{
+                .key = try allocator.print("{s}|{s}|{s}", .{ parent, node_name, name }),
+                .message = try allocator.print(
+                    "{s} sets {s}, which {s}, so Godot sets nothing and says nothing: the value never reaches the node, and the editor's next save drops the line.{s}",
+                    .{ node_name, name, owner, suggestion },
+                ),
+                .line = section.line,
+            });
+        }
+    }
+    return found.items;
+}
+
+/// The Variant kinds a theme override of each data type takes. Godot
+/// converts a float for an int item, so a float is let through there.
+const theme_override_kinds = [_]struct { prefix: []const u8, type_name: []const u8, kinds: []const []const u8 }{
+    .{ .prefix = "theme_override_colors/", .type_name = "a Color", .kinds = &.{"color"} },
+    .{ .prefix = "theme_override_constants/", .type_name = "an int", .kinds = &.{ "integer", "float" } },
+    .{ .prefix = "theme_override_font_sizes/", .type_name = "an int", .kinds = &.{ "integer", "float" } },
+    .{ .prefix = "theme_override_fonts/", .type_name = "a Font", .kinds = &.{ "ext_resource", "sub_resource", "resource", "null" } },
+    .{ .prefix = "theme_override_icons/", .type_name = "a Texture2D", .kinds = &.{ "ext_resource", "sub_resource", "resource", "null" } },
+    .{ .prefix = "theme_override_styles/", .type_name = "a StyleBox", .kinds = &.{ "ext_resource", "sub_resource", "resource", "null" } },
+    .{ .prefix = "theme_override_sounds/", .type_name = "an AudioStream", .kinds = &.{ "ext_resource", "sub_resource", "resource", "null" } },
+};
+
+/// Theme overrides a node's class does not offer, and ones whose value is
+/// the wrong type. Control::_set stores an override of any name, but only
+/// the class's own theme items are drawn with or listed for saving
+/// (`control.cpp`, Control::_get_property_list), so
+/// `theme_override_colors/font_colour` changes nothing and the editor's next
+/// save drops it; a class that is not a Control or a Window takes none at
+/// all. The names come from the engine (tools/gen_theme_overrides.sh). An
+/// instanced node is checked against its scene's root when the project root
+/// lets that be read.
+pub fn unknownThemeOverrides(allocator: std.mem.Allocator, doc: *const document.Document, ctx: ValidateContext) ![]WriteNote {
+    const variant_parse = @import("variant/parse.zig");
+    var found: std.ArrayList(WriteNote) = .empty;
+    for (doc.sections.items) |*section| {
+        if (!std.mem.eql(u8, section.header.name, "node")) continue;
+        var has_override = false;
+        for (section.properties.items) |line| {
+            if (std.mem.startsWith(u8, line.raw, "theme_override_")) has_override = true;
+        }
+        if (!has_override) continue;
+
+        var instanced_from: ?[]const u8 = null;
+        const class = if (section.header.getString("type")) |node_type| node_type else blk: {
+            const instance = section.header.getString("instance") orelse continue;
+            const scene_path = extPathOf(doc, instance) orelse continue;
+            instanced_from = scene_path;
+            break :blk (instancedRoot(allocator, ctx, scene_path, 0) orelse continue).class;
+        };
+        if (class_info.findClass(class) == null) continue;
+        const themed = class_info.descendsFrom(class, "Control") or class_info.descendsFrom(class, "Window");
+        const offered = class_info.themeOverrides(class);
+        if (themed and offered == null) continue;
+
+        const node_name = section.header.getString("name") orelse "";
+        const parent = section.header.getString("parent") orelse "";
+        const class_text = if (instanced_from) |scene_path| try allocator.print("{s} (the root of {s})", .{ class, scene_path }) else class;
+        for (section.properties.items) |line| {
+            const equals = std.mem.indexOfScalar(u8, line.raw, '=') orelse continue;
+            const name = std.mem.trim(u8, line.raw[0..equals], " \t");
+            if (!std.mem.startsWith(u8, name, "theme_override_")) continue;
+            const slash = std.mem.indexOfScalar(u8, name, '/') orelse continue;
+            const item = name[slash + 1 ..];
+
+            const message = if (!themed)
+                try allocator.print(
+                    "{s} sets {s}, but {s} is not a Control or a Window and takes no theme overrides, so Godot sets nothing and says nothing, and the editor's next save drops the line",
+                    .{ node_name, name, class_text },
+                )
+            else if (!containsName(offered.?, name)) blk: {
+                // The item under another data type is the likeliest mistake
+                // (`theme_override_constants/font_color`), then a misspelling.
+                var same_item: ?[]const u8 = null;
+                for (offered.?) |candidate| {
+                    const candidate_slash = std.mem.indexOfScalar(u8, candidate, '/') orelse continue;
+                    if (std.mem.eql(u8, candidate[candidate_slash + 1 ..], item)) same_item = candidate;
+                }
+                const near = same_item orelse edit_distance.closest(name, offered.?);
+                break :blk try allocator.print(
+                    "{s} sets {s}, which {s} has no theme item for: the override is stored, nothing draws with it, and the editor's next save drops the line.{s}{s}{s}",
+                    .{ node_name, name, class_text, if (near != null) " Did you mean " else "", near orelse "", if (near != null) "?" else "" },
+                );
+            } else blk: {
+                const value_text = std.mem.trim(u8, line.raw[equals + 1 ..], " \t");
+                const expected = for (theme_override_kinds) |entry| {
+                    if (std.mem.startsWith(u8, name, entry.prefix)) break entry;
+                } else continue;
+                var value = variant_parse.parsePropertyValue(allocator, value_text) catch continue;
+                const kind = @tagName(value.kind);
+                value.deinit(allocator);
+                if (containsName(expected.kinds, kind)) continue;
+                const article = if (std.mem.indexOfScalar(u8, "aeiou", kind[0]) != null) "an" else "a";
+                break :blk try allocator.print(
+                    "{s} sets {s} to {s} {s}, and the override takes {s}: Godot converts what it can, so only the running frame shows the damage",
+                    .{ node_name, name, article, kind, expected.type_name },
+                );
+            };
+            try found.append(allocator, .{
+                .key = try allocator.print("{s}|{s}|{s}", .{ parent, node_name, name }),
+                .message = message,
+                .line = section.line,
+            });
+        }
+    }
+    return found.items;
+}
+
+fn containsName(names: []const []const u8, name: []const u8) bool {
+    for (names) |candidate| if (std.mem.eql(u8, candidate, name)) return true;
+    return false;
 }
 
 /// The `path` of the ext_resource a value such as `ExtResource("1_abc")`
@@ -887,6 +1214,7 @@ const dynamic_properties = [_]struct { class: []const u8, name: []const u8 }{
     .{ .class = "Bone2D", .name = "bone_angle" },
     .{ .class = "Bone2D", .name = "length" },
     .{ .class = "AudioListener3D", .name = "current" },
+    .{ .class = "SoftBody3D", .name = "pinned_points" },
     .{ .class = "TileMapPattern", .name = "tile_data" },
     .{ .class = "AnimationNodeBlendTree", .name = "node_connections" },
     .{ .class = "AnimationNodeStateMachine", .name = "transitions" },
@@ -1383,4 +1711,72 @@ test "classes that live in engine modules are in the table" {
     try std.testing.expect(class_info.findClass("TileMapLayer") != null);
     try std.testing.expect(class_info.findClass("GridMap") != null);
     try std.testing.expect(class_info.findClass("CSGBox3D") != null);
+}
+
+test "a scripted or instanced node's properties are checked against its script" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const doc = try document.parseFile(a, std.testing.io, "test_fixtures/script_properties/main.tscn");
+    const ctx: ValidateContext = .{ .project_root = "test_fixtures/script_properties", .io = std.testing.io };
+
+    const notes = try unknownScriptProperties(a, &doc, ctx);
+    var keys: std.ArrayList([]const u8) = .empty;
+    for (notes) |note| try keys.append(a, note.key);
+    // max_helth on the player, whose script extends another by path (a
+    // static var is settable too, so `shared` passes); max_helht on an
+    // instance whose root's script declares max_health; colour on an
+    // instance with no script; levle against a built-in script's level.
+    // Everything a class, a script in the chain
+    // (by path or by class_name) or a `_set` could answer is left alone.
+    const expected = [_][]const u8{ ".|Player|max_helth", ".|HUD|max_helht", ".|Panel|colour", ".|Builtin|levle" };
+    try std.testing.expectEqual(expected.len, keys.items.len);
+    for (expected, keys.items) |want, got| try std.testing.expectEqualStrings(want, got);
+
+    try std.testing.expect(std.mem.indexOf(u8, notes[0].message, "neither CharacterBody2D nor res://player.gd and the scripts it extends declares") != null);
+    try std.testing.expect(std.mem.indexOf(u8, notes[0].message, "Did you mean max_health?") != null);
+    try std.testing.expect(std.mem.indexOf(u8, notes[1].message, "neither ProgressBar (the root of res://ui/health_bar.tscn) nor res://ui/bar.gd declares") != null);
+    try std.testing.expect(std.mem.indexOf(u8, notes[2].message, "Panel (the root of res://ui/plain_panel.tscn) does not have and no script adds") != null);
+    try std.testing.expect(std.mem.indexOf(u8, notes[3].message, "neither Node2D nor its built-in script declares") != null);
+    try std.testing.expect(std.mem.indexOf(u8, notes[3].message, "Did you mean level?") != null);
+
+    // Without the project root nothing can be read, so nothing is said.
+    try std.testing.expectEqual(@as(usize, 0), (try unknownScriptProperties(a, &doc, .{})).len);
+
+    // And validate reports them as unknown_property warnings.
+    var report = try validateDocument(allocator, &doc, ctx);
+    defer report.deinit(allocator);
+    var unknown: usize = 0;
+    for (report.issues.items) |issue| {
+        if (std.mem.eql(u8, issue.kind, "unknown_property")) unknown += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 4), unknown);
+}
+
+test "theme overrides are checked against the items the class offers" {
+    const allocator = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const doc = try document.parseFile(a, std.testing.io, "test_fixtures/script_properties/theme.tscn");
+    const ctx: ValidateContext = .{ .project_root = "test_fixtures/script_properties", .io = std.testing.io };
+
+    const notes = try unknownThemeOverrides(a, &doc, ctx);
+    const expected = [_]struct { key: []const u8, says: []const u8 }{
+        .{ .key = ".|Title|theme_override_colors/font_colour", .says = "Did you mean theme_override_colors/font_color?" },
+        // The item exists, under another data type.
+        .{ .key = ".|Title|theme_override_constants/font_shadow_color", .says = "Did you mean theme_override_colors/font_shadow_color?" },
+        .{ .key = ".|Title|theme_override_colors/font_outline_color", .says = "to an integer, and the override takes a Color" },
+        .{ .key = ".|Sprite|theme_override_colors/font_color", .says = "Node2D is not a Control or a Window" },
+        .{ .key = ".|Card|theme_override_styles/panle", .says = "Panel (the root of res://ui/plain_panel.tscn) has no theme item" },
+    };
+    try std.testing.expectEqual(expected.len, notes.len);
+    for (expected, notes) |want, got| {
+        try std.testing.expectEqualStrings(want.key, got.key);
+        try std.testing.expect(std.mem.indexOf(u8, got.message, want.says) != null);
+    }
+
+    // Without the project root the instance cannot be read; the rest stands.
+    try std.testing.expectEqual(@as(usize, 4), (try unknownThemeOverrides(a, &doc, .{})).len);
 }

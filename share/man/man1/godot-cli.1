@@ -2503,13 +2503,16 @@ over a frame range and \-\-click /root/Main/HUD/PauseButton@20
 clicks a node, so movement and buttons can be exercised; the
 frame then shows the result. The cursor moves off the node
 after a click, so the last frame shows its normal style; \-\-keep\-cursor
-leaves it there for the hover style. Only the game's own cursor
-moves, never the desktop pointer. Result data: frame (path
-of the last PNG), log, log_tail (last 40 lines), errors and
-error_count, exit and import_exit, stderr_tail, frames_written,
-presses, clicks, duration_ms, summary. Frames other than the
-last, and the .wav Godot writes, are deleted unless \-\-keep\-frames.
-Over MCP the frame is also returned as an image.
+leaves it there for the hover style, and \-\-hover <node>@<frame>
+shows it with no click at all. \-\-key enter@20 presses a real
+key, which a Button's shortcut sees and an action from \-\-press
+does not. Only the game's own cursor moves, never the desktop
+pointer. Result data: frame (path of the last PNG), log, log_tail
+(last 40 lines), errors and error_count, exit and import_exit,
+stderr_tail, frames_written, presses, clicks, keys, hovers,
+duration_ms, summary. Frames other than the last, and the .wav
+Godot writes, are deleted unless \-\-keep\-frames. Over MCP
+the frame is also returned as an image.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)
@@ -2557,7 +2560,29 @@ or ui_accept@5; repeatable. Sent as a real InputEventAction
 and as polled action state, so a focused Control and Input.get_vector
 both see it. It is the action itself, not a key or button bound
 to it, so it proves code reacting to the action, not the bindings;
-project input list reports those
+project input list reports those. A Button's shortcut never
+sees an action, since Godot passes only key, joypad\-button
+and shortcut events to shortcut_input: press its key with \-\-key
+instead
+.TP
+\fB\-\-key\fR \fIvalue\fR
+Press a real key over a frame range: <key>@<frame> or <key>@<first>..<last>,
+with ctrl+, shift+, alt+ or meta+ before it, e.g. enter@20,
+ctrl+s@10, space@5..30; repeatable. An InputEventKey, so a
+Button's shortcut sees it and the input map turns it into whatever
+actions bind it: this proves the binding as well as the code.
+Keys: a letter or digit, space, escape, tab, backtab, backspace,
+enter/return, kp_enter, insert, delete, pause, print, home,
+end, left, up, right, down, pageup, pagedown, shift, ctrl,
+meta/cmd, alt, capslock, numlock, scrolllock, f1\-f12; or a
+Godot keycode number. Names are matched without case, and KEY_<letter>
+is accepted
+.TP
+\fB\-\-hover\fR \fIvalue\fR
+Move the cursor over a node on a frame without clicking: <node
+path>@<frame>, e.g. /root/Main/HUD/StartButton@20; repeatable.
+The node draws its hover style from the next frame, for a \-\-frame\-at
+a frame or two later; a click would press it as well
 .TP
 \fB\-\-click\fR \fIvalue\fR
 Left\-click the centre of a node on a frame, e.g. /root/Main/HUD/PauseButton@20;
@@ -2625,10 +2650,15 @@ Run Godot's headless import after the move, so its uid cache
 stops mapping the old path and validation stops reporting uid_path_mismatch
 .TP
 \fB\-\-from\fR \fIvalue\fR
-Current path (res://scripts/player.gd or scripts/player.gd)
+Current path (res://scripts/player.gd or scripts/player.gd),
+or a folder to rename; repeatable, to move several files into
+the folder \-\-to names in one call
 .TP
 \fB\-\-to\fR \fIvalue\fR
-New path
+New path. With several \-\-from, or ending in /, the folder
+the files go into, keeping their names: \-\-from res://player.tscn
+\-\-from res://player.gd \-\-to res://actors/player/. For a
+folder \-\-from, the folder's new path
 .TP
 \fB\-\-dry\-run\fR
 Report what would change without moving or writing

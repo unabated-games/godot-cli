@@ -690,6 +690,11 @@ pub fn isFloatProperty(property: []const u8) bool {
 /// `energy` never matched the name, and `{d}` prints 2.0 as `2`.
 pub fn numberText(allocator: std.mem.Allocator, class_name: ?[]const u8, property: []const u8, value: std.json.Value) Error!?[]const u8 {
     const declared_float: ?bool = blk: {
+        // Theme constants and font sizes are ints whatever the item is
+        // called; `outline_size` on the float list made trial 47's
+        // `theme_override_constants/outline_size = 8` come out `8.0`.
+        if (std.mem.startsWith(u8, property, "theme_override_constants/") or
+            std.mem.startsWith(u8, property, "theme_override_font_sizes/")) break :blk false;
         const class = class_name orelse break :blk null;
         const info = class_info.findProperty(class, property) orelse break :blk null;
         if (std.mem.eql(u8, info.type_name, "float")) break :blk true;
@@ -1204,4 +1209,18 @@ test "a JSON number is written the way Godot writes that property" {
         try std.testing.expectEqualStrings(case.want, text);
     }
     try std.testing.expectEqual(@as(?[]const u8, null), try numberText(allocator, "Node", "name", .{ .bool = true }));
+}
+
+test "a theme constant or font size is an int, whatever its name" {
+    const allocator = std.testing.allocator;
+    const outline = (try numberText(allocator, "Label", "theme_override_constants/outline_size", .{ .integer = 8 })).?;
+    defer allocator.free(outline);
+    try std.testing.expectEqualStrings("8", outline);
+    const size = (try numberText(allocator, null, "theme_override_font_sizes/font_size", .{ .float = 24.0 })).?;
+    defer allocator.free(size);
+    try std.testing.expectEqualStrings("24", size);
+    // A float property keeps its .0.
+    const offset = (try numberText(allocator, null, "offset_left", .{ .integer = 8 })).?;
+    defer allocator.free(offset);
+    try std.testing.expectEqualStrings("8.0", offset);
 }

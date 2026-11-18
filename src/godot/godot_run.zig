@@ -55,6 +55,12 @@ pub const Options = struct {
     main_scene: ?[]const u8 = null,
     /// Mouse clicks on a node, by viewport path, on a frame.
     clicks: []const Click = &.{},
+    /// Real key presses held over a frame range: what a Button's shortcut
+    /// and the input map's key bindings both see, which an action does not.
+    keys: []const KeyPress = &.{},
+    /// The cursor moved over a node, by viewport path, on a frame, with no
+    /// click: the hover style, without the press a click brings.
+    hovers: []const Click = &.{},
     /// Text typed into a LineEdit or TextEdit, by viewport path, on a frame.
     types: []const TypeText = &.{},
     /// Keyboard focus moved to a node, by viewport path, on a frame.
@@ -87,6 +93,41 @@ pub fn parseClick(text: []const u8) ?Click {
     const frame = std.fmt.parseInt(u32, text[at + 1 ..], 10) catch return null;
     if (frame == 0) return null;
     return .{ .node_path = text[0..at], .frame = frame };
+}
+
+pub const KeyPress = struct {
+    /// Godot's `Key` code.
+    keycode: i32,
+    ctrl: bool = false,
+    shift: bool = false,
+    alt: bool = false,
+    meta: bool = false,
+    start: u32,
+    end: u32,
+};
+
+/// `enter@20`, `ctrl+s@10`, `space@5..30`: a key with any modifiers, held
+/// over a frame range. `keycodeFor` maps a key name to Godot's code; the
+/// caller passes project_input's, so this stays free of the input tables.
+pub fn parseKey(text: []const u8, keycodeFor: *const fn ([]const u8) ?i32) ?KeyPress {
+    const at = std.mem.lastIndexOfScalar(u8, text, '@') orelse return null;
+    const range = parseFrameRange(text[at + 1 ..]) orelse return null;
+    var key: KeyPress = .{ .keycode = 0, .start = range.start, .end = range.end };
+    var parts = std.mem.splitScalar(u8, text[0..at], '+');
+    var name: ?[]const u8 = null;
+    while (parts.next()) |part| {
+        if (name) |previous| {
+            // Everything before the last part is a modifier.
+            if (std.ascii.eqlIgnoreCase(previous, "ctrl") or std.ascii.eqlIgnoreCase(previous, "control")) key.ctrl = true //
+            else if (std.ascii.eqlIgnoreCase(previous, "shift")) key.shift = true //
+            else if (std.ascii.eqlIgnoreCase(previous, "alt")) key.alt = true //
+            else if (std.ascii.eqlIgnoreCase(previous, "meta") or std.ascii.eqlIgnoreCase(previous, "cmd")) key.meta = true //
+            else return null;
+        }
+        name = part;
+    }
+    key.keycode = keycodeFor(name orelse return null) orelse return null;
+    return key;
 }
 
 pub const TypeText = struct {
@@ -135,16 +176,23 @@ pub fn parsePress(text: []const u8) ?Press {
     const at = std.mem.indexOfScalar(u8, text, '@') orelse return null;
     const action = text[0..at];
     if (action.len == 0) return null;
-    const range = text[at + 1 ..];
+    const range = parseFrameRange(text[at + 1 ..]) orelse return null;
+    return .{ .action = action, .start = range.start, .end = range.end };
+}
+
+const FrameRange = struct { start: u32, end: u32 };
+
+/// `10..40` or `10`: frames counted from 1, the end inclusive.
+fn parseFrameRange(range: []const u8) ?FrameRange {
     if (std.mem.indexOf(u8, range, "..")) |dots| {
         const start = std.fmt.parseInt(u32, range[0..dots], 10) catch return null;
         const end = std.fmt.parseInt(u32, range[dots + 2 ..], 10) catch return null;
         if (end < start or start == 0) return null;
-        return .{ .action = action, .start = start, .end = end };
+        return .{ .start = start, .end = end };
     }
     const frame = std.fmt.parseInt(u32, range, 10) catch return null;
     if (frame == 0) return null;
-    return .{ .action = action, .start = frame, .end = frame };
+    return .{ .start = frame, .end = frame };
 }
 
 pub const Result = struct {
@@ -263,7 +311,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     const frames_text = allocator.print("{d}", .{options.frames}) catch return error.OutOfMemory;
 
     var script_relative: ?[]const u8 = null;
-    if (options.presses.len != 0 or options.clicks.len != 0 or options.types.len != 0 or options.focuses.len != 0 or options.auto_camera) {
+    if (options.presses.len != 0 or options.clicks.len != 0 or options.keys.len != 0 or options.hovers.len != 0 or options.types.len != 0 or options.focuses.len != 0 or options.auto_camera) {
         script_relative = try writeDriverScript(allocator, io, options);
         result.driver_script = std.fs.path.join(allocator, &.{ options.project_root, script_relative.? }) catch return error.OutOfMemory;
     }
@@ -345,6 +393,14 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
     for (options.clicks, 0..) |click, i| {
         w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", click.node_path, click.frame }) catch return error.OutOfMemory;
     }
+    w.writeAll("]\nconst KEYS := [") catch return error.OutOfMemory;
+    for (options.keys, 0..) |key, i| {
+        w.print("{s}[{d}, {s}, {s}, {s}, {s}, {d}, {d}]", .{ if (i == 0) "" else ", ", key.keycode, if (key.ctrl) "true" else "false", if (key.shift) "true" else "false", if (key.alt) "true" else "false", if (key.meta) "true" else "false", key.start, key.end }) catch return error.OutOfMemory;
+    }
+    w.writeAll("]\nconst HOVERS := [") catch return error.OutOfMemory;
+    for (options.hovers, 0..) |hover, i| {
+        w.print("{s}[\"{s}\", {d}]", .{ if (i == 0) "" else ", ", hover.node_path, hover.frame }) catch return error.OutOfMemory;
+    }
     w.writeAll("]\nconst TYPES := [") catch return error.OutOfMemory;
     for (options.types, 0..) |entry, i| {
         w.print("{s}[\"{s}\", {d}, ", .{ if (i == 0) "" else ", ", entry.node_path, entry.frame }) catch return error.OutOfMemory;
@@ -377,6 +433,7 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
     w.writeAll(
         \\const AWAY := Vector2(-10000, -10000)
         \\var _frame := 0
+        \\var _hovering := ""
         \\
         \\func _initialize() -> void:
         \\    # Not _init(): that runs while the custom main loop is being
@@ -415,11 +472,28 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\    else:
         \\        Input.action_release(name)
         \\
-        \\func _click(path: String, pressed: bool) -> void:
+        \\# A real key event, not an action: a Button's shortcut only sees key,
+        \\# joypad-button and shortcut events (Viewport::_push_shortcut_input_internal),
+        \\# and the input map turns the key into whatever actions bind it.
+        \\func _key(spec: Array, pressed: bool) -> void:
+        \\    var event := InputEventKey.new()
+        \\    event.keycode = spec[0]
+        \\    event.physical_keycode = spec[0]
+        \\    event.ctrl_pressed = spec[1]
+        \\    event.shift_pressed = spec[2]
+        \\    event.alt_pressed = spec[3]
+        \\    event.meta_pressed = spec[4]
+        \\    event.pressed = pressed
+        \\    Input.parse_input_event(event)
+        \\
+        \\# The centre of a Control or the origin of a Node2D, on screen; null,
+        \\# with an error in the log, when there is no such node or it lies
+        \\# outside the viewport, where input cannot reach it.
+        \\func _point(path: String, verb: String, check_viewport: bool):
         \\    var node := root.get_node_or_null(NodePath(path))
         \\    if node == null:
-        \\        push_error("godot-cli: no node at " + path + " to click")
-        \\        return
+        \\        push_error("godot-cli: no node at " + path + " to " + verb)
+        \\        return null
         \\    var at := Vector2.ZERO
         \\    if node is Control:
         \\        at = (node as Control).get_global_rect().get_center()
@@ -427,11 +501,31 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        at = (node as Node2D).get_global_transform_with_canvas().origin
         \\    else:
         \\        push_error("godot-cli: " + path + " is not a Control or Node2D")
+        \\        return null
+        \\    # Outside the viewport reaches nothing, and used to do so in
+        \\    # silence: the run passed while the button was never pressed.
+        \\    if check_viewport and not Rect2(Vector2.ZERO, Vector2(root.size)).has_point(at):
+        \\        push_error("godot-cli: " + path + " is at " + str(at) + ", outside the " + str(root.size) + " viewport, so the " + verb + " cannot reach it; the node is laid out beyond the window, or an ancestor has moved it off-screen")
+        \\        return null
+        \\    return at
+        \\
+        \\# Sent again every frame until a click, so a real pointer event
+        \\# reaching the window (the desktop mouse crossing it) cannot clear
+        \\# the hover before the frame is taken; one run lost it that way.
+        \\func _hover(path: String) -> void:
+        \\    var at = _point(path, "hover", true)
+        \\    if at == null:
+        \\        _hovering = ""
         \\        return
-        \\    # A click outside the viewport reaches nothing, and used to do so
-        \\    # in silence: the run passed while the button was never pressed.
-        \\    if pressed and not Rect2(Vector2.ZERO, Vector2(root.size)).has_point(at):
-        \\        push_error("godot-cli: " + path + " is at " + str(at) + ", outside the " + str(root.size) + " viewport, so the click cannot reach it; the node is laid out beyond the window, or an ancestor has moved it off-screen")
+        \\    _hovering = path
+        \\    var motion := InputEventMouseMotion.new()
+        \\    motion.position = at
+        \\    motion.global_position = at
+        \\    Input.parse_input_event(motion)
+        \\
+        \\func _click(path: String, pressed: bool) -> void:
+        \\    var at = _point(path, "click", pressed)
+        \\    if at == null:
         \\        return
         \\    var event := InputEventMouseButton.new()
         \\    event.button_index = MOUSE_BUTTON_LEFT
@@ -545,6 +639,21 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\            _action(press[0], true)
         \\        if _frame == press[2] + 1:
         \\            _action(press[0], false)
+        \\    for key in KEYS:
+        \\        if _frame == key[5]:
+        \\            _key(key, true)
+        \\        if _frame == key[6] + 1:
+        \\            _key(key, false)
+        \\    var hovered_now := false
+        \\    for hover in HOVERS:
+        \\        if _frame == hover[1]:
+        \\            _hover(hover[0])
+        \\            hovered_now = true
+        \\    for click in CLICKS:
+        \\        if _frame == click[1]:
+        \\            _hovering = ""
+        \\    if not hovered_now and _hovering != "":
+        \\        _hover(_hovering)
         \\    for entry in FOCUSES:
         \\        if _frame == entry[1]:
         \\            _focus(entry[0])
@@ -1038,4 +1147,26 @@ test "a camera-less 3D run gets a temporary camera from the driver, and only the
     const plain = try writeDriverScript(arena, io, .{ .project_root = root, .scene = "level.tscn", .capture_dir = "cap", .presses = &.{.{ .action = "jump", .start = 1, .end = 2 }} });
     const plain_script = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ root, plain }), arena, .unlimited);
     try std.testing.expect(std.mem.indexOf(u8, plain_script, "const AUTO_CAMERA := false") != null);
+}
+
+test "key syntax" {
+    const lookup = struct {
+        fn f(name: []const u8) ?i32 {
+            if (std.ascii.eqlIgnoreCase(name, "enter")) return 4194309;
+            if (name.len == 1) return @intCast(std.ascii.toUpper(name[0]));
+            return null;
+        }
+    }.f;
+    const enter = parseKey("enter@20", &lookup).?;
+    try std.testing.expectEqual(@as(i32, 4194309), enter.keycode);
+    try std.testing.expectEqual(@as(u32, 20), enter.start);
+    try std.testing.expectEqual(@as(u32, 20), enter.end);
+    const save = parseKey("ctrl+shift+s@10..12", &lookup).?;
+    try std.testing.expect(save.ctrl and save.shift and !save.alt);
+    try std.testing.expectEqual(@as(i32, 'S'), save.keycode);
+    try std.testing.expectEqual(@as(u32, 12), save.end);
+    try std.testing.expect(parseKey("hyper+s@10", &lookup) == null);
+    try std.testing.expect(parseKey("nokey@10", &lookup) == null);
+    try std.testing.expect(parseKey("enter", &lookup) == null);
+    try std.testing.expect(parseKey("enter@0", &lookup) == null);
 }

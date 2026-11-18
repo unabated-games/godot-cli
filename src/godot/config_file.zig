@@ -82,7 +82,7 @@ pub fn parse(arena: std.mem.Allocator, text: []const u8) Error!Document {
 
 /// The end of a value that starts at `start`: the first newline outside a
 /// string and outside any bracket.
-fn scanValue(text: []const u8, start: usize) usize {
+pub fn scanValue(text: []const u8, start: usize) usize {
     var depth: usize = 0;
     var in_string = false;
     var j = start;

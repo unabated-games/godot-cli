@@ -90,7 +90,8 @@ A change with no scene in it, such as the input map, is checked the same way:
 on a scene that reacts to the action (--scene res://... when the project has
 no main scene yet), reading the log. --press sends the action itself, not a
 key or a button, so it proves code reacting to the action works; the bindings
-are what project input list reports.
+are what project input list reports. A Button's shortcut never sees an action:
+press its key with --key enter@20 instead, which also proves the binding.
 
 For a screen that does not move, --frames 5 is enough; the default, 60, is one
 second, which leaves room for movement and clicks. The run imports first, which

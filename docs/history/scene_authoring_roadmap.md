@@ -1,8 +1,10 @@
 # Scene authoring roadmap (LLM-first)
 
+> **Finished, and kept for the record.** Every item here has shipped, and some of what it says has since changed: the MCP server shipped in 0.8.0, and CI runs on every push. Open work is in [BACKLOG.md](../BACKLOG.md); what shipped is in the [changelog](../../CHANGELOG.md).
+
 **Goal:** Let LLMs fully author Godot scenes — nodes, parenting, sub-resources, instanced scenes — without editing raw `.tscn` text or falling back to “create everything in GDScript at runtime.”
 
-**Context:** [ABOUT.md](ABOUT.md) describes what godot-cli is today. Phases 1–6 (IDs, parse/write, inspect, variants) are done. This roadmap is the next major capability gap.
+**Context:** [ABOUT.md](../ABOUT.md) describes what godot-cli is today. Phases 1–6 (IDs, parse/write, inspect, variants) are done. This roadmap is the next major capability gap.
 
 ---
 
@@ -26,7 +28,7 @@ LLMs are bad at Godot scene authoring for predictable reasons:
 
 ## Design principles
 
-1. **Editor scenes, not runtime spawning.** Persist nodes, instances, and properties in `.tscn` the way a human would in the Godot editor. Use `scene node add` / `scene instance add` — not `load().instantiate()` in GDScript — for static UI and level structure. See [ABOUT.md — North star](ABOUT.md#north-star-editor-like-scene-authoring).
+1. **Editor scenes, not runtime spawning.** Persist nodes, instances, and properties in `.tscn` the way a human would in the Godot editor. Use `scene node add` / `scene instance add` — not `load().instantiate()` in GDScript — for static UI and level structure. See [ABOUT.md — North star](../ABOUT.md#north-star-editor-like-scene-authoring).
 2. **Tree operations, not text edits.** Agents call `scene node add`, not “insert these lines after line 42.”
 3. **Every mutation validates.** Return structured errors (duplicate name, unknown parent, invalid type) before write.
 4. **Godot save path on write.** All mutations go through existing `save_prepare` (IDs, `load_steps`, ordering).
@@ -137,11 +139,11 @@ godot-cli scene instance add main.tscn --parent /root/Main \
 
 ### Phase E — Component catalog (replaces simple template folder)
 
-**Design:** [catalog_design.md](catalog_design.md)
+**Design:** [catalog_design.md](../catalog_design.md)
 
 **Problem:** LLMs need project semantics (which button, which player ship, when to use builtins) — not just TSCN syntax. Cold-start skeletons are a subset of this.
 
-**Authoring:** `godot-cli catalog add` writes a `*.manifest.json` beside the scene — see [catalog design](catalog_design.md).
+**Authoring:** `godot-cli catalog add` writes a `*.manifest.json` beside the scene — see [catalog design](../catalog_design.md).
 
 **Consumption:** `godot-cli catalog scan|list|show|validate|search|export` + builtin JSON (`godot/ui/Button`, document-only).
 
@@ -196,7 +198,7 @@ godot-cli scene template copy 2d/character_body --output player.tscn \
 godot-cli scene apply main.tscn --patch patch.json --output main.tscn --project-root .
 ```
 
-**Patch schema:** see [agent_scene_authoring.md](agent_scene_authoring.md#patch-format).
+**Patch schema:** see [agent_scene_authoring.md](../agent_scene_authoring.md#patch-format).
 
 **Implementation:** `src/godot/scene_patch.zig`
 
@@ -229,7 +231,7 @@ Defer MCP server; CLI + patch JSON is enough.
 - **`ext_remove` / `sub_remove` patch ops** — **done** — with undo via `ext_add` / `sub_add` capture
 - **`instance_override` patch op** — **done** — instance property or editable child override (`child`, `type`, `editable`)
 - **`scene template list|show|copy`** — **done** — built-ins in `templates/` (`2d/character_body`, `ui/control_root`)
-- **`godot-cli batch`** — **done** — multi-step workflows; modes `stop`, `continue`, `atomic`; see [agent_batch_commands.md](agent_batch_commands.md)
+- **`godot-cli batch`** — **done** — multi-step workflows; modes `stop`, `continue`, `atomic`; see [agent_batch_commands.md](../agent_batch_commands.md)
 
 Defer MCP server; CLI + batch + patch JSON is enough.
 

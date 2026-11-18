@@ -27,7 +27,8 @@ Validation exits 1 when it finds an error, and returns every issue with a line n
 | `property_type_mismatch` | error | A property's value is the wrong Variant type for its class, e.g. `visible = Vector2(1, 2)` |
 | `unknown_signal` | error | A connection names a signal the emitting class does not have, and its script does not declare, nor any script it extends |
 | `unknown_method` | warning | A connection calls a method the receiving node does not have: not in its script, nor in what the script extends, nor in its class. Godot logs "Method not found" each time the signal fires |
-| `unknown_property` | warning | A property the class does not have, on a node with no script and no instance: Godot keeps the line and ignores it |
+| `unknown_property` | warning | A property neither the node's class nor its script declares. With `--project-root` the script, the scripts it extends and an instanced scene's root are read too. Godot sets nothing, logs nothing, and the editor's next save drops the line |
+| `unknown_theme_override` | warning | A theme override the node's class has no theme item for, such as `theme_override_colors/font_colour`, or one whose value is the wrong type. Nothing draws with it, and the editor's next save drops it |
 | `connection_node_missing` | error | A connection names a node that is not in the scene |
 | `property_not_stored` | warning | A 3D node placed with `position`, `rotation`, `scale` or the like, which the editor's next save turns into `transform` |
 | `control_under_node2d` | warning | A `Control` under a `Node2D` has no parent rect, so anchors give it no size and it may draw nothing |
@@ -37,29 +38,40 @@ Validation exits 1 when it finds an error, and returns every issue with a line n
 
 `property_type_mismatch`, `unknown_signal` and `unknown_property` come from a
 table generated out of Godot's own class reference (718 classes, 4422
-properties, 399 signals, 4350 methods), so they catch the mistakes that
-otherwise cost a run to find:
+properties, 399 signals, 4350 methods), and `unknown_theme_override` from the
+theme items each class offers, as the engine lists them. They catch the
+mistakes that otherwise cost a run to find:
 
 ```text
 [err] property_type_mismatch: Control.visible is bool, and this value is vector2:
       Godot coerces it and the file still loads, so only the running frame shows the damage
 [err] unknown_signal: Button does not emit a signal named pressd, and its script does not
       declare one either, so this connection never fires
-[warn] unknown_property: HBoxContainer has no property margin_left, so Godot keeps the line
-      and ignores it: the setting does nothing and nothing reports it
+[warn] unknown_property: HUD sets max_helht, which neither ProgressBar (the root of
+      res://ui/health_bar.tscn) nor res://ui/bar.gd declares, so Godot sets nothing and says
+      nothing: the value never reaches the node, and the editor's next save drops the line.
+      Did you mean max_health?
+[warn] unknown_theme_override: Title sets theme_override_constants/font_shadow_color, which
+      Label has no theme item for: the override is stored, nothing draws with it, and the
+      editor's next save drops the line. Did you mean theme_override_colors/font_shadow_color?
 ```
 
-`unknown_property` is a warning rather than an error because the table cannot
-see everything a property might come from. A node with a script attached, or an
-instanced node, is skipped entirely: their `@export` vars are not in any class
-reference. So are namespaced names like `theme_override_constants/margin_left`
-and `metadata/level`, and the handful Godot registers as internal, `layout_mode`
-and `anchors_preset` among them, which the editor writes into every scene it
-touches and the class reference never mentions.
+`unknown_property` is a warning rather than an error because a property can
+come from places the check cannot always read. On a node with a script it
+reads the script, built-in ones included, and the scripts it extends by path or
+by `class_name`. On an instanced node it reads the instanced scene's root and
+that root's script. That needs `--project-root`; without it, scripted and
+instanced nodes are skipped. A script that answers properties itself
+(`_set`, `_get_property_list`), a C# script, a binary `.scn` and an imported
+model are skipped too. So are `metadata/level` and the handful of names Godot
+registers as internal, `layout_mode` and `anchors_preset` among them, which
+the editor writes into every scene it touches and the class reference never
+mentions.
 
-Both are deliberately quiet about anything the table cannot speak for: a class
-it does not carry, a `theme_override_*` entry, a `metadata/*` key, a script's
-exported variables, and a connection whose endpoint lives inside an instance.
+They stay quiet about anything they cannot speak for: a class the table does
+not carry, a `metadata/*` key, a script they cannot read, an override inside
+another scene's instance, and a connection whose endpoint lives inside an
+instance.
 
 If a run answers `uid_cache_unreadable`, the damaged file is Godot's
 `.godot/uid_cache.bin` and not the scene you passed. Delete it and run the
@@ -68,9 +80,9 @@ more; it skips the `stale_uid_for_path` check and says so in `messages`.
 
 **So read a clean `scene validate` for what it is.** It says nothing here was
 found wrong; it does not say every property is real, every signal exists, or
-every value is right. `unknown_property` in particular skips more than it
-checks: a misspelled `theme_override_constants/marign_left` passes, and so
-does any property on a node that has a script. A partial check that says
+every value is right. A property on a node whose script cannot be read
+passes unchecked, and without `--project-root` so does every property on a
+scripted or instanced node. A partial check that says
 nothing reads exactly like a complete one that found nothing, which is why the
 step after validating is [running the game]({{ base_url }}/how-to/verify-a-change/)
 rather than calling it done.

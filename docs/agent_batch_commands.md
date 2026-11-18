@@ -140,4 +140,4 @@ With batch: **one** `godot-cli batch --file … --json` call returns nested `dat
 ## See also
 
 - [agent_scene_authoring.md](agent_scene_authoring.md) — patch ops, intents, undo
-- [scene_authoring_roadmap.md](scene_authoring_roadmap.md) — Phase I features
+- [scene_authoring_roadmap.md](history/scene_authoring_roadmap.md) — Phase I features

@@ -227,4 +227,4 @@ godot-cli resource inspect path/to/material.tres --json
 
 ## Next work
 
-See [mini_roadmap.md](mini_roadmap.md). **Items 1–4 complete** (rich inspect, node tree, property normalization, variant gaps). **Next: item #5** fixture/CI hardening, then optional MCP server.
+See [history/mini_roadmap.md](history/mini_roadmap.md), now finished; open work is in [BACKLOG.md](BACKLOG.md).

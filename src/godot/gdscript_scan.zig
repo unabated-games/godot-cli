@@ -34,6 +34,10 @@ pub const ScriptInterface = struct {
     signals: []SignalInfo = &.{},
     /// Names of the functions it defines, static ones included.
     functions: []const []const u8 = &.{},
+    /// Every member variable it declares at the top level, exported or not,
+    /// static ones included: a scene line may set any of them
+    /// (GDScriptInstance::set looks up static variables too).
+    variables: []const []const u8 = &.{},
     /// What `extends` names: a class (`Node2D`, a `class_name`) or a quoted
     /// path, unquoted (`res://base.gd`). Empty when there is no `extends`,
     /// which for GDScript means RefCounted.
@@ -48,12 +52,19 @@ pub const ScriptInterface = struct {
         allocator.free(self.signals);
         for (self.functions) |name| allocator.free(name);
         allocator.free(self.functions);
+        for (self.variables) |name| allocator.free(name);
+        allocator.free(self.variables);
         allocator.free(self.extends);
         allocator.free(self.class_name);
     }
 
     pub fn definesFunction(self: *const ScriptInterface, name: []const u8) bool {
         for (self.functions) |candidate| if (std.mem.eql(u8, candidate, name)) return true;
+        return false;
+    }
+
+    pub fn declaresVariable(self: *const ScriptInterface, name: []const u8) bool {
+        for (self.variables) |candidate| if (std.mem.eql(u8, candidate, name)) return true;
         return false;
     }
 };
@@ -78,6 +89,11 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
     errdefer {
         for (functions.items) |name| allocator.free(name);
         functions.deinit(allocator);
+    }
+    var variables: std.ArrayList([]const u8) = .empty;
+    errdefer {
+        for (variables.items) |name| allocator.free(name);
+        variables.deinit(allocator);
     }
     var extends: []const u8 = "";
     errdefer allocator.free(extends);
@@ -121,6 +137,7 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
         // an inner class's are indented.
         const top_level = line.len > 0 and !std.ascii.isWhitespace(line[0]);
         if (top_level) {
+            if (topLevelVarName(trimmed)) |name| try variables.append(allocator, try allocator.dupe(u8, name));
             const without_static = if (std.mem.startsWith(u8, trimmed, "static ")) std.mem.trimStart(u8, trimmed["static ".len..], " \t") else trimmed;
             if (std.mem.startsWith(u8, without_static, "func ")) {
                 const rest = std.mem.trimStart(u8, without_static["func ".len..], " \t");
@@ -185,9 +202,41 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
         .exports = try exports.toOwnedSlice(allocator),
         .signals = try signals.toOwnedSlice(allocator),
         .functions = try functions.toOwnedSlice(allocator),
+        .variables = try variables.toOwnedSlice(allocator),
         .extends = extends,
         .class_name = class_name,
     };
+}
+
+/// The name a top-level `var` line declares, past any annotations on the
+/// same line (`@export_range(0, 10) var speed`, `@onready var label`,
+/// `static var count`). Null for anything else.
+fn topLevelVarName(trimmed: []const u8) ?[]const u8 {
+    var rest = trimmed;
+    while (rest.len > 0 and rest[0] == '@') {
+        var i: usize = 1;
+        while (i < rest.len and (std.ascii.isAlphanumeric(rest[i]) or rest[i] == '_')) i += 1;
+        if (i < rest.len and rest[i] == '(') {
+            var depth: usize = 0;
+            while (i < rest.len) : (i += 1) {
+                if (rest[i] == '(') depth += 1;
+                if (rest[i] == ')') {
+                    depth -= 1;
+                    if (depth == 0) {
+                        i += 1;
+                        break;
+                    }
+                }
+            }
+        }
+        rest = std.mem.trimStart(u8, rest[i..], " \t");
+    }
+    if (std.mem.startsWith(u8, rest, "static ")) rest = std.mem.trimStart(u8, rest["static ".len..], " \t");
+    if (!std.mem.startsWith(u8, rest, "var ")) return null;
+    rest = std.mem.trimStart(u8, rest["var ".len..], " \t");
+    const end = std.mem.indexOfAny(u8, rest, " \t:=") orelse rest.len;
+    if (end == 0) return null;
+    return rest[0..end];
 }
 
 /// `Node2D`, `"res://base.gd"` or `'res://base.gd'`, up to a comment.
@@ -376,4 +425,23 @@ test "functions, extends and class_name are read from the top level only" {
     var plain = try parseScript(allocator, "extends Node2D # a comment\n");
     defer plain.deinit(allocator);
     try std.testing.expectEqualStrings("Node2D", plain.extends);
+}
+
+test "top-level variables are read whatever their annotations" {
+    const allocator = std.testing.allocator;
+    var interface = try parseScript(allocator, "extends Node2D\n\n" ++
+        "@export var max_health: int = 100\n" ++
+        "@export_range(0, 10, 0.5) var speed := 4.0\n" ++
+        "@export\nvar on_next_line = 1\n" ++
+        "@onready var label: Label = $Label\n" ++
+        "var plain\n" ++
+        "static var shared := 0\n" ++
+        "const LIMIT = 3\n\n" ++
+        "func _ready():\n\tvar local = 2\n\n" ++
+        "class Inner:\n\tvar not_mine = 1\n");
+    defer interface.deinit(allocator);
+    const expected = [_][]const u8{ "max_health", "speed", "on_next_line", "label", "plain", "shared" };
+    try std.testing.expectEqual(expected.len, interface.variables.len);
+    for (expected, interface.variables) |want, got| try std.testing.expectEqualStrings(want, got);
+    try std.testing.expect(!interface.declaresVariable("local"));
 }

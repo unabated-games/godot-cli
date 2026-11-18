@@ -6,7 +6,9 @@
 //! Resources they reference are copied into the new scene and pruned from the
 //! source when nothing else uses them. Connections and editable-children
 //! sections wholly inside the subtree move and are rewritten relative to the
-//! new root; a connection that crosses the boundary is dropped and reported,
+//! new root. One between the extracted node itself and the rest of the scene
+//! stays, since the instance keeps that node's path. One that reaches a node
+//! below it from outside crosses the boundary and is dropped and reported,
 //! since the parent scene must connect to the instance instead.
 
 const std = @import("std");
@@ -181,6 +183,12 @@ pub fn extractSubtreeWithOptions(allocator: std.mem.Allocator, doc: *document.Do
                 try new_doc.sections.append(allocator, cloned);
                 try remove_indices.append(allocator, index);
                 moved_connections += 1;
+            } else if ((from_in and std.mem.eql(u8, from, target_rel)) or (to_in and std.mem.eql(u8, to, target_rel))) {
+                // The endpoint inside is the extracted node itself, and the
+                // instance keeps its name and path, so the connection is as
+                // valid as before; Save Branch as Scene leaves it where it
+                // is. Trial 47 had to re-create a Start button's `pressed`.
+                continue;
             } else if (from_in or to_in) {
                 const signal = section.header.getString("signal") orelse "";
                 const method = section.header.getString("method") orelse "";
@@ -392,4 +400,48 @@ test "a subtree moves out with its resources and inner connections" {
     }
     try std.testing.expect(!kept_hud_script);
     try std.testing.expect(kept_icon);
+}
+
+test "a connection on the extracted node itself stays in the source" {
+    // The instance keeps the extracted node's name and path, so its own
+    // signals still reach the rest of the scene, and the rest of the scene
+    // still reaches it. Trial 47's Start button lost its `pressed`.
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[node name="HUD" type="CanvasLayer"]
+        \\
+        \\[node name="Start" type="Button" parent="."]
+        \\
+        \\[node name="Icon" type="TextureRect" parent="Start"]
+        \\
+        \\[node name="Timer" type="Timer" parent="."]
+        \\
+        \\[connection signal="pressed" from="Start" to="." method="_on_start"]
+        \\
+        \\[connection signal="timeout" from="Timer" to="Start" method="hide"]
+        \\
+        \\[connection signal="resized" from="Start/Icon" to="." method="_on_icon"]
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    var result = try extractSubtree(allocator, &doc, "/root/HUD/Start");
+    defer result.new_doc.deinit(allocator);
+    defer allocator.free(result.name);
+    defer allocator.free(result.parent_path);
+    defer {
+        for (result.dropped_connections) |d| allocator.free(d);
+        allocator.free(result.dropped_connections);
+    }
+
+    // Only the one from a node below Start crosses the boundary.
+    try std.testing.expectEqual(@as(usize, 1), result.dropped_connections.len);
+    try std.testing.expect(std.mem.indexOf(u8, result.dropped_connections[0], "Start/Icon") != null);
+    var kept: usize = 0;
+    for (doc.sections.items) |section| {
+        if (std.mem.eql(u8, section.header.name, "connection")) kept += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 2), kept);
 }

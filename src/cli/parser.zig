@@ -2,6 +2,7 @@ const std = @import("std");
 const spec = @import("spec.zig");
 const error_details = @import("../godot/error_details.zig");
 const help = @import("help.zig");
+const editDistance = @import("../godot/edit_distance.zig").distance;
 
 pub const ParseError = spec.CliError;
 
@@ -302,30 +303,6 @@ fn noteUnknownOption(
 
     const joined = std.mem.join(allocator, " ", path) catch return;
     error_details.record(.{ .command = joined, .field = bare, .value = arg, .hint = hint });
-}
-
-fn editDistance(a: []const u8, b: []const u8) usize {
-    if (a.len == 0) return b.len;
-    if (b.len == 0) return a.len;
-    // Bounded so the row fits a fixed buffer; option names are short, and a
-    // pathological argument should not cost more than a wrong answer.
-    if (a.len > 64 or b.len > 64) return std.math.maxInt(usize);
-
-    var previous: [65]usize = undefined;
-    var current: [65]usize = undefined;
-    for (0..b.len + 1) |i| previous[i] = i;
-
-    for (a, 0..) |ca, i| {
-        current[0] = i + 1;
-        for (b, 0..) |cb, j| {
-            const substitute = previous[j] + @intFromBool(ca != cb);
-            const insert = current[j] + 1;
-            const delete = previous[j + 1] + 1;
-            current[j + 1] = @min(substitute, @min(insert, delete));
-        }
-        @memcpy(previous[0 .. b.len + 1], current[0 .. b.len + 1]);
-    }
-    return previous[b.len];
 }
 
 fn isGlobalFlag(arg: []const u8) bool {

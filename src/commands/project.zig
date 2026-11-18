@@ -45,6 +45,14 @@ fn loadProject(cli: *const app_mod.App, inv: *const spec.Invocation) !struct {
             });
             return error.FileNotFound;
         },
+        error.InvalidFormat => {
+            error_details.record(.{
+                .field = "project.godot",
+                .value = path,
+                .hint = "godot-cli could not parse this project.godot; nothing was changed. If Godot opens the project, this is a godot-cli bug worth reporting with the file",
+            });
+            return error.InvalidFormat;
+        },
         else => {
             cli.allocator.free(path);
             return err;
@@ -339,6 +347,23 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         try clicks.append(cli.allocator, click);
     }
 
+    var keys: std.ArrayList(godot_run.KeyPress) = .empty;
+    for (try inv.getOptionAll(cli.allocator, "key")) |text| {
+        const key = godot_run.parseKey(text, &project_input.keycodeForName) orelse {
+            error_details.record(.{ .field = "key", .value = text, .hint = "write <key>@<frame> or <key>@<first>..<last>, with any of ctrl+, shift+, alt+, meta+ before the key, e.g. enter@20 or ctrl+s@10. Keys: " ++ project_input.key_names });
+            return error.InvalidPropertyValue;
+        };
+        try keys.append(cli.allocator, key);
+    }
+    var hovers: std.ArrayList(godot_run.Click) = .empty;
+    for (try inv.getOptionAll(cli.allocator, "hover")) |text| {
+        const hover = godot_run.parseClick(text) orelse {
+            error_details.record(.{ .field = "hover", .value = text, .hint = "write <node path>@<frame>, e.g. /root/Main/HUD/StartButton@20" });
+            return error.InvalidPropertyValue;
+        };
+        try hovers.append(cli.allocator, hover);
+    }
+
     // Repeatable, so one run can keep frame 0 and a mid-run frame as well as
     // the last: a before-and-after pair in a single run (trial 16).
     var frames_at: std.ArrayList(u32) = .empty;
@@ -387,7 +412,11 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
                 if (physics_fps == 0) physics_fps = 60;
             }
         }
-    } else |_| {}
+    } else |err| {
+        // An unreadable file is not a project without a main scene: saying
+        // so sent trial 47 to set a setting that was already there.
+        if (err == error.InvalidFormat) return err;
+    }
 
     // Godot refuses to run with no scene to run, but only after the import,
     // and the reason was left in the log under a generic checks_failed.
@@ -415,6 +444,8 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
         .user_args = user_args,
         .presses = presses.items,
         .clicks = clicks.items,
+        .keys = keys.items,
+        .hovers = hovers.items,
         .types = types.items,
         .focuses = focuses.items,
         .keep_cursor = inv.flag("keep-cursor"),
@@ -432,6 +463,8 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     if (run.frame) |frame| try data.put(cli.allocator, "frame", .{ .string = frame });
     try data.put(cli.allocator, "presses", .{ .integer = @intCast(presses.items.len) });
     try data.put(cli.allocator, "clicks", .{ .integer = @intCast(clicks.items.len) });
+    try data.put(cli.allocator, "keys", .{ .integer = @intCast(keys.items.len) });
+    try data.put(cli.allocator, "hovers", .{ .integer = @intCast(hovers.items.len) });
     if (run.driver_script) |script| try data.put(cli.allocator, "driver_script", .{ .string = script });
     if (run.frame_at_paths.len != 0) {
         var kept = std.json.Array.init(cli.allocator);
@@ -1305,31 +1338,63 @@ fn renderingValidateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.
 fn moveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
     const root = projectRootFrom(inv) orelse return error.Usage;
-    const from = inv.getOption("from") orelse return error.Usage;
+    const froms = try inv.getOptionAll(cli.allocator, "from");
+    if (froms.len == 0) return error.Usage;
     const to = inv.getOption("to") orelse return error.Usage;
+    const dry_run = inv.flag("dry-run");
 
-    var result = try project_move.moveResource(cli.allocator, cli.io, root, from, to, inv.flag("dry-run"), inv.flag("rename-ids"));
-    defer result.deinit(cli.allocator);
+    const pairs = try project_move.planMoves(cli.allocator, cli.io, root, froms, to);
+
+    var moves = std.json.Array.init(cli.allocator);
+    var changed: std.StringArrayHashMapUnmanaged(void) = .empty;
+    var sidecars: usize = 0;
+    var references: usize = 0;
+    var manifests: usize = 0;
+    var settings: usize = 0;
+    var ids_renamed: usize = 0;
+    for (pairs) |pair| {
+        var result = try project_move.moveResource(cli.allocator, cli.io, root, pair.from, pair.to, dry_run, inv.flag("rename-ids"));
+        defer result.deinit(cli.allocator);
+        for (result.changed_files) |f| try changed.put(cli.allocator, try cli.allocator.dupe(u8, f), {});
+        sidecars += result.sidecars_moved;
+        references += result.references_retargeted;
+        manifests += result.manifests_updated;
+        settings += result.settings_updated;
+        ids_renamed += result.ids_renamed;
+        var move: std.json.ObjectMap = .{};
+        try move.put(cli.allocator, "from", .{ .string = try cli.allocator.dupe(u8, result.from) });
+        try move.put(cli.allocator, "to", .{ .string = try cli.allocator.dupe(u8, result.to) });
+        try move.put(cli.allocator, "references_retargeted", .{ .integer = @intCast(result.references_retargeted) });
+        try moves.append(.{ .object = move });
+    }
+    // A folder move leaves the folders it emptied; take them away too.
+    if (!dry_run and froms.len == 1 and pairs.len > 0 and !std.mem.eql(u8, pairs[0].from, try project_move.normalizeResPath(cli.allocator, root, std.mem.trimEnd(u8, froms[0], "/")))) {
+        project_move.removeEmptyFolders(cli.allocator, cli.io, root, try project_move.normalizeResPath(cli.allocator, root, std.mem.trimEnd(u8, froms[0], "/")));
+    }
 
     var files = std.json.Array.init(cli.allocator);
-    for (result.changed_files) |f| try files.append(.{ .string = try cli.allocator.dupe(u8, f) });
+    for (changed.keys()) |f| try files.append(.{ .string = f });
 
     var data: std.json.ObjectMap = .{};
-    try data.put(cli.allocator, "from", .{ .string = try cli.allocator.dupe(u8, result.from) });
-    try data.put(cli.allocator, "to", .{ .string = try cli.allocator.dupe(u8, result.to) });
-    try data.put(cli.allocator, "sidecars_moved", .{ .integer = @intCast(result.sidecars_moved) });
-    try data.put(cli.allocator, "files_changed", .{ .integer = @intCast(result.files_changed) });
-    try data.put(cli.allocator, "references_retargeted", .{ .integer = @intCast(result.references_retargeted) });
-    try data.put(cli.allocator, "manifests_updated", .{ .integer = @intCast(result.manifests_updated) });
-    try data.put(cli.allocator, "settings_updated", .{ .integer = @intCast(result.settings_updated) });
-    if (inv.flag("rename-ids")) try data.put(cli.allocator, "ids_renamed", .{ .integer = @intCast(result.ids_renamed) });
+    if (pairs.len == 1) {
+        try data.put(cli.allocator, "from", .{ .string = pairs[0].from });
+        try data.put(cli.allocator, "to", .{ .string = pairs[0].to });
+    }
+    try data.put(cli.allocator, "moves", .{ .array = moves });
+    try data.put(cli.allocator, "sidecars_moved", .{ .integer = @intCast(sidecars) });
+    try data.put(cli.allocator, "files_changed", .{ .integer = @intCast(changed.count()) });
+    try data.put(cli.allocator, "references_retargeted", .{ .integer = @intCast(references) });
+    try data.put(cli.allocator, "manifests_updated", .{ .integer = @intCast(manifests) });
+    try data.put(cli.allocator, "settings_updated", .{ .integer = @intCast(settings) });
+    if (inv.flag("rename-ids")) try data.put(cli.allocator, "ids_renamed", .{ .integer = @intCast(ids_renamed) });
     try data.put(cli.allocator, "changed_files", .{ .array = files });
-    try data.put(cli.allocator, "dry_run", .{ .bool = inv.flag("dry-run") });
+    try data.put(cli.allocator, "dry_run", .{ .bool = dry_run });
     // Godot's uid cache still maps the old path, so validation reports
     // uid_path_mismatch until an import refreshes it. --import runs that here,
-    // which is what makes "validate after every edit" hold for a move.
+    // which is what makes "validate after every edit" hold for a move. With
+    // no cache yet there is nothing stale, and nothing to say.
     var imported = false;
-    if (!inv.flag("dry-run")) {
+    if (!dry_run) {
         if (inv.flag("import")) {
             const godot = try godot_run.locateGodot(cli.allocator, cli.io, cli.environ, inv.getOption("godot"));
             const outcome = try godot_run.runProcess(cli.allocator, cli.environ, root, &.{ godot, "--headless", "--path", ".", "--import", "--quit" });
@@ -1339,11 +1404,17 @@ fn moveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
             };
             try data.put(cli.allocator, "imported", .{ .bool = imported });
         }
-        if (!imported) {
+        const cache_path = try std.fs.path.join(cli.allocator, &.{ root, ".godot", "uid_cache.bin" });
+        const has_cache = if (std.Io.Dir.cwd().access(cli.io, cache_path, .{})) |_| true else |_| false;
+        if (!imported and has_cache) {
             try data.put(cli.allocator, "note", .{ .string = "Godot's uid_cache.bin still maps the old path until the next import; scene validate reports uid_path_mismatch until project import (or project run) has run. Pass --import to do it here" });
         }
     }
-    const summary = try cli.allocator.print("moved {s} to {s}; retargeted {d} reference(s) in {d} file(s), {d} manifest(s), {d} setting(s)", .{ result.from, result.to, result.references_retargeted, result.files_changed, result.manifests_updated, result.settings_updated });
+    const what = if (pairs.len == 1)
+        try cli.allocator.print("moved {s} to {s}", .{ pairs[0].from, pairs[0].to })
+    else
+        try cli.allocator.print("moved {d} files to {s}", .{ pairs.len, std.mem.trimEnd(u8, to, "/") });
+    const summary = try cli.allocator.print("{s}{s}; retargeted {d} reference(s) in {d} file(s), {d} manifest(s), {d} setting(s)", .{ if (dry_run) "would have " else "", what, references, changed.count(), manifests, settings });
     try data.put(cli.allocator, "summary", .{ .string = summary });
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
@@ -1572,7 +1643,9 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "keep-frames", .kind = .flag, .description = "Keep every frame and the .wav; the default keeps only the last frame" },
     .{ .long = "headless", .kind = .flag, .description = "No window and no frames, only the log; for machines without a display. --press and --click both work: the run puts the project's viewport size back, which the headless display server does not report. What you lose is the frame" },
     .{ .long = "user-arg", .kind = .string, .description = "Argument passed after --, readable with OS.get_cmdline_user_args(); repeatable", .repeatable = true },
-    .{ .long = "press", .kind = .string, .description = "Hold an input action over a frame range, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it. It is the action itself, not a key or button bound to it, so it proves code reacting to the action, not the bindings; project input list reports those", .repeatable = true },
+    .{ .long = "press", .kind = .string, .description = "Hold an input action over a frame range, e.g. move_right@10..40 or ui_accept@5; repeatable. Sent as a real InputEventAction and as polled action state, so a focused Control and Input.get_vector both see it. It is the action itself, not a key or button bound to it, so it proves code reacting to the action, not the bindings; project input list reports those. A Button's shortcut never sees an action, since Godot passes only key, joypad-button and shortcut events to shortcut_input: press its key with --key instead", .repeatable = true },
+    .{ .long = "key", .kind = .string, .description = "Press a real key over a frame range: <key>@<frame> or <key>@<first>..<last>, with ctrl+, shift+, alt+ or meta+ before it, e.g. enter@20, ctrl+s@10, space@5..30; repeatable. An InputEventKey, so a Button's shortcut sees it and the input map turns it into whatever actions bind it: this proves the binding as well as the code. Keys: " ++ project_input.key_names, .repeatable = true },
+    .{ .long = "hover", .kind = .string, .description = "Move the cursor over a node on a frame without clicking: <node path>@<frame>, e.g. /root/Main/HUD/StartButton@20; repeatable. The node draws its hover style from the next frame, for a --frame-at a frame or two later; a click would press it as well", .repeatable = true },
     .{ .long = "click", .kind = .string, .description = "Left-click the centre of a node on a frame, e.g. /root/Main/HUD/PauseButton@20; repeatable. A Button's pressed signal fires from this, and the cursor moves off the node after the release so later frames show its normal style. Works under --headless too. A click on a node laid out beyond the viewport reaches nothing and fails the run rather than passing silently", .repeatable = true },
     .{ .long = "type", .kind = .string, .description = "Type text into a LineEdit or TextEdit on a frame: <node-path>@<frame>=<text>, e.g. /root/Main/%Email@20=someone@example.com; repeatable. The field is focused and emptied, then the text goes in as real key events, so text_changed fires the way a validating form expects. The value lands the frame after, so click Submit at least two frames later", .repeatable = true },
     .{ .long = "focus", .kind = .string, .description = "Give a Control keyboard focus on a frame: <node-path>@<frame>; repeatable. --type focuses the field it types into, so this is for watching a focus ring or a tab order", .repeatable = true },
@@ -1626,8 +1699,8 @@ pub fn commands() spec.CommandSpec {
         .{ .long = "rename-ids", .kind = .flag, .description = "Re-seed ext_resource ids from the new file name, so a Script_player id stops naming a file called hero.gd; ids already in use are left alone" },
         godot_option,
         .{ .long = "import", .kind = .flag, .description = "Run Godot's headless import after the move, so its uid cache stops mapping the old path and validation stops reporting uid_path_mismatch" },
-        .{ .long = "from", .kind = .string, .description = "Current path (res://scripts/player.gd or scripts/player.gd)", .required = true },
-        .{ .long = "to", .kind = .string, .description = "New path", .required = true },
+        .{ .long = "from", .kind = .string, .description = "Current path (res://scripts/player.gd or scripts/player.gd), or a folder to rename; repeatable, to move several files into the folder --to names in one call", .required = true, .repeatable = true },
+        .{ .long = "to", .kind = .string, .description = "New path. With several --from, or ending in /, the folder the files go into, keeping their names: --from res://player.tscn --from res://player.gd --to res://actors/player/. For a folder --from, the folder's new path", .required = true },
         .{ .long = "dry-run", .kind = .flag, .description = "Report what would change without moving or writing" },
     } ++ project_options;
 
@@ -1663,7 +1736,7 @@ pub fn commands() spec.CommandSpec {
                 .name = "run",
                 .summary = "Run the game for a few frames and capture the last frame and the log",
                 .description =
-                \\Imports (unless --no-import; the import writes .import and .uid files into the project, as project import says), then runs the main scene or --scene with --write-movie into the capture folder (--capture-dir, under .godot/ by default, which Godot never imports), quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. The cursor moves off the node after a click, so the last frame shows its normal style; --keep-cursor leaves it there for the hover style. Only the game's own cursor moves, never the desktop pointer. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
+                \\Imports (unless --no-import; the import writes .import and .uid files into the project, as project import says), then runs the main scene or --scene with --write-movie into the capture folder (--capture-dir, under .godot/ by default, which Godot never imports), quits after --frames, and reads the log. The result names the last frame, the log and its last 40 lines, and every ERROR or SCRIPT ERROR line with its backtrace; it fails (exit 1) when Godot did not exit cleanly or the log holds an error, so the change is not done until this passes. A run can pass with a wrong layout, so read the frame as well as the log. --press move_right@10..40 holds an input action over a frame range and --click /root/Main/HUD/PauseButton@20 clicks a node, so movement and buttons can be exercised; the frame then shows the result. The cursor moves off the node after a click, so the last frame shows its normal style; --keep-cursor leaves it there for the hover style, and --hover <node>@<frame> shows it with no click at all. --key enter@20 presses a real key, which a Button's shortcut sees and an action from --press does not. Only the game's own cursor moves, never the desktop pointer. Result data: frame (path of the last PNG), log, log_tail (last 40 lines), errors and error_count, exit and import_exit, stderr_tail, frames_written, presses, clicks, keys, hovers, duration_ms, summary. Frames other than the last, and the .wav Godot writes, are deleted unless --keep-frames. Over MCP the frame is also returned as an image.
                 ,
                 .options = &run_options,
                 .handler = runHandler,

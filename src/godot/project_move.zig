@@ -6,6 +6,7 @@
 //! does the `mv` and the repointing together.
 
 const std = @import("std");
+const error_details = @import("error_details.zig");
 const document = @import("text_format/document.zig");
 const writer = @import("text_format/writer.zig");
 const text_batch = @import("text_format/batch.zig");
@@ -19,6 +20,8 @@ pub const Error = error{
     InvalidPath,
     SourceNotFound,
     DestinationExists,
+    /// project.godot will not parse, so it could not be kept in step.
+    InvalidFormat,
 };
 
 pub const Result = struct {
@@ -82,6 +85,112 @@ fn renameIdsForMovedFile(allocator: std.mem.Allocator, doc: *document.Document, 
     return renamed;
 }
 
+pub const Pair = struct { from: []const u8, to: []const u8 };
+
+/// The file moves a `project move` asks for, every one checked before any
+/// happens, so a bad destination cannot leave half a folder moved:
+/// - one `from` that is a folder: every file in it moves to the same place
+///   under `to`, which must not exist (a folder rename);
+/// - several `from`s, or a `to` ending in `/`: each file moves into the
+///   folder `to`, keeping its name;
+/// - otherwise one file to one path.
+/// A `.uid` or `.import` file whose file is moving is left out: it goes with
+/// its file. Trial 47 spent six calls on six files.
+pub fn planMoves(allocator: std.mem.Allocator, io: std.Io, project_root: []const u8, froms: []const []const u8, to_in: []const u8) Error![]Pair {
+    var pairs: std.ArrayList(Pair) = .empty;
+    const into_folder = froms.len > 1 or std.mem.endsWith(u8, to_in, "/");
+    const to_base = try normalizeResPath(allocator, project_root, std.mem.trimEnd(u8, to_in, "/"));
+    if (into_folder) {
+        const to_fs = (project_config.resPathToFilesystem(allocator, project_root, to_base) catch return error.InvalidPath) orelse return error.InvalidPath;
+        if (std.Io.Dir.cwd().statFile(io, to_fs, .{})) |stat| {
+            if (stat.kind != .directory) {
+                error_details.record(.{ .field = "to", .value = to_in, .hint = "with several --from, or a --to ending in /, --to is the folder the files go into, and this is a file; nothing was moved" });
+                return error.DestinationExists;
+            }
+        } else |_| {}
+    }
+    for (froms) |from_in| {
+        const from = try normalizeResPath(allocator, project_root, std.mem.trimEnd(u8, from_in, "/"));
+        const from_fs = (project_config.resPathToFilesystem(allocator, project_root, from) catch return error.InvalidPath) orelse return error.InvalidPath;
+        const stat = std.Io.Dir.cwd().statFile(io, from_fs, .{}) catch return error.SourceNotFound;
+        if (stat.kind == .directory) {
+            if (into_folder) {
+                error_details.record(.{ .field = "from", .value = from_in, .hint = "a folder moves on its own: --from res://ui --to res://interface renames it. Several --from, or a --to ending in /, move files into a folder" });
+                return error.InvalidPath;
+            }
+            var dir = std.Io.Dir.cwd().openDir(io, from_fs, .{ .iterate = true }) catch return error.Io;
+            defer dir.close(io);
+            var walker = dir.walk(allocator) catch return error.OutOfMemory;
+            defer walker.deinit();
+            var files: std.ArrayList([]const u8) = .empty;
+            while (walker.next(io) catch return error.Io) |entry| {
+                if (entry.kind != .file) continue;
+                try files.append(allocator, try allocator.dupe(u8, entry.path));
+            }
+            for (files.items) |rel| {
+                if (isSidecarOf(rel, files.items)) continue;
+                const rel_res = try std.mem.replaceOwned(u8, allocator, rel, "\\", "/");
+                try pairs.append(allocator, .{
+                    .from = try allocator.print("{s}/{s}", .{ from, rel_res }),
+                    .to = try allocator.print("{s}/{s}", .{ to_base, rel_res }),
+                });
+            }
+        } else {
+            const to = if (into_folder) try allocator.print("{s}/{s}", .{ to_base, std.fs.path.basename(from) }) else to_base;
+            try pairs.append(allocator, .{ .from = from, .to = to });
+        }
+    }
+    for (pairs.items, 0..) |pair, i| {
+        const to_fs = (project_config.resPathToFilesystem(allocator, project_root, pair.to) catch return error.InvalidPath) orelse return error.InvalidPath;
+        if (std.Io.Dir.cwd().access(io, to_fs, .{})) |_| {
+            error_details.record(.{ .field = "to", .value = pair.to, .hint = "a file is already there; nothing was moved" });
+            return error.DestinationExists;
+        } else |_| {}
+        for (pairs.items[0..i]) |earlier| if (std.mem.eql(u8, earlier.to, pair.to)) {
+            error_details.record(.{ .field = "to", .value = pair.to, .hint = "two of the files would land on the same path; nothing was moved" });
+            return error.DestinationExists;
+        };
+    }
+    return pairs.items;
+}
+
+/// `x.gd.uid` or `x.png.import` when `x.gd` or `x.png` is among `files`.
+fn isSidecarOf(path: []const u8, files: []const []const u8) bool {
+    for ([_][]const u8{ ".uid", ".import" }) |suffix| {
+        if (!std.mem.endsWith(u8, path, suffix)) continue;
+        const base = path[0 .. path.len - suffix.len];
+        for (files) |candidate| if (std.mem.eql(u8, candidate, base)) return true;
+    }
+    return false;
+}
+
+/// Remove the folders a folder move emptied, deepest first; one still
+/// holding anything (a file the move did not take) stays.
+pub fn removeEmptyFolders(allocator: std.mem.Allocator, io: std.Io, project_root: []const u8, folder_res: []const u8) void {
+    const fs_path = (project_config.resPathToFilesystem(allocator, project_root, folder_res) catch return) orelse return;
+    var dir = std.Io.Dir.cwd().openDir(io, fs_path, .{ .iterate = true }) catch return;
+    var walker = dir.walk(allocator) catch {
+        dir.close(io);
+        return;
+    };
+    var folders: std.ArrayList([]const u8) = .empty;
+    while (walker.next(io) catch null) |entry| {
+        if (entry.kind == .directory) folders.append(allocator, allocator.dupe(u8, entry.path) catch return) catch return;
+    }
+    walker.deinit();
+    dir.close(io);
+    std.mem.sort([]const u8, folders.items, {}, struct {
+        fn deeper(_: void, a: []const u8, b: []const u8) bool {
+            return a.len > b.len;
+        }
+    }.deeper);
+    for (folders.items) |rel| {
+        const full = std.fs.path.join(allocator, &.{ fs_path, rel }) catch return;
+        std.Io.Dir.cwd().deleteDir(io, full) catch {};
+    }
+    std.Io.Dir.cwd().deleteDir(io, fs_path) catch {};
+}
+
 pub fn moveResource(
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -103,6 +212,29 @@ pub fn moveResource(
 
     std.Io.Dir.cwd().access(io, from_fs, .{}) catch return error.SourceNotFound;
     if (std.Io.Dir.cwd().access(io, to_fs, .{})) |_| return error.DestinationExists else |_| {}
+
+    // project.godot is rewritten after the move, so a file that will not
+    // parse has to stop the move before anything changes; otherwise a moved
+    // main scene or autoload would be left pointing at the old path, with
+    // settings_updated: 0 the only sign.
+    {
+        const project_file = try std.fs.path.join(allocator, &.{ project_root, "project.godot" });
+        defer allocator.free(project_file);
+        if (project_godot.readFile(allocator, io, project_file)) |loaded| {
+            var probe = loaded;
+            probe.deinit(allocator);
+        } else |err| switch (err) {
+            error.InvalidFormat => {
+                error_details.record(.{
+                    .field = "project.godot",
+                    .value = try allocator.dupe(u8, project_file),
+                    .hint = "godot-cli could not parse this project.godot, and a move has to keep its main scene and autoload paths in step, so nothing was moved",
+                });
+                return error.InvalidFormat;
+            },
+            else => {},
+        }
+    }
 
     var changed: std.ArrayList([]const u8) = .empty;
     errdefer {

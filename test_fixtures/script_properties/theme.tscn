@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://b8sp1theme001"]
+
+[ext_resource type="PackedScene" path="res://ui/plain_panel.tscn" id="1_panel"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a"]
+
+[node name="Main" type="Control" unique_id=1]
+
+[node name="Title" type="Label" parent="." unique_id=2]
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+theme_override_colors/font_colour = Color(1, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_constants/font_shadow_color = 2
+theme_override_font_sizes/font_size = 24.0
+theme_override_colors/font_outline_color = 5
+
+[node name="Box" type="Panel" parent="." unique_id=3]
+theme_override_styles/panel = SubResource("StyleBoxFlat_a")
+
+[node name="Sprite" type="Node2D" parent="." unique_id=4]
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="Card" parent="." instance=ExtResource("1_panel") unique_id=5]
+theme_override_styles/panle = SubResource("StyleBoxFlat_a")

@@ -296,9 +296,12 @@ pub fn failureFromHandlerError(allocator: std.mem.Allocator, err: anyerror) emit
         .{ .err = "ExportUnknownField", .kind = "unknown_field", .message = "the intent has a field export presets do not take" },
         .{ .err = "ExportDuplicateName", .kind = "duplicate_name", .message = "another export preset already has that name" },
         .{ .err = "NoMainScene", .kind = "no_main_scene", .message = "the project has no main scene to run" },
+        .{ .err = "InvalidFormat", .kind = "unparseable_file", .message = "the file is not in a form godot-cli can parse" },
         .{ .err = "ChildIndexOutOfRange", .kind = "child_index_out_of_range", .message = "the parent does not have a child at that index" },
         .{ .err = "Usage", .kind = "usage", .message = "the options given do not fit together or are incomplete; details name the one at fault" },
         .{ .err = "BinaryResourceUnreadable", .kind = "binary_resource_unreadable", .message = "the binary resource's header could not be read" },
+        .{ .err = "DestinationExists", .kind = "destination_exists", .message = "something is already at the destination path; nothing was moved" },
+        .{ .err = "SourceNotFound", .kind = "source_not_found", .message = "nothing at the path to move" },
     };
     for (mapped) |entry| if (std.mem.eql(u8, name, entry.err)) {
         failure.kind = entry.kind;

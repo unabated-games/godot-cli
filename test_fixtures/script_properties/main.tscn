@@ -1,0 +1,47 @@
+[gd_scene format=3 uid="uid://b8sp1main0001"]
+
+[ext_resource type="Script" path="res://player.gd" id="1_player"]
+[ext_resource type="PackedScene" path="res://ui/health_bar.tscn" id="2_bar"]
+[ext_resource type="PackedScene" path="res://ui/plain_panel.tscn" id="3_panel"]
+[ext_resource type="Script" path="res://dynamic.gd" id="4_dyn"]
+[ext_resource type="Script" path="res://ui/big_bar.gd" id="5_big"]
+
+[sub_resource type="GDScript" id="GDScript_lvl"]
+script/source = "extends Node2D
+
+@export var level := 1
+"
+
+[node name="Main" type="Node2D" unique_id=1]
+
+[node name="Player" type="CharacterBody2D" parent="." unique_id=2]
+script = ExtResource("1_player")
+velocity = Vector2(1, 0)
+speed = 20.0
+max_health = 5
+internal_state = 1
+max_helth = 50
+shared = 1
+
+[node name="HUD" parent="." instance=ExtResource("2_bar") unique_id=3]
+value = 40.0
+max_health = 20
+max_helht = 1
+
+[node name="BigHUD" parent="." instance=ExtResource("2_bar") unique_id=4]
+script = ExtResource("5_big")
+glow = true
+max_health = 2
+
+[node name="Panel" parent="." instance=ExtResource("3_panel") unique_id=5]
+size = Vector2(10, 10)
+colour = 1
+
+[node name="Dyn" type="Node" parent="." unique_id=6]
+script = ExtResource("4_dyn")
+anything_at_all = 1
+
+[node name="Builtin" type="Node2D" parent="." unique_id=7]
+script = SubResource("GDScript_lvl")
+level = 2
+levle = 3

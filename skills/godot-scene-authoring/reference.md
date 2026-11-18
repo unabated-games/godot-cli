@@ -120,7 +120,8 @@ Example: `$GODOT_CLI_HOME/examples/batch/apply_validate.json`
 | `property_type_mismatch` | The value is the wrong Variant type for that class property, e.g. `visible = Vector2(1, 2)` |
 | `unknown_signal` | The class does not emit that signal and the node's script does not declare it; check the spelling |
 | `uid_cache_unreadable` | `.godot/uid_cache.bin` is damaged, not your scene. Delete it and run the project once. `scene validate` works without it and says which check it skipped |
-| `unknown_property` (warning) | The class has no such property, so Godot keeps the line and ignores it. Partial: skipped for a node with a script, an instanced node, and any namespaced name (`theme_override_*`, `metadata/*`) — a clean validate is not proof every property is real |
+| `unknown_property` (warning) | Neither the class nor the node's script (nor what it extends, nor an instanced scene's root) declares it, so Godot drops the value silently. Take the "Did you mean" name. Scripted and instanced nodes are checked only with `--project-root`, and a script with `_set` or `_get_property_list` is skipped, so a clean validate is not proof every property is real |
+| `unknown_theme_override` (warning) | The class has no theme item by that name or of that data type, so nothing draws with it. Take the "Did you mean" name: often the same item under its right prefix (`theme_override_colors/` for a color) |
 | `header_attribute` | `path`, `name`, `parent` and `type` live in a section header: use `scene retarget-ext`, `project move`, `scene node rename` or `reparent` |
 | `invalid_patch` naming a field | The op does not take that field; the hint lists the ones it does |
 | Click verified nothing | A click that cannot reach its target fails the run, naming the node's position and the viewport. `--click` works under `--headless`; only the frame is missing there |
@@ -136,9 +137,12 @@ godot-cli project run --project-root . --frames 40 \
 
 `--type <path>@<frame>=<text>` focuses and empties a LineEdit or TextEdit, then
 types with real key events so `text_changed` fires. `--focus <path>@<frame>`
-moves focus without typing. `--click <path>@<frame>` clicks; `--press
-<action>@<from>..<to>` holds an input action. Keys land the frame after they
-are sent, so leave a gap before clicking Submit.
+moves focus without typing. `--click <path>@<frame>` clicks; `--hover
+<path>@<frame>` moves the cursor over a node without clicking, for its hover
+style; `--press <action>@<from>..<to>` holds an input action; `--key
+enter@20` (or `ctrl+s@10`, `space@5..30`) presses a real key, which a Button's
+shortcut sees and an action does not. Keys land the frame after they are sent,
+so leave a gap before clicking Submit.
 
 ## JSON output
 

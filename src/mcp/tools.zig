@@ -317,8 +317,11 @@ pub fn buildArgv(
             },
             .string, .path, .integer => {
                 if (opt.repeatable) {
-                    if (value != .array) return .{ .invalid = try allocator.print("argument \"{s}\" must be an array of strings", .{opt.long}) };
-                    for (value.array.items) |item| {
+                    // One value may come as itself rather than a one-item
+                    // array, so an option that became repeatable keeps
+                    // taking what callers already send.
+                    const items: []const std.json.Value = if (value == .array) value.array.items else &.{value};
+                    for (items) |item| {
                         const text = scalarText(allocator, item) catch return .{ .invalid = try allocator.print("argument \"{s}\" must be an array of strings", .{opt.long}) };
                         try argv.append(allocator, try allocator.print("--{s}={s}", .{ opt.long, text }));
                     }

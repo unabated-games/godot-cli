@@ -4,7 +4,7 @@
 
 Manifests are plain `*.manifest.json` files. `godot-cli catalog add` scaffolds them, `catalog scan` reads them, and nothing needs to be installed in the Godot project for either to work.
 
-**Related:** [Scene authoring roadmap](scene_authoring_roadmap.md) Phase D (instancing) consumes catalog ids via `scene instance add --catalog-id …`.
+**Related:** [Scene authoring roadmap](history/scene_authoring_roadmap.md) Phase D (instancing) consumes catalog ids via `scene instance add --catalog-id …`.
 
 ---
 

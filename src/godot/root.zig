@@ -45,6 +45,7 @@ pub const scene_undo = @import("scene_undo.zig");
 pub const scene_templates = @import("scene_templates.zig");
 pub const cli_batch = @import("cli_batch.zig");
 pub const gdscript_scan = @import("gdscript_scan.zig");
+pub const edit_distance = @import("edit_distance.zig");
 pub const editor_settings = @import("editor_settings.zig");
 pub const write_notes = @import("write_notes.zig");
 pub const property_order = @import("property_order.zig");

@@ -281,7 +281,7 @@ _godot_cli_options() {
             echo "--project-root --godot --output --no-import --no-build"
             ;;
         'project run')
-            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --click --type --focus --no-auto-camera --keep-cursor --frame-at --log-lines"
+            echo "--project-root --godot --scene --frames --resolution --capture-dir --no-import --keep-frames --headless --user-arg --press --key --hover --click --type --focus --no-auto-camera --keep-cursor --frame-at --log-lines"
             ;;
         'project show')
             echo "--project-root"

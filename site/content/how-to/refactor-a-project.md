@@ -95,6 +95,18 @@ godot-cli project move --project-root . \
   --from scripts/player.gd --to scripts/hero.gd --import --rename-ids --json
 ```
 
+Several files move into a folder in one call, each keeping its name, and a
+folder moves whole:
+
+```bash
+godot-cli project move --project-root . \
+  --from res://player.tscn --from res://player.gd --to res://actors/player/ --json
+godot-cli project move --project-root . --from res://art --to res://assets/art --json
+```
+
+Every destination is checked before anything moves, so a clash leaves the
+project as it was.
+
 `--rename-ids` re-seeds the `ext_resource` id from the new file name, so a
 `Script_player` id stops naming a file called `hero.gd`. Godot's own `1_ab12c`
 ids name no file and are left alone.

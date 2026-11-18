@@ -37,8 +37,8 @@ Through the MCP server there is no `project-root` argument. A server started wit
 3. A project catalog id is instanced (`scene instance add --catalog-id`), and a scene with no catalog entry by its path (`--scene res://...`); a `godot/...` builtin is a plain node (`scene node add --type`), never instanced.
 4. Presentation lives on nodes (`anchor_*`, `grow_*`, `theme_override_*`, `custom_minimum_size`), signals in `[connection]` sections (`scene connection add`), resources in `.tres` files (`resource new`). None of them in `_ready()`.
 5. Values are Godot Variant text: `Vector2(1, 2)`, `1.5`, `true`, and a string carries its own quotes, `"\"Paused\""`. A bare word is rejected before anything is written, and so is a field the op or recipe does not take (`id` is not `id_hint`); the failure names the fields it accepts.
-6. Move files with `project move`, never `mv`; a plain move leaves every `res://` reference stale.
-7. Validate after every edit, then run the game and read the frame and the log. A change with no scene in it, such as the input map, is checked the same way: `project input validate`, then `project run --press <action>@10..30` on a scene that reacts to it (`--scene res://...` when the project has no main scene yet), reading the log. `--press` sends the action itself, not a key or button, so the bindings are what `project input list` reports.
+6. Move files with `project move`, never `mv`; a plain move leaves every `res://` reference stale. Repeat `--from` to move several into a `--to` folder ending in `/`, or pass a folder to move it whole.
+7. Validate after every edit, then run the game and read the frame and the log. A change with no scene in it, such as the input map, is checked the same way: `project input validate`, then `project run --press <action>@10..30` on a scene that reacts to it (`--scene res://...` when the project has no main scene yet), reading the log. `--press` sends the action itself, not a key or button, so the bindings are what `project input list` reports; a Button's shortcut never sees an action, so press its key with `--key enter@20`.
 
 ## Workflow
 

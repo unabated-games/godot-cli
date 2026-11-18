@@ -29,8 +29,8 @@ tools that generate their own bindings.
 | [Development principles](development_principles.md) | Argv/JSON parity, result envelope, exit codes, naming |
 | [Catalog design](catalog_design.md) | Manifest format and how agents choose components |
 | [ID generation plan](id_generation_plan.md) | Godot's ID systems and the phases that implemented them |
-| [Scene authoring roadmap](scene_authoring_roadmap.md) | The LLM-first authoring plan, phase by phase |
-| [Mini roadmap](mini_roadmap.md) | Post-phase-6 backlog and what shipped |
+| [Scene authoring roadmap](history/scene_authoring_roadmap.md) | The LLM-first authoring plan, phase by phase (finished) |
+| [Mini roadmap](history/mini_roadmap.md) | The post-phase-6 plan (finished) |
 
 ## Repository
 

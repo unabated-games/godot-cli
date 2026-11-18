@@ -160,7 +160,7 @@ jobs:
             required: true
           # Newest prerelease of the next minor: reported, never blocking, so a
           # format change lands here first instead of in a user's diff.
-          - godot: 4.8-beta1
+          - godot: 4.8-beta3
             required: false
     continue-on-error: ${{ !matrix.required }}
     steps:
@@ -205,6 +205,15 @@ jobs:
         run: |
           asset="Godot_v${{ matrix.godot }}_linux.x86_64"
           GODOT="$PWD/godot-bin/${asset}" tools/check_class_table.sh
+
+      # Theme override names come from the engine too; one this engine offers
+      # and the table lacks would be reported as unknown on an editor-saved
+      # scene. Reported, never blocking, like the class table.
+      - name: Theme overrides against this engine
+        continue-on-error: true
+        run: |
+          asset="Godot_v${{ matrix.godot }}_linux.x86_64"
+          GODOT="$PWD/godot-bin/${asset}" tools/check_theme_overrides.sh
 
       # The export option tables come from each editor's own save, and the
       # editor rewrites any preset whose options differ. This regenerates the

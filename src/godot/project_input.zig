@@ -560,6 +560,18 @@ const named_keys = [_]struct { names: []const []const u8, code: i32, unicode: i3
 
 pub const key_names = "a letter or digit, space, escape, tab, backtab, backspace, enter/return, kp_enter, insert, delete, pause, print, home, end, left, up, right, down, pageup, pagedown, shift, ctrl, meta/cmd, alt, capslock, numlock, scrolllock, f1-f12; or a Godot keycode number. Names are matched without case, and KEY_<letter> is accepted";
 
+/// Godot's `Key` code for a key name (`enter`, `s`, `f5`) or a keycode
+/// number; null for a name it does not know. For `project run --key`.
+pub fn keycodeForName(name: []const u8) ?i32 {
+    if (std.fmt.parseInt(i32, name, 10)) |code| return code else |_| {}
+    for (named_keys) |key| {
+        for (key.names) |candidate| if (std.ascii.eqlIgnoreCase(name, candidate)) return key.code;
+    }
+    const letter = if (std.ascii.startsWithIgnoreCase(name, "KEY_")) name["KEY_".len..] else name;
+    if (letter.len == 1 and std.ascii.isAlphanumeric(letter[0])) return @intCast(std.ascii.toUpper(letter[0]));
+    return null;
+}
+
 fn resolveKey(name: []const u8, physical: bool) Error!KeyCodes {
     for (named_keys) |key| {
         for (key.names) |candidate| {

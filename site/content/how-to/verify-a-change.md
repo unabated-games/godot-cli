@@ -68,6 +68,24 @@ godot-cli project run --project-root . --frames 30 \
   --click /root/Main/HUD/PlayButton@20 --keep-cursor --json
 ```
 
+A click also presses the button, which may hide it or change the screen. To see
+the hover style alone, move the cursor over the node without clicking:
+
+```bash
+godot-cli project run --project-root . --frames 30 \
+  --hover /root/Main/HUD/PlayButton@10 --json
+```
+
+A button with a keyboard shortcut is pressed by its key, not by an input
+action: Godot passes only key, joypad-button and shortcut events to a
+shortcut, so `--press start_game@20` leaves it untouched. `--key enter@20`
+sends a real key, which the shortcut sees and the input map turns into
+whatever actions bind it:
+
+```bash
+godot-cli project run --project-root . --frames 90 --key enter@20 --json
+```
+
 Two runs, two frames, and you have verified both states of a button plus the
 signal, without adding a line of test code to the game. Only the game's own
 cursor moves; nothing touches the desktop pointer.

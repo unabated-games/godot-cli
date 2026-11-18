@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const io_util = @import("../io_util.zig");
+const config_file = @import("config_file.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -182,58 +183,27 @@ pub fn parseBytes(allocator: std.mem.Allocator, bytes: []const u8) Error!Documen
         const key = std.mem.trim(u8, trimmed[0..eq], &std.ascii.whitespace);
         if (key.len == 0) return error.InvalidFormat;
 
-        const value_region = std.mem.trim(u8, trimmed[eq + 1 ..], &std.ascii.whitespace);
-        const is_brace_value = value_region.len > 0 and value_region[0] == '{';
-        const value_owned: []const u8 = if (is_brace_value) blk: {
-            const value_start = line_start + (std.mem.indexOf(u8, line, value_region) orelse eq + 1);
-            const block = try readBraceBlock(allocator, bytes, value_start);
-            line_start = block.end_index;
-            if (line_start < bytes.len and bytes[line_start] == '\n') line_start += 1;
-            break :blk block.value;
-        } else blk: {
-            line_start = if (has_newline) line_end + 1 else bytes.len;
-            break :blk value_region;
-        };
+        // A value runs to the first newline outside a string and outside any
+        // bracket: `{...}` blocks for input actions, and quoted strings that
+        // span lines, which Godot writes for a multi-line
+        // `config/description`. Reading line by line failed the whole file.
+        const value_start = @intFromPtr(trimmed.ptr) - @intFromPtr(bytes.ptr) + eq + 1;
+        const value_end = config_file.scanValue(bytes, value_start);
+        const value = std.mem.trim(u8, bytes[value_start..value_end], &std.ascii.whitespace);
+        const region_end = value_end;
+        line_start = if (value_end < bytes.len) value_end + 1 else bytes.len;
 
         if (in_preamble) {
-            try appendSlice(&preamble, allocator, line);
-            if (has_newline) try preamble.append(allocator, '\n');
+            try appendSlice(&preamble, allocator, bytes[@intFromPtr(line.ptr) - @intFromPtr(bytes.ptr) .. region_end]);
+            if (region_end < bytes.len) try preamble.append(allocator, '\n');
         } else {
             const section = current_section orelse return error.InvalidFormat;
-            try section.setEntry(allocator, key, value_owned);
-            if (is_brace_value) allocator.free(value_owned);
+            try section.setEntry(allocator, key, value);
         }
     }
 
     doc.preamble = try preamble.toOwnedSlice(allocator);
     return doc;
-}
-
-const BraceBlock = struct {
-    value: []const u8,
-    end_index: usize,
-};
-
-fn readBraceBlock(allocator: std.mem.Allocator, bytes: []const u8, start_index: usize) Error!BraceBlock {
-    if (start_index >= bytes.len or bytes[start_index] != '{') return error.InvalidFormat;
-    var depth: i32 = 0;
-    var i = start_index;
-    while (i < bytes.len) : (i += 1) {
-        switch (bytes[i]) {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if (depth == 0) {
-                    return .{
-                        .value = try allocator.dupe(u8, bytes[start_index .. i + 1]),
-                        .end_index = i + 1,
-                    };
-                }
-            },
-            else => {},
-        }
-    }
-    return error.InvalidFormat;
 }
 
 fn appendSlice(list: *std.ArrayList(u8), allocator: std.mem.Allocator, slice: []const u8) Error!void {
@@ -345,4 +315,38 @@ test "roundtrip preserves input action block" {
     const input2 = doc2.sectionMut("input").?;
     try std.testing.expectEqual(input.entries.items.len, input2.entries.items.len);
     try std.testing.expectEqualStrings(input.entries.items[0].value, input2.entries.items[0].value);
+}
+
+test "a quoted value may span lines, as Godot writes a multi-line description" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\config_version=5
+        \\
+        \\[application]
+        \\
+        \\config/name="Dodge the Creeps"
+        \\config/description="This is a simple game where
+        \\you avoid the enemies. [b]Not[/b] a section.
+        \\
+        \\Still the description; key=value too."
+        \\run/main_scene="res://main.tscn"
+        \\
+        \\[input]
+        \\
+        \\start_game={
+        \\"deadzone": 0.5,
+        \\"events": []
+        \\}
+        \\
+    ;
+    var doc = try parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+    const app = doc.sections.items[doc.sectionIndex("application").?];
+    try std.testing.expectEqualStrings("\"res://main.tscn\"", app.getEntry("run/main_scene").?);
+    try std.testing.expect(std.mem.endsWith(u8, app.getEntry("config/description").?, "key=value too.\""));
+    try std.testing.expect(std.mem.startsWith(u8, doc.sections.items[doc.sectionIndex("input").?].getEntry("start_game").?, "{"));
+
+    const written = try render(allocator, &doc);
+    defer allocator.free(written);
+    try std.testing.expectEqualStrings(source, written);
 }
