@@ -15,6 +15,8 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-11-19
+
 ### Added
 
 - **`unknown_property` on scripted and instanced nodes.** A property line that neither the node's class nor its script declares used to pass, because a script might have declared it. With `--project-root`, `scene validate` now reads the script, built-in ones too, and the scripts it extends by path or `class_name`. For an instanced node it reads the instanced scene's root and its script. It warns about anything none of them declares, and suggests the nearest name: `HUD sets max_helht, which neither ProgressBar (the root of res://ui/health_bar.tscn) nor res://ui/bar.gd declares ... Did you mean max_health?`. Godot's loader sets such a line, ignores that it failed, and logs nothing, and the editor's next save drops it. A scene write says so at once, as it does for a 3D `position`. Anything the check cannot read is left alone: a script that defines `_set` or `_get_property_list`, C#, binary scenes and imported models. Across Godot's 396 demo scenes it reports nothing. Of 267 misspellings planted in their scripted and instanced nodes it caught 247, and the 20 it missed are in C# scripts, a binary `.scn` and scenes that inherit an imported model.
