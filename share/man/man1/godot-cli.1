@@ -2506,13 +2506,17 @@ after a click, so the last frame shows its normal style; \-\-keep\-cursor
 leaves it there for the hover style, and \-\-hover <node>@<frame>
 shows it with no click at all. \-\-key enter@20 presses a real
 key, which a Button's shortcut sees and an action from \-\-press
-does not. Only the game's own cursor moves, never the desktop
-pointer. Result data: frame (path of the last PNG), log, log_tail
-(last 40 lines), errors and error_count, exit and import_exit,
-stderr_tail, frames_written, presses, clicks, keys, hovers,
-duration_ms, summary. Frames other than the last, and the .wav
-Godot writes, are deleted unless \-\-keep\-frames. Over MCP
-the frame is also returned as an image.
+does not. Only the game's own cursor moves: the desktop pointer
+is never moved, and the run's window ignores it. Result data:
+frame (path of the last PNG), log, log_tail (last 40 lines),
+errors and error_count, exit and import_exit, stderr_tail,
+frames_written, frames_per_second (the project's physics tick
+rate), presses, clicks, keys, hovers, stray_keys (keys that
+reached the game without the run sending them, such as typing
+into another app while the run's window has focus), duration_ms,
+summary. Frames other than the last, and the .wav Godot writes,
+are deleted unless \-\-keep\-frames. Over MCP the frame is
+also returned as an image.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (default: current directory)

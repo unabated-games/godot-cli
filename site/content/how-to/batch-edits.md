@@ -48,7 +48,7 @@ Every property value is Variant text, which trips people up exactly once: `"16.0
 
 ## Intents
 
-An intent is a higher-level description. Recipes such as `player_2d`, `static_body_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `catalog_button`, and `connect` expand into the ops above:
+An intent is a higher-level description. Recipes such as `player_2d`, `static_body_2d`, `camera_2d`, `ui_panel`, `tilemap_layer`, `audio_player`, `instance_catalog`, `catalog_button`, and `connect` expand into the ops above. `add_node` adds a node of any class, with a `script` attached in the same step:
 
 ```json
 {
@@ -56,7 +56,9 @@ An intent is a higher-level description. Recipes such as `player_2d`, `static_bo
     { "recipe": "player_2d", "parent": "/root/Main", "name": "Player", "texture": "res://art/player.png" },
     { "recipe": "camera_2d", "parent": "/root/Main", "name": "Camera" },
     { "recipe": "catalog_button", "parent": "/root/Main/HUD", "name": "StartButton",
-      "catalog_id": "ui/button", "label": "Start game" }
+      "catalog_id": "ui/button", "label": "Start game" },
+    { "recipe": "add_node", "parent": "/root/Main/HUD", "name": "PauseButton",
+      "type": "Button", "script": "res://ui/pause_button.gd" }
   ]
 }
 ```

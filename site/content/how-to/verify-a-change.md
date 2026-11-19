@@ -29,6 +29,8 @@ The result names what you need:
 | `errors`, `error_count` | Every `ERROR` / `SCRIPT ERROR` line with its backtrace |
 | `exit`, `import_exit` | Godot's exit codes for the run and the import pass |
 | `frames_written`, `duration_ms` | What the run actually did |
+| `frames_per_second` | The project's physics tick rate, so how many frames make a second |
+| `stray_keys` | Keys that reached the game without the run sending them; present only when there were any |
 
 ## The loop
 
@@ -88,7 +90,8 @@ godot-cli project run --project-root . --frames 90 --key enter@20 --json
 
 Two runs, two frames, and you have verified both states of a button plus the
 signal, without adding a line of test code to the game. Only the game's own
-cursor moves; nothing touches the desktop pointer.
+cursor moves; nothing touches the desktop pointer, and the run's window ignores
+it, so moving your mouse over the window cannot cancel a click.
 
 This works under `--headless` as well, which is what makes a button's wiring
 checkable in CI. The signal fires and the handler's `print` lands in the log;
@@ -153,6 +156,13 @@ menu part-way through opening. One frame is one physics step in both modes:
 the run pins Godot's frame rate to the project's
 `physics/common/physics_ticks_per_second`, so `--frames 40` is 40 frames on
 any machine and `--click …@20` happens at the same point every time.
+
+**On macOS, the run's window takes keyboard focus as it opens.** A key you
+type into another app while a run is going lands in the game, and Godot gives
+it the same device id as the run's own keys, so the run cannot drop it. It
+names it instead: `stray_keys` in the result, and a message with the key and
+the frame it arrived on. A run with a stray key proves less than it seems to;
+run it again without typing.
 
 **Autoloads are fine.** The run injects input through a generated script under
 the capture folder, and that script loads your scene after Godot has registered

@@ -16,6 +16,8 @@ The properties the editor writes are the ones to set:
 | What you want | Property |
 |---------------|----------|
 | Font size | `theme_override_font_sizes/font_size` |
+| Text colour | `theme_override_colors/font_color`, and `font_hover_color` and the like on a `Button` |
+| An outline round the text | `theme_override_colors/font_outline_color` and `theme_override_constants/outline_size` |
 | Padding on a container | `theme_override_constants/margin_left`, `_right`, `_top`, `_bottom` |
 | Position and anchoring | `anchors_preset`, `anchor_*`, `offset_*` |
 | How a child fills its parent | `size_flags_horizontal`, `size_flags_vertical` |
@@ -26,6 +28,8 @@ The properties the editor writes are the ones to set:
 godot-cli scene node add hud.tscn --parent /root/HUD/Row --name Score --type Label \
   --property theme_override_font_sizes/font_size --value 35 --project-root .
 ```
+
+Overrides are written where the editor puts them: grouped by type (colors, constants, fonts, font sizes, icons, styles), and within a type in the order the class lists them, so the editor's next save leaves them alone. Constants and font sizes are ints, so `outline_size` 6 is written `6`, not `6.0`. A name the class has no theme item for, such as `theme_override_colors/font_colour`, is reported by the write and by `scene validate` as `unknown_theme_override`, with the name it most likely meant: Godot would store it, draw nothing with it, and drop it on the next save.
 
 Quote string values so they survive the shell and reach the Variant parser as strings:
 

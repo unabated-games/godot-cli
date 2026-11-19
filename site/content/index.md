@@ -101,7 +101,9 @@ godot-cli project run --project-root . --frames 30 \
 That clicks the node on frame 20, so its `pressed` signal fires and the
 handler's output lands in the log. Afterwards the cursor moves off, so the frame
 shows the button's normal style; `--keep-cursor` holds it there for the hover
-style instead. `--press move_right@10..40` does the same for an input action.
+style instead, and `--hover` shows it without a click. `--press
+move_right@10..40` does the same for an input action, and `--key enter@20`
+presses a real key, which a button's shortcut answers to.
 Two runs and you have verified both button states, the signal, and the layout.
 
 [Verify a change by running the game]({{ base_url }}/how-to/verify-a-change/)

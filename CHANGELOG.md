@@ -15,6 +15,10 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+### Changed
+
+- **`project run --help` lists `frames_per_second` and `stray_keys`** among the result data, and says the run's window ignores the desktop pointer. The site covers 0.29.0: `--key`, `--hover`, stray keys and the tick rate on the run pages, theme override colours, order and `unknown_theme_override` on the UI page, the `add_node` recipe's `script`, and a script's float keeping its `.0`.
+
 ## [0.29.0] — 2026-11-19
 
 ### Added

@@ -32,7 +32,7 @@ godot-cli scene set-property scenes/main.tscn --node-name Player \
   --property position --value "Vector2(320, 180)" --project-root .
 ```
 
-Property values go through the Variant parser, so a float lands as `16.0` on a property and as `2` inside `Vector2(2, 1.5)`, which is what the editor writes for each. Pass `--raw-value` when you have already formatted the text yourself.
+Property values go through the Variant parser, so a float lands as `16.0` on a property and as `2` inside `Vector2(2, 1.5)`, which is what the editor writes for each. A property the node's script declares goes by the script's type: with `--project-root`, `12` for `@export var min_speed: float` is written `12.0`, as the editor writes it, which matters over MCP, where a client may send `12.0` as `12`. Pass `--raw-value` when you have already formatted the text yourself.
 
 `scene node add` also takes `--property` and `--value` directly, repeated as many times as needed, so a Control's full set of anchors goes on in the same command that creates it.
 
