@@ -693,7 +693,7 @@ complete -c godot-cli -n '__godot_cli_at "project resave"' -l no-build -d 'Load 
 complete -c godot-cli -n '__godot_cli_at "project run"' -l project-root -r -d 'Godot project root (default: current directory)'
 complete -c godot-cli -n '__godot_cli_at "project run"' -l godot -r -d 'Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle'
 complete -c godot-cli -n '__godot_cli_at "project run"' -l scene -r -d 'Scene to run (res:// or project-relative); the main scene when omitted'
-complete -c godot-cli -n '__godot_cli_at "project run"' -l frames -r -d 'Frames to run before quitting; 60 is one second, 5 is enough for a static screen'
+complete -c godot-cli -n '__godot_cli_at "project run"' -l frames -r -d 'Frames to run before quitting, one per physics tick: 60 is one second at Godot'\''s default rate, and frames_per_second in the result gives the project'\''s; 5 is enough for a static screen'
 complete -c godot-cli -n '__godot_cli_at "project run"' -l resolution -r -d 'Window size as WIDTHxHEIGHT; default is the project'\''s display/window/size, else Godot'\''s own 1152x648'
 complete -c godot-cli -n '__godot_cli_at "project run"' -l capture-dir -r -d 'Folder under the project for the frame and log; the default is under .godot/, which Godot never imports'
 complete -c godot-cli -n '__godot_cli_at "project run"' -l no-import -d 'Skip the headless import pass that assigns UIDs to new files'

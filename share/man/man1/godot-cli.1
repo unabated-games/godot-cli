@@ -2526,8 +2526,9 @@ Scene to run (res:// or project\-relative); the main scene
 when omitted
 .TP
 \fB\-\-frames\fR \fIn\fR
-Frames to run before quitting; 60 is one second, 5 is enough
-for a static screen (default: 60)
+Frames to run before quitting, one per physics tick: 60 is
+one second at Godot's default rate, and frames_per_second in
+the result gives the project's; 5 is enough for a static screen (default: 60)
 .TP
 \fB\-\-resolution\fR \fIvalue\fR
 Window size as WIDTHxHEIGHT; default is the project's display/window/size,

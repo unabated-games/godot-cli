@@ -797,12 +797,18 @@ fn instancedRoot(allocator: std.mem.Allocator, ctx: ValidateContext, res_path: [
 /// when a link cannot be read, the chain ends in a class the table does not
 /// carry, or a script answers properties itself (`_set`,
 /// `_get_property_list`), since then any name may be real.
-const ChainVariables = struct { names: []const []const u8, depth: usize };
+const ChainVariables = struct {
+    names: []const []const u8,
+    /// Parallel to `names`: whether each holds a float or an int.
+    kinds: []const gdscript_scan.NumberKind,
+    depth: usize,
+};
 
 fn scriptChainVariables(allocator: std.mem.Allocator, ctx: ValidateContext, start: ScriptStart) ?ChainVariables {
     const root = ctx.project_root orelse return null;
     const io = ctx.io orelse return null;
     var names: std.ArrayList([]const u8) = .empty;
+    var kinds: std.ArrayList(gdscript_scan.NumberKind) = .empty;
     var next = start;
     var depth: usize = 0;
     while (depth < 16) : (depth += 1) {
@@ -817,13 +823,43 @@ fn scriptChainVariables(allocator: std.mem.Allocator, ctx: ValidateContext, star
         const interface = gdscript_scan.parseScript(allocator, source) catch return null;
         if (interface.definesFunction("_set") or interface.definesFunction("_get_property_list")) return null;
         names.appendSlice(allocator, interface.variables) catch return null;
+        for (interface.variables, 0..) |_, i| {
+            kinds.append(allocator, if (i < interface.variable_kinds.len) interface.variable_kinds[i] else .unknown) catch return null;
+        }
         if (interface.extends.len == 0) return null;
         if (std.mem.startsWith(u8, interface.extends, "res://")) {
             next = .{ .path = interface.extends };
             continue;
         }
-        if (class_info.findClass(interface.extends) != null) return .{ .names = names.items, .depth = depth + 1 };
+        if (class_info.findClass(interface.extends) != null) return .{ .names = names.items, .kinds = kinds.items, .depth = depth + 1 };
         next = .{ .path = findClassNameScript(allocator, io, root, interface.extends) orelse return null };
+    }
+    return null;
+}
+
+/// Whether a node section's script (its own, or an instanced scene root's)
+/// declares `property` as a float (true) or an int (false); null when it
+/// says neither or cannot be read. Allocates without freeing: pass an arena.
+pub fn scriptNumberKind(allocator: std.mem.Allocator, doc: *const document.Document, ctx: ValidateContext, section: *const document.Section, property: []const u8) ?bool {
+    if (ctx.project_root == null or ctx.io == null) return null;
+    const own = scriptRefOf(allocator, doc, section);
+    if (own == .unreadable) return null;
+    const start: ScriptStart = if (section.header.getString("type") != null)
+        (if (own == .script) own.script else return null)
+    else if (section.header.getString("instance")) |instance| blk: {
+        if (own == .script) break :blk own.script;
+        const scene_path = extPathOf(doc, instance) orelse return null;
+        const base = instancedRoot(allocator, ctx, scene_path, 0) orelse return null;
+        break :blk base.script orelse return null;
+    } else return null;
+    const chain = scriptChainVariables(allocator, ctx, start) orelse return null;
+    for (chain.names, chain.kinds) |name, kind| {
+        if (!std.mem.eql(u8, name, property)) continue;
+        return switch (kind) {
+            .float => true,
+            .int => false,
+            .unknown => null,
+        };
     }
     return null;
 }
@@ -1752,6 +1788,28 @@ test "a scripted or instanced node's properties are checked against its script" 
         if (std.mem.eql(u8, issue.kind, "unknown_property")) unknown += 1;
     }
     try std.testing.expectEqual(@as(usize, 4), unknown);
+}
+
+test "a script says whether its variable is a float or an int" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const doc = try document.parseFile(a, std.testing.io, "test_fixtures/script_properties/main.tscn");
+    const ctx: ValidateContext = .{ .project_root = "test_fixtures/script_properties", .io = std.testing.io };
+    var player: ?*const document.Section = null;
+    var hud: ?*const document.Section = null;
+    for (doc.sections.items) |*section| {
+        const name = section.header.getString("name") orelse continue;
+        if (std.mem.eql(u8, name, "Player")) player = section;
+        if (std.mem.eql(u8, name, "HUD")) hud = section;
+    }
+    // speed := 100.0 comes from the script the player's extends; max_health
+    // := 3 from its own; an instance answers from its scene root's script.
+    try std.testing.expectEqual(@as(?bool, true), scriptNumberKind(a, &doc, ctx, player.?, "speed"));
+    try std.testing.expectEqual(@as(?bool, false), scriptNumberKind(a, &doc, ctx, player.?, "max_health"));
+    try std.testing.expectEqual(@as(?bool, false), scriptNumberKind(a, &doc, ctx, hud.?, "max_health"));
+    try std.testing.expectEqual(@as(?bool, null), scriptNumberKind(a, &doc, ctx, player.?, "nothing"));
+    try std.testing.expectEqual(@as(?bool, null), scriptNumberKind(a, &doc, .{}, player.?, "speed"));
 }
 
 test "theme overrides are checked against the items the class offers" {

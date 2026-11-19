@@ -182,6 +182,15 @@ fn expandRecipe(ops_alloc: std.mem.Allocator, recipe: []const u8, step: std.json
             const last = &ops.items[ops.items.len - 1];
             try last.object.put(ops_alloc, "properties", .{ .object = props });
         }
+        // Trial 48 reached for `script` here first, then needed a separate
+        // assign_ext step, as player_2d already takes one.
+        if (step.get("script")) |script_value| {
+            if (script_value != .string) return error.InvalidIntent;
+            const node_path = try ops_alloc.print("{s}/{s}", .{ try requiredString(step, "parent"), try requiredString(step, "name") });
+            const script_hint = try defaultExtHint(ops_alloc, script_value.string, "script");
+            defer ops_alloc.free(script_hint);
+            try appendAssignExt(ops_alloc, ops, node_path, "script", "Script", script_value.string, script_hint);
+        }
         return;
     }
 
@@ -785,7 +794,7 @@ pub const Recipe = struct {
 /// server serves it as godot-cli://docs/recipes; a test checks the names
 /// against `recipe_names` and the expander.
 pub const recipes = [_]Recipe{
-    .{ .name = "add_node", .summary = "One node of any type under a parent, with optional properties", .required = &.{ "parent", "name", "type" }, .optional = &.{ "properties", "unique_name" } },
+    .{ .name = "add_node", .summary = "One node of any type under a parent, with optional properties", .required = &.{ "parent", "name", "type" }, .optional = &.{ "properties", "unique_name", "script" } },
     .{ .name = "node_set", .summary = "Set a property on an existing node, or several with a properties object", .required = &.{"path"}, .optional = &.{ "property", "value", "properties" } },
     .{ .name = "assign_ext", .summary = "Register an external file and point a node property at it; ext_type is the resource class Godot expects and is inferred for .gd, .tscn, images, audio, and fonts; a .tres needs it given (StyleBoxFlat, Theme, ...)", .required = &.{ "path", "property", "res_path" }, .optional = &.{ "ext_type", "id_hint", "type", "resource_path" } },
     .{ .name = "connect", .summary = "A [connection] section: signal from one node to a method on another", .required = &.{ "from", "signal", "to", "method" }, .optional = &.{ "deferred", "one_shot", "binds", "unbinds" } },
@@ -1170,6 +1179,20 @@ fn shapeIdHint(ops_alloc: std.mem.Allocator, step: std.json.ObjectMap, node_name
         return ops_alloc.dupe(u8, value.string);
     }
     return ops_alloc.print("{s}_shape", .{node_name});
+}
+
+test "add_node takes a script" {
+    const allocator = std.testing.allocator;
+    const intent =
+        \\{ "steps": [ { "recipe": "add_node", "parent": "/root/Main/UI", "name": "PauseButton",
+        \\  "type": "Button", "script": "res://ui/pause_button.gd" } ] }
+    ;
+    var plan = try planFromInput(allocator, intent, null, .{});
+    defer plan.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 2), plan.steps[0].op_count);
+    try std.testing.expect(std.mem.indexOf(u8, plan.patch_json, "\"assign_ext\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, plan.patch_json, "/root/Main/UI/PauseButton") != null);
+    try std.testing.expect(std.mem.indexOf(u8, plan.patch_json, "res://ui/pause_button.gd") != null);
 }
 
 test "expand player_2d intent" {

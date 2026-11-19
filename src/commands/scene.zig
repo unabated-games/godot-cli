@@ -182,12 +182,21 @@ pub var session_id: ?[]const u8 = null;
 /// session takes a new copy.
 fn sessionSnapshot(cli: *const app_mod.App, inv: *const spec.Invocation) !void {
     if (inv.positionals.len == 0) return;
-    const id = session_id orelse (cli.environ.getAlloc(cli.allocator, "GODOT_CLI_SESSION") catch return);
-    if (id.len == 0) return;
     const root = projectRootFrom(inv) orelse return;
     const source = inv.positionals[0];
-    if (!std.mem.endsWith(u8, source, ".tscn") and !std.mem.endsWith(u8, source, ".tres")) return;
     const res = (try project_config.filesystemToResPath(cli.allocator, root, source)) orelse return;
+    try sessionSnapshotAs(cli, root, source, res);
+}
+
+/// The session's "before" copy of the scene at `source`, kept under `res`,
+/// which differs from `source` when a project move is about to put the
+/// file there. Nothing when no session is running, or this session already
+/// has its copy.
+pub fn sessionSnapshotAs(cli: *const app_mod.App, root: []const u8, source: []const u8, res: []const u8) !void {
+    const id = session_id orelse (cli.environ.getAlloc(cli.allocator, "GODOT_CLI_SESSION") catch return);
+    if (id.len == 0) return;
+    if (!std.mem.endsWith(u8, source, ".tscn") and !std.mem.endsWith(u8, source, ".tres")) return;
+    if (!std.mem.startsWith(u8, res, "res://")) return;
     const copy = try std.fs.path.join(cli.allocator, &.{ root, ".godot", "godot-cli", "session", res["res://".len..] });
     const marker = try std.mem.concat(cli.allocator, u8, &.{ copy, ".session" });
     const recorded = std.Io.Dir.cwd().readFileAlloc(cli.io, marker, cli.allocator, .limited(4096)) catch "";
@@ -195,7 +204,8 @@ fn sessionSnapshot(cli: *const app_mod.App, inv: *const spec.Invocation) !void {
     // A scene that does not exist yet has no "before"; the next write takes it.
     scene_undo.writeSnapshot(cli.io, source, copy) catch return;
     io_util.writeFileAtomic(cli.io, marker, id) catch return;
-    try write_notes.add(cli.allocator, try cli.allocator.print("first change to this scene in this session: it is kept as it was at {s}, so scene diff {s} {s} shows everything the session has changed in it", .{ copy, copy, source }));
+    const now = try std.fs.path.join(cli.allocator, &.{ root, res["res://".len..] });
+    try write_notes.add(cli.allocator, try cli.allocator.print("first change to this scene in this session: it is kept as it was at {s}, so scene diff {s} {s} shows everything the session has changed in it", .{ copy, copy, now }));
 }
 
 fn appFrom(ctx: *anyopaque) *const app_mod.App {
@@ -425,6 +435,9 @@ fn formatPropertyValueForWrite(
     raw: bool,
     property_name: []const u8,
     class_name: ?[]const u8,
+    /// What the node's script declares the property as (true for a float),
+    /// for a property its class does not have.
+    script_float: ?bool,
 ) ![]const u8 {
     if (raw) return try allocator.dupe(u8, property_value);
     try scene_patch.rejectRawVariantText(allocator, property_name, property_value);
@@ -436,7 +449,7 @@ fn formatPropertyValueForWrite(
         else => null,
     };
     if (number) |value| {
-        if (try scene_patch.numberText(allocator, class_name, property_name, value)) |text| return text;
+        return try scene_patch.numberTextFor(allocator, class_name, script_float, property_name, value);
     }
     return try parsed.formatForWrite(allocator);
 }
@@ -525,7 +538,13 @@ fn setPropertyHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []cons
     // diffing afterwards.
     var first_written: []const u8 = "";
     for (pairs, 0..) |pair, index| {
-        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name, doc.sections.items[section_index].header.getString("type"));
+        // A whole number reaches here without its `.0` when it came over
+        // JSON, so a script's float takes it from the script's declaration.
+        const script_float = if (std.mem.eql(u8, doc.sections.items[section_index].header.name, "node"))
+            id_validate.scriptNumberKind(cli.allocator, &doc, .{ .project_root = projectRootFrom(inv), .io = cli.io }, &doc.sections.items[section_index], pair.name)
+        else
+            null;
+        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name, doc.sections.items[section_index].header.getString("type"), script_float);
         try text_format.document.setSectionProperty(&doc, cli.allocator, section_index, pair.name, written_value);
         if (index == 0) first_written = written_value else cli.allocator.free(written_value);
     }
@@ -1012,7 +1031,7 @@ fn resourceNewHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, resource_type);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, resource_type, null);
         defer cli.allocator.free(written_value);
         try text_format.document.setSectionProperty(&doc, cli.allocator, resource_index, property_name, written_value);
     }
@@ -1150,7 +1169,7 @@ fn sceneNodeAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Resul
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, node_type);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, node_type, null);
         defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, property_name, written_value);
     }
@@ -1716,7 +1735,7 @@ fn sceneSubAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result
     for (property_pairs) |pair| {
         const property_name = pair.name;
         const property_value = pair.value;
-        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, res_type);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, property_value, inv.flag("raw-value"), property_name, res_type, null);
         errdefer cli.allocator.free(written_value);
         try properties.append(cli.allocator, .{ .name = property_name, .value = written_value });
     }
@@ -2050,7 +2069,7 @@ fn sceneInstanceAddHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.R
     const instance_pairs = try collectPropertyPairs(cli, inv, null);
     defer cli.allocator.free(instance_pairs);
     for (instance_pairs) |pair| {
-        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name, null);
+        const written_value = try formatPropertyValueForWrite(cli.allocator, pair.value, inv.flag("raw-value"), pair.name, null, null);
         defer cli.allocator.free(written_value);
         try scene_edit.setNodeProperty(cli.allocator, &doc, added.path, pair.name, written_value);
     }

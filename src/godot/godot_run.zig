@@ -212,6 +212,9 @@ pub const Result = struct {
     driver_script: ?[]const u8 = null,
     /// Paths of the frames kept for `frames_at`, in the order asked for.
     frame_at_paths: []const []const u8 = &.{},
+    /// The driver's lines about keys that came from the desktop rather than
+    /// the run (at most five, as it prints them).
+    stray_keys: []const []const u8 = &.{},
 };
 
 pub const Error = error{
@@ -334,8 +337,36 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, environ: std.process.Enviro
     result.errors = try errorLines(allocator, io, result.log_path);
     const log_text = std.Io.Dir.cwd().readFileAlloc(io, result.log_path, allocator, .unlimited) catch "";
     result.log_tail = try tail(allocator, log_text, options.log_lines);
+    result.stray_keys = try strayKeyLines(allocator, log_text);
     result.duration_ms = started.durationTo(.now(io, .real)).raw.toMilliseconds();
     return result;
+}
+
+const stray_key_prefix = "godot-cli: stray key: ";
+
+fn strayKeyLines(allocator: std.mem.Allocator, log_text: []const u8) Error![]const []const u8 {
+    var lines: std.ArrayList([]const u8) = .empty;
+    var it = std.mem.splitScalar(u8, log_text, '\n');
+    while (it.next()) |raw| {
+        const line = std.mem.trimEnd(u8, raw, "\r");
+        if (std.mem.startsWith(u8, line, stray_key_prefix)) {
+            lines.append(allocator, line["godot-cli: ".len..]) catch return error.OutOfMemory;
+        }
+    }
+    return lines.toOwnedSlice(allocator) catch error.OutOfMemory;
+}
+
+test "stray key lines are read from the log" {
+    const log =
+        \\Movie Maker mode enabled
+        \\godot-cli: stray key: P at frame 57 was not sent by this run
+        \\Game paused
+        \\
+    ;
+    const lines = try strayKeyLines(std.testing.allocator, log);
+    defer std.testing.allocator.free(lines);
+    try std.testing.expectEqual(@as(usize, 1), lines.len);
+    try std.testing.expect(std.mem.startsWith(u8, lines[0], "stray key: P at frame 57"));
 }
 
 /// The Godot command line for the run itself, kept apart from running it so
@@ -434,6 +465,11 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\const AWAY := Vector2(-10000, -10000)
         \\var _frame := 0
         \\var _hovering := ""
+        \\# Keys this run sent and the game has not yet seen, as
+        \\# [keycode, pressed, unicode], so a key that arrives without being on
+        \\# the list came from the desktop and can be named in the log.
+        \\var _sent_keys := []
+        \\var _stray_keys := 0
         \\
         \\func _initialize() -> void:
         \\    # Not _init(): that runs while the custom main loop is being
@@ -457,6 +493,25 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\    # Counting frames from here keeps click and press frames
         \\    # relative to the scene being in the tree.
         \\    physics_frame.connect(_tick)
+        \\    root.window_input.connect(_on_window_input)
+        \\
+        \\# macOS gives a new window keyboard focus before any script runs, and
+        \\# no setting changed at run time takes it back, so a key typed into
+        \\# another app then lands in the game. Real and synthetic keys carry the
+        \\# same device id, so the run cannot drop them; it says so instead.
+        \\func _on_window_input(event: InputEvent) -> void:
+        \\    if not (event is InputEventKey) or event.is_echo():
+        \\        return
+        \\    var key := event as InputEventKey
+        \\    var index := _sent_keys.find([int(key.keycode), key.pressed, key.unicode])
+        \\    if index >= 0:
+        \\        _sent_keys.remove_at(index)
+        \\        return
+        \\    if not key.pressed:
+        \\        return
+        \\    _stray_keys += 1
+        \\    if _stray_keys <= 5:
+        \\        print("godot-cli: stray key: ", key.as_text(), " at frame ", _frame, " was not sent by this run, so most likely typed on the desktop while the run's window had keyboard focus; whatever it did is in this run's log and frames")
         \\
         \\func _action(name: String, pressed: bool) -> void:
         \\    if not InputMap.has_action(name):
@@ -484,6 +539,7 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\    event.alt_pressed = spec[3]
         \\    event.meta_pressed = spec[4]
         \\    event.pressed = pressed
+        \\    _sent_keys.append([int(event.keycode), pressed, 0])
         \\    Input.parse_input_event(event)
         \\
         \\# The centre of a Control or the origin of a Node2D, on screen; null,
@@ -532,11 +588,13 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\    event.pressed = pressed
         \\    event.position = at
         \\    event.global_position = at
-        \\    if pressed:
-        \\        var motion := InputEventMouseMotion.new()
-        \\        motion.position = at
-        \\        motion.global_position = at
-        \\        Input.parse_input_event(motion)
+        \\    # The release gets a motion to the same point too: a pointer event
+        \\    # in between, where passthrough does not hold, leaves the press
+        \\    # outside the button and the release then presses nothing.
+        \\    var motion := InputEventMouseMotion.new()
+        \\    motion.position = at
+        \\    motion.global_position = at
+        \\    Input.parse_input_event(motion)
         \\    Input.parse_input_event(event)
         \\
         \\func _focus(path: String) -> Control:
@@ -573,10 +631,12 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\        var down := InputEventKey.new()
         \\        down.unicode = text.unicode_at(i)
         \\        down.pressed = true
+        \\        _sent_keys.append([0, true, down.unicode])
         \\        Input.parse_input_event(down)
         \\        var up := InputEventKey.new()
         \\        up.unicode = text.unicode_at(i)
         \\        up.pressed = false
+        \\        _sent_keys.append([0, false, up.unicode])
         \\        Input.parse_input_event(up)
         \\
         \\# A 3D scene with no camera draws only the clear colour. Frame what it
@@ -632,6 +692,17 @@ fn writeDriverScript(allocator: std.mem.Allocator, io: std.Io, options: Options)
         \\    # the first tick sticks, and the layout follows on the next.
         \\    if _frame <= 2 and root.size != VIEWPORT and DisplayServer.get_name() == "headless":
         \\        root.size = VIEWPORT
+        \\    # Only the run's own input may reach the game. The desktop pointer
+        \\    # crossing the window sends real motion events, and one landing
+        \\    # between a click's press and its release cancels the press: a run
+        \\    # lost one Button click in five that way. With passthrough the OS
+        \\    # sends the window no mouse events. Unfocusable stops the window
+        \\    # taking keyboard focus back once the desktop has it; the focus it
+        \\    # takes as it opens is _on_window_input's to report. Like the size,
+        \\    # these only stick once the window has applied its own settings.
+        \\    if _frame == 1 and DisplayServer.get_name() != "headless":
+        \\        root.mouse_passthrough = true
+        \\        root.unfocusable = true
         \\    if AUTO_CAMERA and _frame == 1:
         \\        _frame_scene()
         \\    for press in PRESSES:

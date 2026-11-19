@@ -13,6 +13,8 @@ const project_rendering = @import("../godot/project_rendering.zig");
 const project_physics = @import("../godot/project_physics.zig");
 const project_unified = @import("../godot/project_unified.zig");
 const project_move = @import("../godot/project_move.zig");
+const project_config = @import("../godot/project_config.zig");
+const scene_cmd = @import("scene.zig");
 const project_export = @import("project_export.zig");
 const pos = @import("positionals.zig");
 
@@ -459,6 +461,9 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     try runDataCommon(cli, &data, run);
     if (inv.getOption("scene")) |scene| try data.put(cli.allocator, "scene", .{ .string = scene });
     try data.put(cli.allocator, "frames_requested", .{ .integer = frames });
+    // A frame is a physics tick, and trial 48's project ran 120 of them a
+    // second, so the docs' "60 frames is one second" was half a second there.
+    try data.put(cli.allocator, "frames_per_second", .{ .integer = physics_fps });
     try data.put(cli.allocator, "frames_written", .{ .integer = @intCast(run.frames_written) });
     if (run.frame) |frame| try data.put(cli.allocator, "frame", .{ .string = frame });
     try data.put(cli.allocator, "presses", .{ .integer = @intCast(presses.items.len) });
@@ -485,6 +490,34 @@ fn runHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     // as though the frame is showing a held hover style.
     if (inv.flag("keep-cursor") and clicks.items.len == 0) {
         try messages.append(cli.allocator, "keep-cursor does nothing without --click: the cursor only moves when a click puts it somewhere");
+    }
+
+    // Godot reports leaks on stderr as it shuts down, as `ERROR: 2 resources
+    // still in use at exit`; they are not the game's errors and are not
+    // counted, which trial 48 read as a contradiction beside "no errors".
+    if (std.mem.indexOf(u8, run.stderr_tail, "at exit") != null) {
+        try messages.append(cli.allocator, "stderr_tail's \"still in use at exit\" and \"leaked at exit\" lines are Godot's report on shutting down, not errors in the game, so error_count leaves them out");
+    }
+
+    // The run imports, which fills .godot/; in a git project that does not
+    // ignore it, the next `git add .` commits Godot's caches (trial 48's
+    // demo ignored only `.import` and `logs/`).
+    {
+        const git_dir = try std.fs.path.join(cli.allocator, &.{ root, ".git" });
+        const gitignore = try std.fs.path.join(cli.allocator, &.{ root, ".gitignore" });
+        const in_git = if (std.Io.Dir.cwd().access(cli.io, git_dir, .{})) |_| true else |_| if (std.Io.Dir.cwd().access(cli.io, gitignore, .{})) |_| true else |_| false;
+        if (in_git and !try project_export.gitignoresGodotDir(cli, root)) {
+            try messages.append(cli.allocator, "this project's .gitignore does not ignore .godot/, which the run's import fills with Godot's caches: add a .godot/ line, or a git add of the whole project commits them, and any export secrets in .godot/export_credentials.cfg");
+        }
+    }
+
+    // A key typed on the desktop while the run's window had focus reached
+    // the game; whatever it did is in the log and the frames, so say so.
+    if (run.stray_keys.len != 0) {
+        var arr = std.json.Array.init(cli.allocator);
+        for (run.stray_keys) |line| try arr.append(.{ .string = line });
+        try data.put(cli.allocator, "stray_keys", .{ .array = arr });
+        try messages.append(cli.allocator, "a key this run did not send reached the game (stray_keys), most likely typed on the desktop: the window takes keyboard focus as it opens, so what that key did is in the log and the frames. Run again without typing while the window is open");
     }
 
     // The run passes on a grey frame when a 3D scene has no camera; say so,
@@ -1352,6 +1385,24 @@ fn moveHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     var manifests: usize = 0;
     var settings: usize = 0;
     var ids_renamed: usize = 0;
+    // The scenes the moves will rewrite get the session's "before" copy
+    // first, as any other write does; trial 48's session copy of Main.tscn
+    // was taken after its moves, so scene diff could not show them. A file
+    // that is itself moving is kept under the path it is moving to.
+    if (!dry_run) {
+        for (pairs) |pair| {
+            var preview = try project_move.moveResource(cli.allocator, cli.io, root, pair.from, pair.to, true, inv.flag("rename-ids"));
+            defer preview.deinit(cli.allocator);
+            for (preview.changed_files) |file| {
+                const res = (try project_config.filesystemToResPath(cli.allocator, root, file)) orelse continue;
+                var target: []const u8 = res;
+                for (pairs) |other| if (std.mem.eql(u8, other.from, res)) {
+                    target = other.to;
+                };
+                try scene_cmd.sessionSnapshotAs(cli, root, file, target);
+            }
+        }
+    }
     for (pairs) |pair| {
         var result = try project_move.moveResource(cli.allocator, cli.io, root, pair.from, pair.to, dry_run, inv.flag("rename-ids"));
         defer result.deinit(cli.allocator);
@@ -1636,7 +1687,7 @@ const run_options = [_]spec.OptionSpec{
     .{ .long = "project-root", .kind = .path, .description = "Godot project root (default: current directory)" },
     godot_option,
     .{ .long = "scene", .kind = .string, .description = "Scene to run (res:// or project-relative); the main scene when omitted" },
-    .{ .long = "frames", .kind = .integer, .description = "Frames to run before quitting; 60 is one second, 5 is enough for a static screen", .default_value = "60" },
+    .{ .long = "frames", .kind = .integer, .description = "Frames to run before quitting, one per physics tick: 60 is one second at Godot's default rate, and frames_per_second in the result gives the project's; 5 is enough for a static screen", .default_value = "60" },
     .{ .long = "resolution", .kind = .string, .description = "Window size as WIDTHxHEIGHT; default is the project's display/window/size, else Godot's own 1152x648" },
     .{ .long = "capture-dir", .kind = .path, .description = "Folder under the project for the frame and log; the default is under .godot/, which Godot never imports", .default_value = ".godot/godot-cli" },
     .{ .long = "no-import", .kind = .flag, .description = "Skip the headless import pass that assigns UIDs to new files" },

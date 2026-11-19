@@ -2268,7 +2268,7 @@ godot-cli project run [options]
 | `--project-root` | `<path>` | Godot project root (default: current directory) | — |
 | `--godot` | `<path>` | Godot binary; default $GODOT, then godot on PATH, then the macOS app bundle | — |
 | `--scene` | `<value>` | Scene to run (res:// or project-relative); the main scene when omitted | — |
-| `--frames` | `<n>` | Frames to run before quitting; 60 is one second, 5 is enough for a static screen | `60` |
+| `--frames` | `<n>` | Frames to run before quitting, one per physics tick: 60 is one second at Godot's default rate, and frames_per_second in the result gives the project's; 5 is enough for a static screen | `60` |
 | `--resolution` | `<value>` | Window size as WIDTHxHEIGHT; default is the project's display/window/size, else Godot's own 1152x648 | — |
 | `--capture-dir` | `<path>` | Folder under the project for the frame and log; the default is under .godot/, which Godot never imports | `.godot/godot-cli` |
 | `--no-import` | — | Skip the headless import pass that assigns UIDs to new files | — |

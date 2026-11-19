@@ -15,6 +15,7 @@ const scene_undo = @import("scene_undo.zig");
 const class_info = @import("class_info.zig");
 const node_tree = @import("node_tree.zig");
 const variant_value = @import("variant/value.zig");
+const id_validate = @import("id_validate.zig");
 
 pub const Error = error{
     OutOfMemory,
@@ -219,7 +220,7 @@ fn applyOneOp(
         });
         defer added.deinit(allocator);
         if (op_value.object.get("properties")) |props| {
-            try applyNodeProperties(allocator, doc, added.path, props);
+            try applyNodeProperties(allocator, doc, added.path, props, options);
         }
         // The add_node recipe takes unique_name; the op silently dropped it.
         if (readBool(op_value.object.get("unique_name")) orelse false) {
@@ -340,12 +341,16 @@ fn applyOneOp(
                     }
                 }
             }
-            try applyNodeProperties(allocator, doc, path, props);
+            try applyNodeProperties(allocator, doc, path, props, options);
             const count = props.object.count();
             return allocator.print("set {d} {s} on {s}", .{ count, if (count == 1) "property" else "properties", path });
         }
         const property = try requiredString(op_value.object, "property");
-        const value = try requiredPropertyValue(allocator, nodeClass(allocator, doc, path), op_value.object, "value");
+        const class_name = nodeClass(allocator, doc, path);
+        const value = if (op_value.object.get("value")) |raw| switch (raw) {
+            .integer, .float => try numberTextFor(allocator, class_name, scriptNumberKindAt(options, doc, path, property), property, raw),
+            else => try requiredPropertyValue(allocator, class_name, op_value.object, "value"),
+        } else try requiredPropertyValue(allocator, class_name, op_value.object, "value");
         defer allocator.free(value);
         if (options.undo) |recorder| {
             if (try scene_undo.readNodePropertyRaw(allocator, doc, path, property)) |old_value| {
@@ -535,7 +540,7 @@ fn applyOneOp(
         );
         defer added.deinit(allocator);
         if (op_value.object.get("properties")) |props| {
-            try applyNodeProperties(allocator, doc, added.path, props);
+            try applyNodeProperties(allocator, doc, added.path, props, options);
         }
         if (options.undo) |recorder| {
             try scene_undo.recordNodeAddUndo(recorder, added.path);
@@ -640,12 +645,16 @@ fn applyNodeProperties(
     doc: *document.Document,
     node_path: []const u8,
     props_value: std.json.Value,
+    options: ApplyOptions,
 ) Error!void {
     if (props_value != .object) return error.InvalidPatch;
     const class_name = nodeClass(allocator, doc, node_path);
     var it = props_value.object.iterator();
     while (it.next()) |entry| {
-        const value_text = try jsonValueToPropertyText(allocator, class_name, entry.key_ptr.*, entry.value_ptr.*);
+        const value_text = switch (entry.value_ptr.*) {
+            .integer, .float => try numberTextFor(allocator, class_name, scriptNumberKindAt(options, doc, node_path, entry.key_ptr.*), entry.key_ptr.*, entry.value_ptr.*),
+            else => try jsonValueToPropertyText(allocator, class_name, entry.key_ptr.*, entry.value_ptr.*),
+        };
         defer allocator.free(value_text);
         try scene_edit.setNodeProperty(allocator, doc, node_path, entry.key_ptr.*, value_text);
     }
@@ -689,14 +698,42 @@ pub fn isFloatProperty(property: []const u8) bool {
 /// `{"light_energy": 2.0}` came out `light_energy = 2` both ways: the prefix
 /// `energy` never matched the name, and `{d}` prints 2.0 as `2`.
 pub fn numberText(allocator: std.mem.Allocator, class_name: ?[]const u8, property: []const u8, value: std.json.Value) Error!?[]const u8 {
+    return numberTextWith(allocator, class_name, null, property, value);
+}
+
+/// numberText for a number, with what the node's script says of the
+/// property (true for a float, false for an int) when the class has no
+/// such property. JSON from a JavaScript client sends `12.0` as `12`, so
+/// trial 48's `min_speed: 12.0` came out `12` where the editor writes 12.0.
+pub fn numberTextFor(allocator: std.mem.Allocator, class_name: ?[]const u8, script_float: ?bool, property: []const u8, value: std.json.Value) Error![]const u8 {
+    return (try numberTextWith(allocator, class_name, script_float, property, value)).?;
+}
+
+/// Whether the script on the node at `node_path` (or its instanced scene's
+/// root script) declares `property` a float or an int; null when there is
+/// no project root, no script, or it does not say.
+pub fn scriptNumberKindAt(options: ApplyOptions, doc: *const document.Document, node_path: []const u8, property: []const u8) ?bool {
+    const root = options.project_root orelse return null;
+    const io = options.io orelse return null;
+    var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var list = node_tree.collectNodes(arena, doc) catch return null;
+    const node = node_tree.findByPath(&list, node_path) orelse return null;
+    const section = &doc.sections.items[node.section_index];
+    if (section.header.getString("type")) |class| if (class_info.findProperty(class, property) != null) return null;
+    return id_validate.scriptNumberKind(arena, doc, .{ .project_root = root, .io = io }, section, property);
+}
+
+fn numberTextWith(allocator: std.mem.Allocator, class_name: ?[]const u8, script_float: ?bool, property: []const u8, value: std.json.Value) Error!?[]const u8 {
     const declared_float: ?bool = blk: {
         // Theme constants and font sizes are ints whatever the item is
         // called; `outline_size` on the float list made trial 47's
         // `theme_override_constants/outline_size = 8` come out `8.0`.
         if (std.mem.startsWith(u8, property, "theme_override_constants/") or
             std.mem.startsWith(u8, property, "theme_override_font_sizes/")) break :blk false;
-        const class = class_name orelse break :blk null;
-        const info = class_info.findProperty(class, property) orelse break :blk null;
+        const class = class_name orelse break :blk script_float;
+        const info = class_info.findProperty(class, property) orelse break :blk script_float;
         if (std.mem.eql(u8, info.type_name, "float")) break :blk true;
         if (std.mem.eql(u8, info.type_name, "int")) break :blk false;
         break :blk null;

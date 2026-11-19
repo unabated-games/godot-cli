@@ -93,8 +93,10 @@ key or a button, so it proves code reacting to the action works; the bindings
 are what project input list reports. A Button's shortcut never sees an action:
 press its key with --key enter@20 instead, which also proves the binding.
 
-For a screen that does not move, --frames 5 is enough; the default, 60, is one
-second, which leaves room for movement and clicks. The run imports first, which
+For a screen that does not move, --frames 5 is enough; the default, 60, leaves
+room for movement and clicks. A frame is one physics tick, so 60 frames is one
+second only at Godot's default 60 ticks a second; the result's
+frames_per_second gives this project's rate. The run imports first, which
 writes a .import file beside each asset and a .uid file beside each script.
 Those belong in version control; .godot/ does not. A 3D scene with no Camera3D
 is captured through a temporary camera the run adds and never saves, with a

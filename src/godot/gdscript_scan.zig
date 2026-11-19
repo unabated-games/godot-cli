@@ -29,6 +29,8 @@ pub const SignalInfo = struct {
     }
 };
 
+pub const NumberKind = enum { unknown, int, float };
+
 pub const ScriptInterface = struct {
     exports: []ExportInfo = &.{},
     signals: []SignalInfo = &.{},
@@ -38,6 +40,10 @@ pub const ScriptInterface = struct {
     /// static ones included: a scene line may set any of them
     /// (GDScriptInstance::set looks up static variables too).
     variables: []const []const u8 = &.{},
+    /// Whether each of `variables` holds a float or an int, from its type
+    /// or its default, so a whole number set over JSON (where `12.0` arrives
+    /// as `12`) is written the way the editor writes it.
+    variable_kinds: []const NumberKind = &.{},
     /// What `extends` names: a class (`Node2D`, a `class_name`) or a quoted
     /// path, unquoted (`res://base.gd`). Empty when there is no `extends`,
     /// which for GDScript means RefCounted.
@@ -54,6 +60,7 @@ pub const ScriptInterface = struct {
         allocator.free(self.functions);
         for (self.variables) |name| allocator.free(name);
         allocator.free(self.variables);
+        allocator.free(self.variable_kinds);
         allocator.free(self.extends);
         allocator.free(self.class_name);
     }
@@ -61,6 +68,13 @@ pub const ScriptInterface = struct {
     pub fn definesFunction(self: *const ScriptInterface, name: []const u8) bool {
         for (self.functions) |candidate| if (std.mem.eql(u8, candidate, name)) return true;
         return false;
+    }
+
+    pub fn variableKind(self: *const ScriptInterface, name: []const u8) ?NumberKind {
+        for (self.variables, 0..) |candidate, i| if (std.mem.eql(u8, candidate, name)) {
+            return if (i < self.variable_kinds.len) self.variable_kinds[i] else .unknown;
+        };
+        return null;
     }
 
     pub fn declaresVariable(self: *const ScriptInterface, name: []const u8) bool {
@@ -95,6 +109,8 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
         for (variables.items) |name| allocator.free(name);
         variables.deinit(allocator);
     }
+    var variable_kinds: std.ArrayList(NumberKind) = .empty;
+    errdefer variable_kinds.deinit(allocator);
     var extends: []const u8 = "";
     errdefer allocator.free(extends);
     var class_name: []const u8 = "";
@@ -137,7 +153,11 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
         // an inner class's are indented.
         const top_level = line.len > 0 and !std.ascii.isWhitespace(line[0]);
         if (top_level) {
-            if (topLevelVarName(trimmed)) |name| try variables.append(allocator, try allocator.dupe(u8, name));
+            if (topLevelVarName(trimmed)) |name| {
+                try variables.append(allocator, try allocator.dupe(u8, name));
+                const after = @intFromPtr(name.ptr) - @intFromPtr(trimmed.ptr) + name.len;
+                try variable_kinds.append(allocator, numberKindOf(trimmed[after..]));
+            }
             const without_static = if (std.mem.startsWith(u8, trimmed, "static ")) std.mem.trimStart(u8, trimmed["static ".len..], " \t") else trimmed;
             if (std.mem.startsWith(u8, without_static, "func ")) {
                 const rest = std.mem.trimStart(u8, without_static["func ".len..], " \t");
@@ -203,6 +223,7 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
         .signals = try signals.toOwnedSlice(allocator),
         .functions = try functions.toOwnedSlice(allocator),
         .variables = try variables.toOwnedSlice(allocator),
+        .variable_kinds = try variable_kinds.toOwnedSlice(allocator),
         .extends = extends,
         .class_name = class_name,
     };
@@ -211,6 +232,35 @@ pub fn parseScript(allocator: std.mem.Allocator, source: []const u8) ParseError!
 /// The name a top-level `var` line declares, past any annotations on the
 /// same line (`@export_range(0, 10) var speed`, `@onready var label`,
 /// `static var count`). Null for anything else.
+/// What follows a variable's name: `: float`, `: int`, or a default whose
+/// literal says which (`= 10.0`, `:= 14`). Godot's export takes an untyped
+/// variable's type from its default.
+fn numberKindOf(rest_in: []const u8) NumberKind {
+    var rest = std.mem.trimStart(u8, rest_in, " \t");
+    if (rest.len > 0 and rest[0] == ':' and !(rest.len > 1 and rest[1] == '=')) {
+        rest = std.mem.trimStart(u8, rest[1..], " \t");
+        var end: usize = 0;
+        while (end < rest.len and (std.ascii.isAlphanumeric(rest[end]) or rest[end] == '_')) end += 1;
+        const type_name = rest[0..end];
+        if (std.mem.eql(u8, type_name, "float")) return .float;
+        if (std.mem.eql(u8, type_name, "int")) return .int;
+        return .unknown;
+    }
+    if (std.mem.startsWith(u8, rest, ":=")) rest = rest[2..] else if (std.mem.startsWith(u8, rest, "=")) rest = rest[1..] else return .unknown;
+    var value = std.mem.trim(u8, rest, " \t\r");
+    if (std.mem.indexOfScalar(u8, value, '#')) |hash| value = std.mem.trimEnd(u8, value[0..hash], " \t");
+    if (value.len > 0 and (value[0] == '-' or value[0] == '+')) value = value[1..];
+    if (value.len == 0 or !std.ascii.isDigit(value[0])) return .unknown;
+    if (std.mem.startsWith(u8, value, "0x") or std.mem.startsWith(u8, value, "0b")) return .int;
+    var float = false;
+    for (value) |c| switch (c) {
+        '0'...'9', '_' => {},
+        '.', 'e', 'E' => float = true,
+        else => return .unknown,
+    };
+    return if (float) .float else .int;
+}
+
 fn topLevelVarName(trimmed: []const u8) ?[]const u8 {
     var rest = trimmed;
     while (rest.len > 0 and rest[0] == '@') {
@@ -425,6 +475,30 @@ test "functions, extends and class_name are read from the top level only" {
     var plain = try parseScript(allocator, "extends Node2D # a comment\n");
     defer plain.deinit(allocator);
     try std.testing.expectEqualStrings("Node2D", plain.extends);
+}
+
+test "a variable's number kind comes from its type or its default" {
+    const allocator = std.testing.allocator;
+    var interface = try parseScript(allocator,
+        \\extends Node
+        \\@export var min_speed = 10.0
+        \\@export var speed = 14
+        \\@export_range(0, 100) var health: float = 5
+        \\var count: int
+        \\var ratio := 1e3 # scientific
+        \\var label = "x"
+        \\static var hex = 0xff
+        \\
+    );
+    defer interface.deinit(allocator);
+    try std.testing.expectEqual(NumberKind.float, interface.variableKind("min_speed").?);
+    try std.testing.expectEqual(NumberKind.int, interface.variableKind("speed").?);
+    try std.testing.expectEqual(NumberKind.float, interface.variableKind("health").?);
+    try std.testing.expectEqual(NumberKind.int, interface.variableKind("count").?);
+    try std.testing.expectEqual(NumberKind.float, interface.variableKind("ratio").?);
+    try std.testing.expectEqual(NumberKind.unknown, interface.variableKind("label").?);
+    try std.testing.expectEqual(NumberKind.int, interface.variableKind("hex").?);
+    try std.testing.expectEqual(@as(?NumberKind, null), interface.variableKind("missing"));
 }
 
 test "top-level variables are read whatever their annotations" {
