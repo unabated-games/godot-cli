@@ -1,0 +1,10 @@
+{
+  "ops": [
+    {
+      "op": "instance_add",
+      "parent": "/root/Main",
+      "name": "HUD",
+      "catalog_id": "ui/hud"
+    }
+  ]
+}

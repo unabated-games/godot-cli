@@ -1,0 +1,138 @@
+{
+  "ops": [
+    {
+      "op": "ext_add",
+      "type": "Script",
+      "path": "res://scripts/main.gd",
+      "id_hint": "main"
+    },
+    {
+      "op": "node_set",
+      "path": "/root/Main",
+      "property": "script",
+      "value": "ExtResource(\"Script_main\")"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Gems/Gem1",
+      "signal": "collected",
+      "to": "/root/Main",
+      "method": "_on_gem_collected"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Gems/Gem2",
+      "signal": "collected",
+      "to": "/root/Main",
+      "method": "_on_gem_collected"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Gems/Gem3",
+      "signal": "collected",
+      "to": "/root/Main",
+      "method": "_on_gem_collected"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Gems/Gem4",
+      "signal": "collected",
+      "to": "/root/Main",
+      "method": "_on_gem_collected"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Gems/Gem5",
+      "signal": "collected",
+      "to": "/root/Main",
+      "method": "_on_gem_collected"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Gems/Gem6",
+      "signal": "collected",
+      "to": "/root/Main",
+      "method": "_on_gem_collected"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Slimes/Slime1",
+      "signal": "touched",
+      "to": "/root/Main",
+      "method": "_on_slime_touched"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Slimes/Slime2",
+      "signal": "touched",
+      "to": "/root/Main",
+      "method": "_on_slime_touched"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/Slimes/Slime3",
+      "signal": "touched",
+      "to": "/root/Main",
+      "method": "_on_slime_touched"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/HUD",
+      "signal": "play_pressed",
+      "to": "/root/Main",
+      "method": "_on_play_pressed"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/Main/HUD",
+      "signal": "retry_pressed",
+      "to": "/root/Main",
+      "method": "_on_retry_pressed"
+    },
+    {
+      "op": "ext_add",
+      "type": "AudioStream",
+      "path": "res://audio/pickup.wav",
+      "id_hint": "pickup"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Main",
+      "name": "Pickup",
+      "type": "AudioStreamPlayer",
+      "properties": {
+        "stream": "ExtResource(\"AudioStream_pickup\")"
+      }
+    },
+    {
+      "op": "ext_add",
+      "type": "AudioStream",
+      "path": "res://audio/hit.wav",
+      "id_hint": "hit"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Main",
+      "name": "Hit",
+      "type": "AudioStreamPlayer",
+      "properties": {
+        "stream": "ExtResource(\"AudioStream_hit\")"
+      }
+    },
+    {
+      "op": "ext_add",
+      "type": "AudioStream",
+      "path": "res://audio/over.wav",
+      "id_hint": "over"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Main",
+      "name": "Over",
+      "type": "AudioStreamPlayer",
+      "properties": {
+        "stream": "ExtResource(\"AudioStream_over\")"
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "ops": [
+    {
+      "op": "sub_add",
+      "type": "CircleShape2D",
+      "id_hint": "body",
+      "properties": {
+        "radius": 40.0
+      }
+    },
+    {
+      "op": "ext_add",
+      "type": "Texture2D",
+      "path": "res://art/player.png",
+      "id_hint": "player"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Player",
+      "name": "Sprite",
+      "type": "Sprite2D",
+      "properties": {
+        "texture": "ExtResource(\"Texture2D_player\")"
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Player",
+      "name": "Collision",
+      "type": "CollisionShape2D",
+      "properties": {
+        "shape": "SubResource(\"CircleShape2D_body\")"
+      }
+    }
+  ]
+}

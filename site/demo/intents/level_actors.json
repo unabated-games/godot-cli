@@ -1,0 +1,109 @@
+{
+  "ops": [
+    {
+      "op": "node_add",
+      "parent": "/root/Main",
+      "name": "Gems",
+      "type": "Node2D"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Main",
+      "name": "Slimes",
+      "type": "Node2D"
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Gems",
+      "name": "Gem1",
+      "catalog_id": "actors/gem",
+      "properties": {
+        "position": "Vector2(170, 190)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Gems",
+      "name": "Gem2",
+      "catalog_id": "actors/gem",
+      "properties": {
+        "position": "Vector2(330, 400)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Gems",
+      "name": "Gem3",
+      "catalog_id": "actors/gem",
+      "properties": {
+        "position": "Vector2(520, 160)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Gems",
+      "name": "Gem4",
+      "catalog_id": "actors/gem",
+      "properties": {
+        "position": "Vector2(640, 410)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Gems",
+      "name": "Gem5",
+      "catalog_id": "actors/gem",
+      "properties": {
+        "position": "Vector2(790, 290)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Gems",
+      "name": "Gem6",
+      "catalog_id": "actors/gem",
+      "properties": {
+        "position": "Vector2(860, 150)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Slimes",
+      "name": "Slime1",
+      "catalog_id": "actors/slime",
+      "properties": {
+        "position": "Vector2(140, 150)",
+        "velocity": "Vector2(140, 110)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Slimes",
+      "name": "Slime2",
+      "catalog_id": "actors/slime",
+      "properties": {
+        "position": "Vector2(820, 170)",
+        "velocity": "Vector2(-130, 120)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main/Slimes",
+      "name": "Slime3",
+      "catalog_id": "actors/slime",
+      "properties": {
+        "position": "Vector2(700, 420)",
+        "velocity": "Vector2(120, -140)"
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/Main",
+      "name": "Player",
+      "catalog_id": "actors/player",
+      "properties": {
+        "position": "Vector2(480, 290)"
+      }
+    }
+  ]
+}

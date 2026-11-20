@@ -11,6 +11,8 @@ Each guide is a task with the commands to finish it. If you are new here, read [
 
 [Build a scene]({{ base_url }}/how-to/first-scene/): create a scene, add nodes and properties, work with sub-resources, and move nodes around without breaking the tree.
 
+[Build the demo game]({{ base_url }}/how-to/build-gem-grove/): Gem Grove, the game on the front page, built from an empty folder by one shell script, with the frame captured after each stage.
+
 [Instance and override]({{ base_url }}/how-to/instance-and-override/): put one scene inside another, override exported values on the instance, and reach editable children when you must.
 
 [Build UI]({{ base_url }}/how-to/build-ui/): Control trees with anchors, containers, theme overrides, and unique names, in the shape the editor writes them.

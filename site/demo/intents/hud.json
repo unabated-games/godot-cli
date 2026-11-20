@@ -1,0 +1,313 @@
+{
+  "ops": [
+    {
+      "op": "ext_add",
+      "type": "FontFile",
+      "path": "res://fonts/LilitaOne-Regular.ttf",
+      "id_hint": "lilita"
+    },
+    {
+      "op": "ext_add",
+      "type": "Texture2D",
+      "path": "res://art/gem.png",
+      "id_hint": "gem"
+    },
+    {
+      "op": "sub_add",
+      "type": "StyleBoxFlat",
+      "id_hint": "card",
+      "properties": {
+        "content_margin_left": 40.0,
+        "content_margin_top": 28.0,
+        "content_margin_right": 40.0,
+        "content_margin_bottom": 36.0,
+        "bg_color": "Color(1, 0.957, 0.839, 1)",
+        "border_width_left": 4,
+        "border_width_top": 4,
+        "border_width_right": 4,
+        "border_width_bottom": 4,
+        "border_color": "Color(0.106, 0.082, 0.188, 1)",
+        "corner_radius_top_left": 24,
+        "corner_radius_top_right": 24,
+        "corner_radius_bottom_right": 24,
+        "corner_radius_bottom_left": 24,
+        "shadow_color": "Color(0.106, 0.082, 0.188, 1)",
+        "shadow_size": 1,
+        "shadow_offset": "Vector2(0, 8)"
+      }
+    },
+    {
+      "op": "sub_add",
+      "type": "StyleBoxFlat",
+      "id_hint": "pill",
+      "properties": {
+        "content_margin_left": 14.0,
+        "content_margin_top": 4.0,
+        "content_margin_right": 18.0,
+        "content_margin_bottom": 4.0,
+        "bg_color": "Color(0.106, 0.082, 0.188, 1)",
+        "border_width_left": 3,
+        "border_width_top": 3,
+        "border_width_right": 3,
+        "border_width_bottom": 3,
+        "border_color": "Color(1, 0.957, 0.839, 1)",
+        "corner_radius_top_left": 16,
+        "corner_radius_top_right": 16,
+        "corner_radius_bottom_right": 16,
+        "corner_radius_bottom_left": 16,
+        "shadow_color": "Color(0.106, 0.082, 0.188, 1)",
+        "shadow_size": 0,
+        "shadow_offset": "Vector2(0, 0)"
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD",
+      "name": "TopBar",
+      "type": "MarginContainer",
+      "properties": {
+        "anchors_preset": 10,
+        "anchor_right": 1.0,
+        "offset_bottom": 72.0,
+        "grow_horizontal": 2,
+        "mouse_filter": 2,
+        "theme_override_constants/margin_left": 20,
+        "theme_override_constants/margin_top": 14,
+        "theme_override_constants/margin_right": 20,
+        "theme_override_constants/margin_bottom": 8
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/TopBar",
+      "name": "Row",
+      "type": "HBoxContainer",
+      "properties": {
+        "mouse_filter": 2
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/TopBar/Row",
+      "name": "Hearts",
+      "type": "HBoxContainer",
+      "unique_name": true,
+      "properties": {
+        "theme_override_constants/separation": 6
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/HUD/TopBar/Row/Hearts",
+      "name": "Heart1",
+      "catalog_id": "ui/heart"
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/HUD/TopBar/Row/Hearts",
+      "name": "Heart2",
+      "catalog_id": "ui/heart"
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/HUD/TopBar/Row/Hearts",
+      "name": "Heart3",
+      "catalog_id": "ui/heart"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/TopBar/Row",
+      "name": "Spacer",
+      "type": "Control",
+      "properties": {
+        "size_flags_horizontal": 3,
+        "mouse_filter": 2
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/TopBar/Row",
+      "name": "ScorePill",
+      "type": "PanelContainer",
+      "properties": {
+        "theme_override_styles/panel": "SubResource(\"StyleBoxFlat_pill\")"
+      },
+      "unique_name": true
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/TopBar/Row/ScorePill",
+      "name": "ScoreRow",
+      "type": "HBoxContainer",
+      "properties": {
+        "theme_override_constants/separation": 8
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/TopBar/Row/ScorePill/ScoreRow",
+      "name": "GemIcon",
+      "type": "TextureRect",
+      "properties": {
+        "custom_minimum_size": "Vector2(32, 32)",
+        "texture": "ExtResource(\"Texture2D_gem\")",
+        "expand_mode": 1,
+        "stretch_mode": 5
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/TopBar/Row/ScorePill/ScoreRow",
+      "name": "Score",
+      "type": "Label",
+      "properties": {
+        "text": "\"0\"",
+        "horizontal_alignment": 1,
+        "theme_override_colors/font_color": "Color(1, 0.957, 0.839, 1)",
+        "theme_override_fonts/font": "ExtResource(\"FontFile_lilita\")",
+        "theme_override_font_sizes/font_size": 30,
+        "custom_minimum_size": "Vector2(40, 0)"
+      },
+      "unique_name": true
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD",
+      "name": "Center",
+      "type": "CenterContainer",
+      "properties": {
+        "anchors_preset": 15,
+        "anchor_right": 1.0,
+        "anchor_bottom": 1.0,
+        "grow_horizontal": 2,
+        "grow_vertical": 2,
+        "mouse_filter": 2
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center",
+      "name": "TitleCard",
+      "type": "PanelContainer",
+      "unique_name": true,
+      "properties": {
+        "theme_override_styles/panel": "SubResource(\"StyleBoxFlat_card\")"
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center/TitleCard",
+      "name": "Column",
+      "type": "VBoxContainer",
+      "properties": {
+        "theme_override_constants/separation": 14
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center/TitleCard/Column",
+      "name": "Title",
+      "type": "Label",
+      "properties": {
+        "text": "\"Gem Grove\"",
+        "horizontal_alignment": 1,
+        "theme_override_colors/font_color": "Color(0.106, 0.082, 0.188, 1)",
+        "theme_override_fonts/font": "ExtResource(\"FontFile_lilita\")",
+        "theme_override_font_sizes/font_size": 72
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center/TitleCard/Column",
+      "name": "Hint",
+      "type": "Label",
+      "properties": {
+        "text": "\"Grab gems. Dodge slimes.\\nMove with WASD or the arrow keys.\"",
+        "horizontal_alignment": 1,
+        "theme_override_colors/font_color": "Color(0.29, 0.25, 0.42, 1)",
+        "theme_override_fonts/font": "ExtResource(\"FontFile_lilita\")",
+        "theme_override_font_sizes/font_size": 22
+      }
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/HUD/Center/TitleCard/Column",
+      "name": "PlayButton",
+      "catalog_id": "ui/big_button",
+      "properties": {
+        "size_flags_horizontal": 4
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center",
+      "name": "GameOverCard",
+      "type": "PanelContainer",
+      "unique_name": true,
+      "properties": {
+        "visible": false,
+        "theme_override_styles/panel": "SubResource(\"StyleBoxFlat_card\")"
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center/GameOverCard",
+      "name": "Column",
+      "type": "VBoxContainer",
+      "properties": {
+        "theme_override_constants/separation": 14
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center/GameOverCard/Column",
+      "name": "Title",
+      "type": "Label",
+      "properties": {
+        "text": "\"Out of hearts\"",
+        "horizontal_alignment": 1,
+        "theme_override_colors/font_color": "Color(0.106, 0.082, 0.188, 1)",
+        "theme_override_fonts/font": "ExtResource(\"FontFile_lilita\")",
+        "theme_override_font_sizes/font_size": 56
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/HUD/Center/GameOverCard/Column",
+      "name": "FinalScore",
+      "type": "Label",
+      "properties": {
+        "text": "\"You grabbed 0 gems\"",
+        "horizontal_alignment": 1,
+        "theme_override_colors/font_color": "Color(0.29, 0.25, 0.42, 1)",
+        "theme_override_fonts/font": "ExtResource(\"FontFile_lilita\")",
+        "theme_override_font_sizes/font_size": 24
+      },
+      "unique_name": true
+    },
+    {
+      "op": "instance_add",
+      "parent": "/root/HUD/Center/GameOverCard/Column",
+      "name": "RetryButton",
+      "catalog_id": "ui/big_button",
+      "properties": {
+        "size_flags_horizontal": 4,
+        "text": "\"Try again\""
+      }
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/HUD/Center/TitleCard/Column/PlayButton",
+      "signal": "pressed",
+      "to": "/root/HUD",
+      "method": "_on_play_pressed"
+    },
+    {
+      "op": "connection_add",
+      "from": "/root/HUD/Center/GameOverCard/Column/RetryButton",
+      "signal": "pressed",
+      "to": "/root/HUD",
+      "method": "_on_retry_pressed"
+    }
+  ]
+}

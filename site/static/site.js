@@ -30,3 +30,40 @@
     button.setAttribute("aria-expanded", open ? "true" : "false");
   });
 })();
+
+// Copy buttons. Each one names the element whose text it copies, and says so
+// for a moment afterwards.
+(function () {
+  document.querySelectorAll("[data-copy]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var source = document.getElementById(button.getAttribute("data-copy"));
+      if (!source || !navigator.clipboard) return;
+      var text = source.textContent.replace(/^\$ /gm, "");
+      navigator.clipboard.writeText(text).then(function () {
+        var label = button.innerHTML;
+        button.textContent = "Copied";
+        setTimeout(function () {
+          button.innerHTML = label;
+        }, 1400);
+      });
+    });
+  });
+})();
+
+// The demo game. Nothing is downloaded until Play is pressed; then the still
+// frame is swapped for the game itself.
+(function () {
+  var button = document.querySelector("[data-demo]");
+  if (!button) return;
+  button.addEventListener("click", function () {
+    var screen = button.parentNode;
+    var frame = document.createElement("iframe");
+    frame.src = button.getAttribute("data-demo");
+    frame.title = "Gem Grove";
+    frame.allow = "autoplay; fullscreen";
+    screen.classList.remove("poster");
+    screen.innerHTML = "";
+    screen.appendChild(frame);
+    frame.focus();
+  });
+})();

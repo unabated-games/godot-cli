@@ -1,0 +1,20 @@
+{
+  "ops": [
+    {
+      "op": "ext_add",
+      "type": "Texture2D",
+      "path": "res://art/bg.png",
+      "id_hint": "bg"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Main",
+      "name": "Background",
+      "type": "Sprite2D",
+      "properties": {
+        "texture": "ExtResource(\"Texture2D_bg\")",
+        "centered": false
+      }
+    }
+  ]
+}

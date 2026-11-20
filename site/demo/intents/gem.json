@@ -1,0 +1,36 @@
+{
+  "ops": [
+    {
+      "op": "sub_add",
+      "type": "CircleShape2D",
+      "id_hint": "body",
+      "properties": {
+        "radius": 30.0
+      }
+    },
+    {
+      "op": "ext_add",
+      "type": "Texture2D",
+      "path": "res://art/gem.png",
+      "id_hint": "gem"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Gem",
+      "name": "Sprite",
+      "type": "Sprite2D",
+      "properties": {
+        "texture": "ExtResource(\"Texture2D_gem\")"
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/Gem",
+      "name": "Collision",
+      "type": "CollisionShape2D",
+      "properties": {
+        "shape": "SubResource(\"CircleShape2D_body\")"
+      }
+    }
+  ]
+}

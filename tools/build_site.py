@@ -30,6 +30,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTENT = ROOT / "site" / "content"
 TEMPLATES = ROOT / "site" / "templates"
 STATIC = ROOT / "site" / "static"
+# The browser build of the demo game, written by `WEB=1 site/demo/build.sh`.
+# It is not committed, so a build without it leaves the demo as a still frame.
+DEMO_WEB = ROOT / "site" / "demo" / "web"
+CHANGELOG = ROOT / "CHANGELOG.md"
 
 # Sidebar order and grouping. A page missing from here still builds; it just
 # does not appear in the navigation.
@@ -46,6 +50,7 @@ NAV = [
         [
             ("how-to/index.md", "All guides"),
             ("how-to/first-scene.md", "Build a scene"),
+            ("how-to/build-gem-grove.md", "Build the demo game"),
             ("how-to/your-own-components.md", "Teach an agent your sub-scenes"),
             ("how-to/instance-and-override.md", "Instance and override"),
             ("how-to/batch-edits.md", "Batch edits with intents and patches"),
@@ -85,6 +90,25 @@ def parse_header(text: str) -> tuple[dict[str, str], str]:
         key, _, value = line.partition(":")
         header[key.strip()] = value.strip()
     return header, text[end + 5 :]
+
+
+def latest_release() -> tuple[str, str]:
+    """The newest released version and its date, from the changelog's first
+    `## [x.y.z] — date` heading, so the site never states a version by hand."""
+    match = re.search(r"^## \[(\d+\.\d+\.\d+)\] \S+ (\d{4})-(\d{2})-(\d{2})", CHANGELOG.read_text(), re.MULTILINE)
+    if not match:
+        sys.exit("No released version found in CHANGELOG.md")
+    months = "January February March April May June July August September October November December".split()
+    version, year, month, day = match.groups()
+    return version, f"{int(day)} {months[int(month) - 1]} {year}"
+
+
+def demo_blocks(page: str, playable: bool) -> str:
+    """Keep the `<!-- demo:play -->` blocks when the browser build exists and
+    the `<!-- demo:still -->` ones when it does not."""
+    keep, drop = ("play", "still") if playable else ("still", "play")
+    page = re.sub(rf"<!-- demo:{drop} -->.*?<!-- /demo:{drop} -->", "", page, flags=re.DOTALL)
+    return re.sub(rf"<!-- /?demo:{keep} -->", "", page)
 
 
 def render_markdown(body: str) -> tuple[str, list[tuple[int, str, str]]]:
@@ -168,8 +192,10 @@ def main() -> int:
     # old one under the new HTML. Stamping asset URLs with a content hash makes
     # every deploy fetch fresh.
     asset_hash = hashlib.sha256(
-        b"".join(sorted(path.read_bytes() for path in STATIC.iterdir()))
+        b"".join(sorted(path.read_bytes() for path in STATIC.rglob("*") if path.is_file()))
     ).hexdigest()[:10]
+    version, released = latest_release()
+    playable = (DEMO_WEB / "index.html").exists()
     for name in ("style.css", "highlight.css", "site.js", "favicon.svg"):
         base_template = base_template.replace(f"/assets/{name}", f"/assets/{name}?v={asset_hash}")
         landing_template = landing_template.replace(f"/assets/{name}", f"/assets/{name}?v={asset_hash}")
@@ -196,7 +222,11 @@ def main() -> int:
             )
             body = body + "\n\n" + included.split("\n", 1)[1]
 
-        rendered, headings = render_markdown(body)
+        # A page with `format: html` is laid out by hand, so it skips Markdown.
+        if header.get("format") == "html":
+            rendered, headings = demo_blocks(body, playable), []
+        else:
+            rendered, headings = render_markdown(body)
         template = landing_template if header.get("layout") == "landing" else base_template
 
         page = template.replace("{{ content }}", rendered)
@@ -205,6 +235,9 @@ def main() -> int:
         page = page.replace("{{ title }}", html.escape(header.get("title", "godot-cli")))
         page = page.replace("{{ description }}", html.escape(header.get("description", "")))
         page = page.replace("{{ base_url }}", base_url)
+        page = page.replace("{{ version }}", version)
+        page = page.replace("{{ released }}", released)
+        page = page.replace("{{ asset_hash }}", asset_hash)
         page = page.replace("{{ source }}", rel)
 
         stem = rel[: -len(".md")]
@@ -215,9 +248,9 @@ def main() -> int:
         target.write_text(page)
 
     assets = out_root / "assets"
-    assets.mkdir()
-    for item in STATIC.iterdir():
-        shutil.copy(item, assets / item.name)
+    shutil.copytree(STATIC, assets, ignore=shutil.ignore_patterns(".DS_Store"))
+    if playable:
+        shutil.copytree(DEMO_WEB, out_root / "demo" / "gem-grove")
 
     # Syntax highlighting: one dark palette, used in both site themes so code
     # reads the same either way.
@@ -241,6 +274,9 @@ def check_links(out_root: pathlib.Path, base_url: str) -> list[str]:
     linking to a page that was renamed is the failure this catches."""
     broken = []
     for page in sorted(out_root.rglob("*.html")):
+        # The demo game's page is Godot's export, with links relative to itself.
+        if page.relative_to(out_root).parts[0] == "demo":
+            continue
         for href in re.findall(r'href="([^"]+)"', page.read_text()):
             if href.startswith(("http://", "https://", "mailto:", "#")):
                 continue

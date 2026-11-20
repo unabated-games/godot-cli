@@ -1,0 +1,19 @@
+{
+  "ops": [
+    {
+      "op": "ext_add",
+      "type": "Texture2D",
+      "path": "res://art/heart.png",
+      "id_hint": "heart"
+    },
+    {
+      "op": "node_set",
+      "path": "/root/Heart",
+      "properties": {
+        "custom_minimum_size": "Vector2(44, 40)",
+        "texture": "ExtResource(\"Texture2D_heart\")",
+        "stretch_mode": 5
+      }
+    }
+  ]
+}

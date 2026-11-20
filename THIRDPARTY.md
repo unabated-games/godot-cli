@@ -87,6 +87,17 @@ types. The algorithm, constants, and output sequence are unchanged.
 
 ---
 
+## Lilita One (documentation site and demo game only)
+
+The documentation site's headings and the demo game under `site/demo` use the
+Lilita One typeface, copyright (c) 2011 Juan Montoreano, licensed under the SIL
+Open Font License, Version 1.1. The font file is not part of the `godot-cli`
+binary. The full license text is included beside each copy of the font, at
+[`site/static/fonts/LilitaOne-OFL.txt`](site/static/fonts/LilitaOne-OFL.txt) and
+[`site/demo/src/fonts/OFL.txt`](site/demo/src/fonts/OFL.txt).
+
+---
+
 ## Godot trademark
 
 "Godot" and the Godot Engine logo are trademarks of the Godot Foundation. This

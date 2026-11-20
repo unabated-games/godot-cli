@@ -1,0 +1,60 @@
+{
+  "actions": [
+    {
+      "name": "move_left",
+      "events": [
+        {
+          "type": "key",
+          "keycode": "A",
+          "physical": true
+        },
+        {
+          "type": "key",
+          "keycode": "left"
+        }
+      ]
+    },
+    {
+      "name": "move_right",
+      "events": [
+        {
+          "type": "key",
+          "keycode": "D",
+          "physical": true
+        },
+        {
+          "type": "key",
+          "keycode": "right"
+        }
+      ]
+    },
+    {
+      "name": "move_up",
+      "events": [
+        {
+          "type": "key",
+          "keycode": "W",
+          "physical": true
+        },
+        {
+          "type": "key",
+          "keycode": "up"
+        }
+      ]
+    },
+    {
+      "name": "move_down",
+      "events": [
+        {
+          "type": "key",
+          "keycode": "S",
+          "physical": true
+        },
+        {
+          "type": "key",
+          "keycode": "down"
+        }
+      ]
+    }
+  ]
+}

@@ -1,182 +1,286 @@
 ---
 title: godot-cli
-description: Build Godot scenes from the command line. Files that match the editor's own saves byte for byte, JSON in and out, and a component catalog so coding agents reuse what you have already built.
+description: Faster, safer Godot scene edits for coding agents. One command for a whole scene change, checked against Godot's own class reference, in files that match the editor's saves byte for byte.
 layout: landing
+format: html
 ---
 
-# Edit Godot scenes safely, without opening the editor
+<section class="hero">
+  <div class="wrap hero-inner">
+    <div class="hero-copy">
+      <div class="hero-chips">
+        <span class="chip mint">For Godot 4</span>
+        <span class="chip">MIT licensed</span>
+      </div>
+      <h1><em>Faster, safer</em> Godot scene edits for agents</h1>
+      <p class="lede">godot-cli gives a coding agent one command for a whole scene change, from a terminal or over MCP. Every edit is checked against Godot's own class reference, and the <code>.tscn</code>, <code>.tres</code> and <code>project.godot</code> files it writes match the editor's saves byte for byte.</p>
+      <div class="install">
+        <div class="install-box">
+          <pre id="install-hero"><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.sh | bash</pre>
+          <button class="copy" type="button" data-copy="install-hero" aria-label="Copy the install command"><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+        </div>
+        <span class="install-note">Linux, macOS and Windows, x86_64 and aarch64. One binary with no runtime dependencies.</span>
+      </div>
+      <div class="hero-actions">
+        <a class="btn" href="{{ base_url }}/getting-started/">Install the CLI</a>
+        <a class="hero-secondary" href="#demo"><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="M7 4.5v15l12-7.5z" fill="#6ee7d8" stroke="#6ee7d8" stroke-width="2" stroke-linejoin="round"/></svg><!-- demo:play -->Play the game it built<!-- /demo:play --><!-- demo:still -->See the game it built<!-- /demo:still --></a>
+      </div>
+    </div>
 
-godot-cli edits `.tscn`, `.tres`, and `project.godot` from a terminal. The files it produces match Godot's own saves byte for byte, and every command speaks JSON, which makes it usable by a shell script, a CI job, or a coding agent that has never opened the editor.
-{: .lede }
+    <figure class="hero-art">
+      <div class="game-window">
+        <div class="window-bar"><i></i><i></i><i></i>Gem Grove</div>
+        <img src="{{ base_url }}/assets/demo/4-play.webp?v={{ asset_hash }}" width="960" height="540" alt="Gem Grove running: a robot in a forest clearing with gems and three purple slimes, three hearts top left and a score of 2 top right">
+      </div>
+      <pre class="term hero-term"><span class="p">$</span> godot-cli scene instance add main.tscn \
+    --parent /root/Main --name HUD <span class="hl">--catalog-id ui/hud</span>
+<span class="dim">[node name="HUD" parent="." unique_id=1886270267
+  instance=ExtResource("4_7dm0k")]</span></pre>
+      <figcaption>A frame from Gem Grove, the demo further down. Every scene in it was written by godot-cli.</figcaption>
+    </figure>
+  </div>
+</section>
 
-<div class="cta">
-<a href="{{ base_url }}/getting-started/">Get started</a>
-<a href="{{ base_url }}/how-to/your-own-components/">Teach an agent your sub-scenes</a>
-<a href="https://github.com/unabated-games/godot-cli">Source on GitHub</a>
+<div class="proof">
+  <ul class="wrap">
+    <li>v{{ version }}, released {{ released }}</li>
+    <li>Compared with Godot's own saves on every push</li>
+    <li>Type-checked against Godot's class reference</li>
+    <li>Works in Claude Code, Cursor and OpenCode</li>
+  </ul>
 </div>
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.sh | bash
-source "$HOME/.godot-cli/env.sh"
-```
+<section class="wrap section">
+  <div class="section-head">
+    <h2>Ask an agent for a HUD and look at the scene tree</h2>
+    <p>Scene text is hard to write blind, so an agent left alone builds the HUD in GDScript. The game runs and the scene stays empty. godot-cli gives it a safe way to put the nodes where the editor expects them.</p>
+  </div>
+  <div class="versus">
+    <div class="panel">
+      <span class="chip grey">Without godot-cli</span>
+      <pre class="term"><span class="kw">func</span> _ready() -> <span class="p">void</span>:
+    <span class="kw">var</span> bar = load(<span class="hl">"res://ui/health_bar/health_bar.tscn"</span>).instantiate()
+    add_child(bar)</pre>
+      <div class="dock">
+        <div class="dock-title">Scene dock: hud.tscn</div>
+        <ul>
+          <li>HUD</li>
+          <li class="empty">Nothing else here. The layout exists only while the game is playing.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="panel good">
+      <span class="chip mint">With godot-cli</span>
+      <pre class="term"><span class="p">$</span> godot-cli scene instance add hud.tscn \
+    --parent /root/HUD --name PlayerHealth \
+    <span class="hl">--catalog-id ui/health_bar</span> --project-root .</pre>
+      <div class="dock">
+        <div class="dock-title">Scene dock: hud.tscn</div>
+        <ul>
+          <li>HUD</li>
+          <li class="d1 new">PlayerHealth <small>instance of ui/health_bar</small></li>
+          <li class="d1">Score</li>
+          <li class="d1">PauseButton</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
 
-## Ask an agent for a HUD and watch what comes back
+<section class="wrap section" id="demo">
+  <img class="keyart" src="{{ base_url }}/assets/demo/keyart.webp?v={{ asset_hash }}" width="1600" height="893" alt="Key art for Gem Grove: the robot runs through a forest clearing reaching for a gem while three purple slimes chase it">
+  <div class="section-head">
+    <h2>This game was built from a terminal</h2>
+    <p>Gem Grove is one shell script of godot-cli commands plus six short GDScript files. Nobody opened the editor and nobody typed a line of scene text. <!-- demo:play -->Play it here, then read how each stage went in.<!-- /demo:play --><!-- demo:still -->Here is how each stage went in.<!-- /demo:still --></p>
+  </div>
 
-It tends to be this:
+  <div class="demo-row">
+    <div class="player">
+      <!-- demo:play --><div class="screen poster">
+        <img src="{{ base_url }}/assets/demo/4-play.webp?v={{ asset_hash }}" width="960" height="540" alt="Gem Grove in play">
+        <button class="btn" type="button" data-demo="{{ base_url }}/demo/gem-grove/index.html">Play in your browser</button>
+      </div><!-- /demo:play -->
+      <!-- demo:still --><div class="screen">
+        <img src="{{ base_url }}/assets/demo/3-hud.webp?v={{ asset_hash }}" width="960" height="540" alt="Gem Grove title screen">
+      </div><!-- /demo:still -->
+      <div class="player-bar">
+        <span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
+        <span>or the arrow keys</span>
+        <!-- demo:play --><span class="note">Loads on click. About 10 MB the first time.</span><!-- /demo:play -->
+        <!-- demo:still --><span class="note">The title screen, as godot-cli captured it.</span><!-- /demo:still -->
+      </div>
+    </div>
+    <ul class="stats">
+      <li><b>8</b>scenes, every one passing scene validate</li>
+      <li><b>13</b>signal connections, all in the scene files</li>
+      <li><b>319</b>lines of GDScript, for the rules and the animation</li>
+      <li class="zero"><b>0</b>lines of hand-written scene text</li>
+    </ul>
+  </div>
 
-```gdscript
-func _ready() -> void:
-    var bar = load("res://ui/health_bar/health_bar.tscn").instantiate()
-    add_child(bar)
-```
+  <h3 class="stages-title">Four stages, and the frame godot-cli captured after each</h3>
+  <ol class="stages">
+    <li>
+      <img src="{{ base_url }}/assets/demo/1-level.webp?v={{ asset_hash }}" width="960" height="540" loading="lazy" alt="Stage 1: the empty forest clearing">
+      <div class="stage-body">
+        <span class="chip sun">Stage 1</span>
+        <strong>A project and a level</strong>
+        <span>A new project.godot, WASD and arrow keys in the input map, and a level scene with its background.</span>
+        <pre class="term">project new --name "Gem Grove"
+project input apply</pre>
+      </div>
+    </li>
+    <li>
+      <img src="{{ base_url }}/assets/demo/2-actors.webp?v={{ asset_hash }}" width="960" height="540" loading="lazy" alt="Stage 2: gems, slimes and the robot placed in the clearing">
+      <div class="stage-body">
+        <span class="chip sun">Stage 2</span>
+        <strong>Actors from the catalog</strong>
+        <span>The robot, a gem and a slime are each their own scene. One patch places six gems and three slimes by catalog id.</span>
+        <pre class="term">catalog add actors/gem.tscn
+scene apply main.tscn --patch</pre>
+      </div>
+    </li>
+    <li>
+      <img src="{{ base_url }}/assets/demo/3-hud.webp?v={{ asset_hash }}" width="960" height="540" loading="lazy" alt="Stage 3: hearts, a score counter and a title card over the clearing">
+      <div class="stage-body">
+        <span class="chip sun">Stage 3</span>
+        <strong>A HUD you can open in the editor</strong>
+        <span>Hearts, score, title card and game over card: 22 nodes, fonts and style boxes in a single write.</span>
+        <pre class="term">scene apply ui/hud.tscn --patch
+scene instance add --catalog-id</pre>
+      </div>
+    </li>
+    <li>
+      <img src="{{ base_url }}/assets/demo/4-play.webp?v={{ asset_hash }}" width="960" height="540" loading="lazy" alt="Stage 4: the game in play with a score of 2 and a burst where a gem was picked up">
+      <div class="stage-body">
+        <span class="chip sun">Stage 4</span>
+        <strong>Rules, then a test drive</strong>
+        <span>The run clicks Play and steers the robot into two gems. The score reads 2, and the log has no errors.</span>
+        <pre class="term">project run --click PlayButton@10
+  --press move_right@20..55</pre>
+      </div>
+    </li>
+  </ol>
+  <a class="more" href="{{ base_url }}/how-to/build-gem-grove/">Read the build, stage by stage</a>
+</section>
 
-The game runs, so it looks like a success. Open the scene in the editor and there is nothing in it. The layout exists only while the game is playing. The next tweak goes into the script too, because that is where the HUD now lives, and a few months on the project has two ways of building UI and nobody is sure which screens use which.
+<div class="trust">
+  <section class="wrap section">
+    <div class="section-head">
+      <h2>Why you can trust what it writes</h2>
+      <p>Writing a scene Godot can open is a low bar. The bar here is writing the scene Godot itself would have saved, then proving the change works before anyone reviews it.</p>
+    </div>
+    <div class="bento">
+      <div class="tile wide light">
+        <div>
+          <h3>It writes what the editor writes</h3>
+          <p>On every push, Godot saves a fixture scene headless, godot-cli writes the same scene, and <code>cmp</code> compares the two files. The test runs against the current stable Godot releases and the newest prerelease. When it fails, the tool is wrong and the editor is right.</p>
+          <p>No reformatted-by-tool noise in your diffs, and opening the project in the editor changes nothing.</p>
+          <a href="{{ base_url }}/how-to/godot-compatibility/" style="color: inherit">Stay byte-compatible with Godot</a>
+        </div>
+        <div class="cmp" role="img" aria-label="A file Godot saved and the file godot-cli wrote, compared with cmp and found identical">
+          <div class="cmp-file"><b>Godot saved</b><pre>[gd_scene format=3 uid=…]
 
-Agents write this because scene text is hard to write blind. A `.tscn` has resource ids with a particular shape, sections in a particular order, a `load_steps` count that has to be right, and a float format where a property is `16.0` but a vector component is `Vector2(2, 1.5)`. Faced with all that, GDScript is the safer bet, and the agent takes it.
+[node name="Fixture"
+  type="Node2D"
+  unique_id=…]</pre></div>
+          <div class="cmp-eq">cmp<span><svg aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#1b1530" stroke-width="3.2" stroke-linecap="round"><path d="M5 9h14M5 15h14"/></svg></span></div>
+          <div class="cmp-file ours"><b>godot-cli wrote</b><pre>[gd_scene format=3 uid=…]
 
-godot-cli removes the reason. The same request is one command, and wiring the button afterwards is another (`scene connection add`), which writes the `[connection]` section the Node dock would:
+[node name="Fixture"
+  type="Node2D"
+  unique_id=…]</pre></div>
+        </div>
+      </div>
 
-```bash
-godot-cli scene instance add hud.tscn --parent /root/HUD --name PlayerHealth \
-  --catalog-id ui/health_bar --project-root .
-```
+      <div class="tile">
+        <h3>It catches the typo before the run</h3>
+        <p><code>scene validate</code> checks every value, signal and method against a table generated from Godot's own class reference. It reads your scripts too, so a connection to a method that does not exist fails here, not in the running game.</p>
+        <pre class="term"><span class="kw">[err] property_type_mismatch:</span>
+Control.visible is bool, and this
+value is vector2</pre>
+      </div>
 
-The scene file gets what dragging the scene into the tree would have produced, ids and all:
+      <div class="tile">
+        <h3>One document, one write</h3>
+        <p>A player is a node, a collision shape, a sprite and a texture reference. Send the whole change as one JSON document. If any step fails, the file on disk is untouched, and <code>--dry-run</code> shows the tree you would end up with.</p>
+        <pre class="term">{ "recipe": <span class="hl">"player_2d"</span>,
+  "parent": "/root/Main",
+  "name": "Player",
+  "texture": "res://art/player.png" }</pre>
+      </div>
 
-```text
-[ext_resource type="PackedScene" path="res://ui/health_bar/health_bar.tscn" id="1_gpo7l"]
+      <div class="tile wide">
+        <div class="run-shot">
+          <img src="{{ base_url }}/assets/demo/4-play.webp?v={{ asset_hash }}" width="960" height="540" loading="lazy" alt="The frame a project run returned">
+          <pre class="term">"ok": <span class="p">true</span>,
+"error_count": <span class="p">0</span></pre>
+        </div>
+        <div>
+          <h3>Then it runs the game and looks</h3>
+          <p><code>project run</code> imports the project, runs it, keeps the last frame and reads the log. It exits 1 on any <code>ERROR</code> line. It can click a button on a chosen frame or hold an input action, so an agent proves the wiring without test code in your game. Over MCP the frame comes back as an image.</p>
+          <a href="{{ base_url }}/how-to/verify-a-change/">Verify a change by running the game</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
 
-[node name="PlayerHealth" parent="." instance=ExtResource("1_gpo7l") unique_id=1278869255]
-```
+<section class="wrap section duo">
+  <div>
+    <h2>It knows what you have already built</h2>
+    <p>An agent starts each session knowing none of your parts, so it rebuilds your health bar out of raw nodes. A catalog manifest beside a scene says what it is for, and the agent instances it by id.</p>
+    <div class="manifest">
+      <span class="manifest-icon"><img src="{{ base_url }}/assets/demo/gem.png?v={{ asset_hash }}" alt=""></span>
+      <dl>
+        <dt>actors/gem</dt>
+        <dd>A gem that emits <code>collected</code> when the player touches it</dd>
+        <dd><b>When to use</b> Anything the player picks up for score</dd>
+        <dd><b>Signals</b> collected</dd>
+      </dl>
+    </div>
+    <a class="more" href="{{ base_url }}/how-to/your-own-components/">Teach an agent your sub-scenes</a>
+  </div>
+  <div>
+    <h2>Built for agents, usable by hand</h2>
+    <p><code>godot-cli mcp</code> serves every command as a tool for Claude Code, Cursor and OpenCode. In a shell, <code>--json</code> on any command returns one envelope with a stable exit code. For people there is help on everything, a man page, and completions for bash, zsh and fish.</p>
+    <pre class="term"><span class="p">$</span> godot-cli scene validate main.tscn --project-root . --json
+{ "ok": <span class="p">true</span>, "data": { … }, "messages": [], "failure": null }</pre>
+    <a class="more" href="{{ base_url }}/how-to/agent-setup/">Set up an agent</a>
+  </div>
+</section>
 
-We make games in Godot, and we think the scene file should be the source of truth. If you have to press Play to find out what a screen looks like, something has gone wrong. This tool exists so that an agent, a script, or a person at a terminal can work that way without hand-writing scene text.
+<section class="wrap section">
+  <div class="limits">
+    <h2>What it is not</h2>
+    <ul>
+      <li>It is not a game engine. Running the game is handed to the Godot you already have installed.</li>
+      <li>It does not read binary <code>.scn</code> or <code>.res</code> files.</li>
+      <li>It will not replace the editor when you are nudging a sprite two pixels to the left by eye.</li>
+      <li>Godot prereleases are tested on every push, as a check that does not block. A format change there shows up in our CI before it shows up in your project.</li>
+    </ul>
+  </div>
+</section>
 
-## It writes what the editor writes
-
-Being able to write a scene Godot can open is a low bar. The bar we care about is writing the scene Godot itself would have saved, because anything less shows up as noise in every diff and a pile of "reformatted by tool" commits.
-
-So we ported the rules instead of guessing at them. `src/godot/hash.zig` is a port of `core/templates/hashfuncs.h` and `core/string/ustring.cpp`. `src/godot/resource_uid.zig` comes from `core/io/resource_uid.cpp`. Variant text (vectors, colors, `Object(...)` bodies, typed arrays, packed byte arrays in base64) follows `core/variant/variant_parser.cpp`, and the parser carries a line map back into that file so you can check any rule against the engine source yourself.
-
-The test that keeps us honest runs on every push, against Godot 4.7, 4.7.2, and the newest 4.8 prerelease. Godot saves a fixture scene headless. godot-cli writes the same scene. `cmp` compares the two files. When it fails, the tool is wrong and the editor is right, and we fix the tool.
-
-`project.godot` gets the same treatment. Input actions are brace blocks full of serialized `InputEventKey` objects, and autoloads carry a leading asterisk for singletons. godot-cli parses the file and writes it back, so an input map applied twice replaces the actions by name instead of doubling them, and the events come out in the layout of the project's own Godot version. `export_presets.cfg` is written the same way: every option a platform has, in the editor's order, with secrets moved to `.godot/export_credentials.cfg`, so opening the project in the editor changes nothing.
-
-## One document, one write
-
-Adding a player is never one edit. It is a node, a collision shape, a sub-resource for the shape, a sprite, and a texture reference. Six commands means six parses and six writes, and if the fourth one fails you have a scene with a shape that nothing uses.
-
-godot-cli takes the whole change as one JSON document and applies it in a single pass:
-
-```bash
-godot-cli scene apply level.tscn --intent player.json --project-root . \
-  --dry-run --json
-```
-
-With `--dry-run` you get the node tree you would end up with and nothing is written. Without it, `--write-undo-patch` produces the inverse edit as it goes, and rolling back means applying that patch instead of digging through git history. If any step fails, the file on disk is untouched.
-
-Fourteen patch ops cover the primitives (add, remove, rename, reparent, set, instance, override, connect, disconnect, resource add and remove). Intents sit on top: `player_2d` expands into the five ops above, `catalog_button` into an instance plus a label override. For a run of several commands, `batch` does apply, then validate, then diff in one process, with `atomic` mode putting back the files you listed if anything fails.
-
-## Then watch it run
-
-A scene that validates is not the same as a scene that works. One command
-imports the project, runs it, keeps the last frame, and reads the log:
-
-```bash
-godot-cli project run --project-root . --json
-```
-
-It exits 1 when Godot did not exit cleanly or the log holds an `ERROR` or
-`SCRIPT ERROR` line, so an agent has a signal to act on rather than a wall of
-output to guess at. The result carries the frame's path, the log's last lines,
-and every error with its GDScript backtrace. Over MCP the frame comes back as
-an image, so an agent that can see pictures looks at the screen it just built.
-
-Buttons and movement can be exercised without test code in the game:
-
-```bash
-godot-cli project run --project-root . --frames 30 \
-  --click /root/Main/HUD/PlayButton@20 --json
-```
-
-That clicks the node on frame 20, so its `pressed` signal fires and the
-handler's output lands in the log. Afterwards the cursor moves off, so the frame
-shows the button's normal style; `--keep-cursor` holds it there for the hover
-style instead, and `--hover` shows it without a click. `--press
-move_right@10..40` does the same for an input action, and `--key enter@20`
-presses a real key, which a button's shortcut answers to.
-Two runs and you have verified both button states, the signal, and the layout.
-
-[Verify a change by running the game]({{ base_url }}/how-to/verify-a-change/)
-
-## It checks the file against Godot's own class reference
-
-`scene validate` reads the scene the way the engine would. Dangling
-`res://` paths, duplicate ids and stale UIDs are the obvious half. The half
-that costs a debugging session is a value of the wrong type:
-
-```text
-[err] property_type_mismatch: Control.visible is bool, and this value is
-      vector2: Godot coerces it and the file still loads, so only the running
-      frame shows the damage
-```
-
-Property types, signal names and method names come from a table generated out
-of Godot's own `doc/classes` XML (718 classes, 4422 properties, 399 signals,
-4350 methods), so `pressd` for `pressed` is caught before the run, not during
-it. With `--project-root`, a scripted node's scripts are read too, along with
-the scripts they extend, so a connection to `_on_sitt` where the script defines
-`_on_sit` is caught as well, and so is `max_helth = 50` on a node whose script
-declares `max_health`, or a theme override the class has no item for. The
-checks stay quiet about anything they cannot read: `metadata/*`, C# scripts,
-and a script that answers properties itself.
-
-## It knows what you have already built
-
-Every project accumulates its own parts: a button with your styling, a health bar, an enemy scene already wired to your spawner. An agent starts each session knowing none of this, so it builds a fresh `Panel` and `Label` out of raw nodes and you review the same thing again next week.
-
-A catalog manifest sits beside a scene and says what it is for:
-
-```json
-{
-  "id": "ui/health_bar",
-  "scene": "res://ui/health_bar/health_bar.tscn",
-  "summary": "Health bar with a label, used in the HUD",
-  "when_to_use": "Any screen showing player or enemy health",
-  "when_not_to_use": "Non-health meters; use ui/meter instead"
-}
-```
-
-`catalog add` writes it for you and fills in what it can read: the scene path, its UID, and a row for every signal the root script declares. `catalog show` merges that with the node tree and the `@export` variables parsed out of the GDScript, so an agent asking about `ui/health_bar` gets an interface. `catalog export` turns the whole thing into a markdown digest you drop into `AGENTS.md` or `CLAUDE.md`, and from then on the agent knows the health bar exists, knows when to use it, and instances it by id.
-
-Godot's own controls are in the catalog too, marked as documentation only, so an agent that needs a plain `Button` is told to create the node. We think that distinction (instance yours, create Godot's) is most of what keeps generated scenes looking like scenes a person made.
-
-[The full walkthrough, step by step]({{ base_url }}/how-to/your-own-components/)
-
-## Built for agents, usable by hand
-
-`--json` on any command returns one envelope: `ok`, `data`, `messages`, `failure`, and a stable exit code. `godot-cli mcp` serves the same commands over the Model Context Protocol, one tool per command with schemas built from the command tree, the agent docs as resources, and the project catalog as a live resource, so Claude Code, Cursor, and OpenCode can call them without a shell. Anything you can type as argv you can also send as a JSON request, and `godot-cli reference --format json` prints the whole command surface as data for anyone generating their own bindings.
-
-An agent gets the whole loop, not just the writes: author with one call, check
-with `scene validate`, then run the game and read the frame and the log. It can
-also work on a project that already exists: `scene extract` pulls a subtree
-into its own scene the way *Save Branch as Scene* does, and `project move`
-relocates a file while rewriting every `res://` reference to it.
-
-For people there is `--help` on everything, a man page, and completions for bash, zsh, and fish, all generated from the same command tree the parser uses. The skill for Cursor, Claude Code, and OpenCode installs with one flag and carries the rules an agent needs, including the one about `_ready()`.
-
-A single binary with no runtime dependencies, built in Zig, for Linux, macOS, and Windows on x86_64 and aarch64. MIT licensed.
-
-## What it is not
-
-It does not run gameplay, physics, or scripts. It does not read binary `.scn` or `.res`. It will not replace the editor when you are nudging a sprite two pixels to the left by eye. The round-trip suite runs against Godot 4.7 and 4.7.2 on every push, and against the newest 4.8 prerelease as a check that does not block; it passes there today, and a 4.8 format change will show up in CI before it shows up in your project.
-
-## Start here
-
-<ul class="cards">
-<li><a href="{{ base_url }}/getting-started/">Getting started</a><p>Install, author a first scene, and learn when <code>--project-root</code> matters.</p></li>
-<li><a href="{{ base_url }}/how-to/your-own-components/">Teach an agent your sub-scenes</a><p>From a scene on disk to an agent instancing it by id, every command shown with its output.</p></li>
-<li><a href="{{ base_url }}/how-to/agent-setup/">Set up an agent</a><p>Install the skill, write the project rules, and spot when an agent drifts back to building nodes in code.</p></li>
-<li><a href="{{ base_url }}/how-to/verify-a-change/">Verify a change by running the game</a><p>Run, read the frame and the log, and click a button to prove its wiring.</p></li>
-<li><a href="{{ base_url }}/how-to/refactor-a-project/">Refactor an existing project</a><p>Extract a subtree, move files without stale paths, and check what your scripts still reach.</p></li>
-<li><a href="{{ base_url }}/reference/">Command reference</a><p>Every command and option, generated from the binary's own command tree.</p></li>
-</ul>
+<section class="wrap section start">
+  <div class="start-head">
+    <img src="{{ base_url }}/assets/demo/player.png?v={{ asset_hash }}" width="256" height="256" alt="">
+    <div>
+      <h2>Install it and author a first scene</h2>
+      <p>Two lines, then the getting started page walks you through a first scene.</p>
+    </div>
+  </div>
+  <div class="install-box">
+    <pre id="install-start"><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/unabated-games/godot-cli/main/install.sh | bash
+<span class="p">$</span> source "$HOME/.godot-cli/env.sh"</pre>
+    <button class="copy" type="button" data-copy="install-start" aria-label="Copy the install commands"><svg aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>
+  </div>
+  <ul class="cards">
+    <li><a href="{{ base_url }}/getting-started/"><strong>Getting started</strong><span>Install, author a first scene, and learn when --project-root matters.</span></a></li>
+    <li><a href="{{ base_url }}/how-to/build-gem-grove/"><strong>Build the demo game</strong><span>Gem Grove's build script, stage by stage, with the frame captured after each.</span></a></li>
+    <li><a href="{{ base_url }}/how-to/agent-setup/"><strong>Set up an agent</strong><span>Install the skill, write the project rules, and spot when an agent drifts back to building nodes in code.</span></a></li>
+    <li><a href="{{ base_url }}/how-to/your-own-components/"><strong>Teach an agent your sub-scenes</strong><span>From a scene on disk to an agent instancing it by id, every command shown with its output.</span></a></li>
+    <li><a href="{{ base_url }}/how-to/refactor-a-project/"><strong>Refactor an existing project</strong><span>Extract a subtree, move files without stale paths, and check what your scripts still reach.</span></a></li>
+    <li><a href="{{ base_url }}/reference/"><strong>Command reference</strong><span>Every command and option, generated from the binary's own command tree.</span></a></li>
+  </ul>
+</section>

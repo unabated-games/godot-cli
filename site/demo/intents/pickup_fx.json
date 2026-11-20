@@ -1,0 +1,55 @@
+{
+  "ops": [
+    {
+      "op": "ext_add",
+      "type": "Texture2D",
+      "path": "res://art/gem.png",
+      "id_hint": "gem"
+    },
+    {
+      "op": "ext_add",
+      "type": "FontFile",
+      "path": "res://fonts/LilitaOne-Regular.ttf",
+      "id_hint": "lilita"
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/PickupFx",
+      "name": "Sparkle",
+      "type": "CPUParticles2D",
+      "properties": {
+        "emitting": false,
+        "amount": 12,
+        "texture": "ExtResource(\"Texture2D_gem\")",
+        "lifetime": 0.55,
+        "one_shot": true,
+        "explosiveness": 1.0,
+        "spread": 180.0,
+        "gravity": "Vector2(0, 420)",
+        "initial_velocity_min": 140.0,
+        "initial_velocity_max": 260.0,
+        "scale_amount_min": 0.18,
+        "scale_amount_max": 0.38
+      }
+    },
+    {
+      "op": "node_add",
+      "parent": "/root/PickupFx",
+      "name": "Plus",
+      "type": "Label",
+      "properties": {
+        "offset_left": -40.0,
+        "offset_top": -70.0,
+        "offset_right": 40.0,
+        "offset_bottom": -26.0,
+        "text": "\"+1\"",
+        "horizontal_alignment": 1,
+        "theme_override_colors/font_color": "Color(1, 0.957, 0.839, 1)",
+        "theme_override_colors/font_outline_color": "Color(0.106, 0.082, 0.188, 1)",
+        "theme_override_constants/outline_size": 10,
+        "theme_override_fonts/font": "ExtResource(\"FontFile_lilita\")",
+        "theme_override_font_sizes/font_size": 34
+      }
+    }
+  ]
+}

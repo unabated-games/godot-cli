@@ -1,0 +1,12 @@
+{
+  "presets": [
+    {
+      "name": "Web",
+      "platform": "Web",
+      "export_path": "build/web/index.html",
+      "options": {
+        "variant/thread_support": false
+      }
+    }
+  ]
+}

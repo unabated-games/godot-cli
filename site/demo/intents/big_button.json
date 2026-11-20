@@ -1,0 +1,100 @@
+{
+  "ops": [
+    {
+      "op": "sub_add",
+      "type": "StyleBoxFlat",
+      "id_hint": "normal",
+      "properties": {
+        "content_margin_left": 28.0,
+        "content_margin_top": 10.0,
+        "content_margin_right": 28.0,
+        "content_margin_bottom": 10.0,
+        "bg_color": "Color(1, 0.478, 0.349, 1)",
+        "border_width_left": 4,
+        "border_width_top": 4,
+        "border_width_right": 4,
+        "border_width_bottom": 4,
+        "border_color": "Color(0.106, 0.082, 0.188, 1)",
+        "corner_radius_top_left": 16,
+        "corner_radius_top_right": 16,
+        "corner_radius_bottom_right": 16,
+        "corner_radius_bottom_left": 16,
+        "shadow_color": "Color(0.106, 0.082, 0.188, 1)",
+        "shadow_size": 1,
+        "shadow_offset": "Vector2(0, 6)"
+      }
+    },
+    {
+      "op": "sub_add",
+      "type": "StyleBoxFlat",
+      "id_hint": "hover",
+      "properties": {
+        "content_margin_left": 28.0,
+        "content_margin_top": 10.0,
+        "content_margin_right": 28.0,
+        "content_margin_bottom": 10.0,
+        "bg_color": "Color(1, 0.58, 0.46, 1)",
+        "border_width_left": 4,
+        "border_width_top": 4,
+        "border_width_right": 4,
+        "border_width_bottom": 4,
+        "border_color": "Color(0.106, 0.082, 0.188, 1)",
+        "corner_radius_top_left": 16,
+        "corner_radius_top_right": 16,
+        "corner_radius_bottom_right": 16,
+        "corner_radius_bottom_left": 16,
+        "shadow_color": "Color(0.106, 0.082, 0.188, 1)",
+        "shadow_size": 1,
+        "shadow_offset": "Vector2(0, 6)"
+      }
+    },
+    {
+      "op": "sub_add",
+      "type": "StyleBoxFlat",
+      "id_hint": "pressed",
+      "properties": {
+        "content_margin_left": 28.0,
+        "content_margin_top": 10.0,
+        "content_margin_right": 28.0,
+        "content_margin_bottom": 10.0,
+        "bg_color": "Color(0.9, 0.4, 0.29, 1)",
+        "border_width_left": 4,
+        "border_width_top": 4,
+        "border_width_right": 4,
+        "border_width_bottom": 4,
+        "border_color": "Color(0.106, 0.082, 0.188, 1)",
+        "corner_radius_top_left": 16,
+        "corner_radius_top_right": 16,
+        "corner_radius_bottom_right": 16,
+        "corner_radius_bottom_left": 16,
+        "shadow_color": "Color(0.106, 0.082, 0.188, 1)",
+        "shadow_size": 1,
+        "shadow_offset": "Vector2(0, 2)"
+      }
+    },
+    {
+      "op": "ext_add",
+      "type": "FontFile",
+      "path": "res://fonts/LilitaOne-Regular.ttf",
+      "id_hint": "lilita"
+    },
+    {
+      "op": "node_set",
+      "path": "/root/BigButton",
+      "properties": {
+        "custom_minimum_size": "Vector2(220, 64)",
+        "text": "\"Play\"",
+        "theme_override_colors/font_color": "Color(0.106, 0.082, 0.188, 1)",
+        "theme_override_colors/font_hover_color": "Color(0.106, 0.082, 0.188, 1)",
+        "theme_override_colors/font_pressed_color": "Color(0.106, 0.082, 0.188, 1)",
+        "theme_override_colors/font_focus_color": "Color(0.106, 0.082, 0.188, 1)",
+        "theme_override_fonts/font": "ExtResource(\"FontFile_lilita\")",
+        "theme_override_font_sizes/font_size": 32,
+        "theme_override_styles/normal": "SubResource(\"StyleBoxFlat_normal\")",
+        "theme_override_styles/hover": "SubResource(\"StyleBoxFlat_hover\")",
+        "theme_override_styles/pressed": "SubResource(\"StyleBoxFlat_pressed\")",
+        "theme_override_styles/focus": "SubResource(\"StyleBoxFlat_hover\")"
+      }
+    }
+  ]
+}
