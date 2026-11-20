@@ -23,6 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The browser build of the demo game is 39 MB of wasm, so it lives on its
+      # own branch, not in main's history. `WEB=1 site/demo/build.sh` makes it,
+      # and the site build includes it when it is there.
+      - name: Fetch the demo game's browser build
+        uses: actions/checkout@v7
+        with:
+          ref: demo-assets
+          path: site/demo/web
+
       - name: Install Zig
         uses: mlugg/setup-zig@v2
         with:
