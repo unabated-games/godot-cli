@@ -105,7 +105,7 @@ format: html
       </div><!-- /demo:still -->
       <div class="player-bar">
         <span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
-        <span>or the arrow keys</span>
+        <span>or the arrow keys. On a phone, drag anywhere.</span>
         <!-- demo:play --><span class="note">Loads on click. About 10 MB the first time.</span><!-- /demo:play -->
         <!-- demo:still --><span class="note">The title screen, as godot-cli captured it.</span><!-- /demo:still -->
       </div>
@@ -145,7 +145,7 @@ scene apply main.tscn --patch</pre>
       <div class="stage-body">
         <span class="chip sun">Stage 3</span>
         <strong>A HUD you can open in the editor</strong>
-        <span>Hearts, score, title card and game over card: 22 nodes, fonts and style boxes in a single write.</span>
+        <span>Hearts, score, a touch joystick, title card and game over card: 23 nodes, fonts and style boxes in a single write.</span>
         <pre class="term">scene apply ui/hud.tscn --patch
 scene instance add --catalog-id</pre>
       </div>

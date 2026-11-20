@@ -82,13 +82,23 @@ One patch then places six gems, three slimes and the robot. Each line is an inst
 
 The HUD is built from two small widgets, a heart and a button, which are scenes with catalog entries of their own. The button's look is three `StyleBoxFlat` sub-resources and a font, all set on the node, so the editor shows it styled without running the game.
 
-`intents/hud.json` is the largest patch in the build. It adds 22 nodes under the HUD root in one write: the health row, the score, a title card and a game over card, with the two buttons instanced from the catalog and their `pressed` signals connected to the HUD script.
+`intents/hud.json` is the largest patch in the build. It adds 23 nodes under the HUD root in one write: the health row, the score, a touch joystick, a title card and a game over card, with the two buttons instanced from the catalog and their `pressed` signals connected to the HUD script.
 
 ```bash
 godot-cli scene apply gem-grove/ui/hud.tscn --patch intents/hud.json --project-root gem-grove
 godot-cli catalog add gem-grove/ui/hud.tscn --id ui/hud \
   --summary "Hearts, score, title card and game over card" --project-root gem-grove
 godot-cli scene apply gem-grove/main.tscn --patch intents/level_hud.json --project-root gem-grove
+```
+
+The joystick is Godot's own `VirtualJoystick` control, filling the screen and set to appear where a finger lands. Its four action properties name the same input actions the keyboard uses, so the player script needs nothing extra for a phone:
+
+```json
+{ "op": "node_add", "parent": "/root/HUD", "name": "Stick", "type": "VirtualJoystick",
+  "properties": { "anchors_preset": 15, "anchor_right": 1.0, "anchor_bottom": 1.0,
+    "joystick_mode": 1, "visibility_mode": 1,
+    "action_left": "&\"move_left\"", "action_right": "&\"move_right\"",
+    "action_up": "&\"move_up\"", "action_down": "&\"move_down\"" } }
 ```
 
 ![Hearts, a score counter and a title card over the clearing]({{ base_url }}/assets/demo/3-hud.webp)
