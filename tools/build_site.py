@@ -250,7 +250,12 @@ def main() -> int:
     assets = out_root / "assets"
     shutil.copytree(STATIC, assets, ignore=shutil.ignore_patterns(".DS_Store"))
     if playable:
-        shutil.copytree(DEMO_WEB, out_root / "demo" / "gem-grove")
+        # In CI this folder is a checkout of the demo-assets branch.
+        shutil.copytree(
+            DEMO_WEB,
+            out_root / "demo" / "gem-grove",
+            ignore=shutil.ignore_patterns(".git", "README.md", ".DS_Store"),
+        )
 
     # Syntax highlighting: one dark palette, used in both site themes so code
     # reads the same either way.
