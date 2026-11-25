@@ -13,6 +13,7 @@ const project_rendering = @import("../godot/project_rendering.zig");
 const project_physics = @import("../godot/project_physics.zig");
 const project_unified = @import("../godot/project_unified.zig");
 const project_move = @import("../godot/project_move.zig");
+const project_files = @import("../godot/project_files.zig");
 const project_config = @import("../godot/project_config.zig");
 const scene_cmd = @import("scene.zig");
 const project_export = @import("project_export.zig");
@@ -1514,6 +1515,79 @@ fn showHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     return .{ .data = .{ .object = data }, .messages = &.{} };
 }
 
+fn validateHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
+    const cli = appFrom(ctx);
+    const root = projectRootFrom(inv) orelse return error.Usage;
+    // Loaded only to fail the usual way when there is no project here.
+    var loaded = try loadProject(cli, inv);
+    defer cli.allocator.free(loaded.path);
+    defer loaded.doc.deinit(cli.allocator);
+
+    const started = std.Io.Clock.Timestamp.now(cli.io, .real);
+    const report = try project_files.check(cli.allocator, cli.io, root);
+    const duration_ms = started.durationTo(.now(cli.io, .real)).raw.toMilliseconds();
+
+    var issues = std.json.Array.init(cli.allocator);
+    // The same file missing from ten scenes is one thing to fix, so the
+    // distinct paths are listed apart from the references to them.
+    var missing = std.json.Array.init(cli.allocator);
+    const Missing = struct { path: []const u8, references: usize };
+    var counted: std.ArrayList(Missing) = .empty;
+    for (report.issues.items) |issue| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "severity", .{ .string = @tagName(issue.severity) });
+        try row.put(cli.allocator, "kind", .{ .string = issue.kind });
+        try row.put(cli.allocator, "file", .{ .string = issue.file });
+        try row.put(cli.allocator, "line", .{ .integer = @intCast(issue.line) });
+        // A stale cache entry is not a file to restore: the scene's path is
+        // right. Trial 51 read `missing` there as the scene's own path.
+        const stale_cache = std.mem.eql(u8, issue.kind, "uid_path_mismatch");
+        try row.put(cli.allocator, if (stale_cache) "cache_path" else "missing", .{ .string = issue.target });
+        if (issue.found_at) |found| {
+            try row.put(cli.allocator, "found_at", .{ .string = found });
+            try row.put(cli.allocator, "found_by", .{ .string = issue.found_by.? });
+        }
+        try row.put(cli.allocator, "message", .{ .string = issue.message });
+        try issues.append(.{ .object = row });
+        if (stale_cache) continue;
+        for (counted.items) |*known| {
+            if (std.mem.eql(u8, known.path, issue.target)) {
+                known.references += 1;
+                break;
+            }
+        } else try counted.append(cli.allocator, .{ .path = issue.target, .references = 1 });
+    }
+    for (counted.items) |entry| {
+        var row: std.json.ObjectMap = .{};
+        try row.put(cli.allocator, "path", .{ .string = entry.path });
+        try row.put(cli.allocator, "references", .{ .integer = @intCast(entry.references) });
+        try missing.append(.{ .object = row });
+    }
+
+    const error_count = report.errorCount();
+    var data: std.json.ObjectMap = .{};
+    try data.put(cli.allocator, "path", .{ .string = try cli.allocator.dupe(u8, loaded.path) });
+    try data.put(cli.allocator, "issues", .{ .array = issues });
+    try data.put(cli.allocator, "missing_files", .{ .array = missing });
+    try data.put(cli.allocator, "error_count", .{ .integer = @intCast(error_count) });
+    try data.put(cli.allocator, "warning_count", .{ .integer = @intCast(report.issues.items.len - error_count) });
+    try data.put(cli.allocator, "scenes_checked", .{ .integer = @intCast(report.scenes) });
+    try data.put(cli.allocator, "scripts_checked", .{ .integer = @intCast(report.scripts) });
+    try data.put(cli.allocator, "references_checked", .{ .integer = @intCast(report.references) });
+    try data.put(cli.allocator, "duration_ms", .{ .integer = duration_ms });
+    const summary = try cli.allocator.print(
+        "{d} missing file(s) ({d} error(s), {d} warning(s)) among {d} reference(s) in project.godot, {d} scene and resource file(s) and {d} script(s)",
+        .{ counted.items.len, error_count, report.issues.items.len - error_count, report.references, report.scenes, report.scripts },
+    );
+    try data.put(cli.allocator, "summary", .{ .string = summary });
+
+    return .{
+        .data = .{ .object = data },
+        .messages = &.{},
+        .exit_code = if (error_count > 0) .failure else .success,
+    };
+}
+
 fn projectApplyHandler(ctx: *anyopaque, inv: *const spec.Invocation) !spec.Result {
     const cli = appFrom(ctx);
     var loaded = try loadProject(cli, inv);
@@ -1797,6 +1871,13 @@ pub fn commands() spec.CommandSpec {
                 .summary = "Summarize key project.godot configuration",
                 .options = &project_options,
                 .handler = showHandler,
+            },
+            .{
+                .name = "validate",
+                .summary = "Find every reference to a file that is not in the project, without starting Godot",
+                .description = "Reads project.godot, every .tscn and .tres, and every .gd under the project, and looks up each file they name. Godot reports a missing file only when something loads it, so project run finds the ones on the path the run took; this finds the rest, such as a scene reached from a menu. When the project shows where a missing file went, the issue says so: found_at is the file that now carries the reference's uid (found_by uid, which a rename or a move by hand leaves intact), or else the only file of the same name (found_by name); scene retarget-ext <scene> --from <missing> --to <found_at> repoints a scene, and a script is edited by hand. Errors, which exit 1: an ext_resource whose file is gone (Godot refuses the whole scene), one whose file is there while the project's uid cache still maps its uid to a file that is gone (uid_path_mismatch: Godot follows the uid first, so the scene fails until project import rewrites the cache, as project run does before it runs), a preload or a path after extends that is gone (the script does not compile), the main scene (run/main_scene.mobile and other per-platform ones included), and an autoload. Warnings: a load() of a literal res:// path that is gone, which fails only when that line runs, and any other res:// path in project.godot, such as the icon. Not looked at: a .translation whose .csv is there, since Godot writes it on import; a path built at run time, a load() of a path with no res://, C# and shaders, files under a folder with .gdignore or a name starting with a dot, and an ext_resource whose uid the project's uid cache maps to a file that is there, since Godot loads by uid first (scene validate reports that one as uid_path_mismatch). This checks only that files exist: scene validate checks what is inside a scene. A path that differs from the file only in letter case passes on macOS and Windows and fails in an exported game. It reads the first 64 KiB of each scene, where the ext_resource lines are, and each path is looked up once, so a project of thousands of files takes well under a second; duration_ms says what it took. Result data: path, issues (severity, kind, file, line, missing, or cache_path on a uid_path_mismatch, found_at and found_by when known, message), missing_files (each distinct path with how many references name it), error_count, warning_count, scenes_checked, scripts_checked, references_checked, duration_ms, summary.",
+                .options = &project_options,
+                .handler = validateHandler,
             },
             .{
                 .name = "move",

@@ -1824,8 +1824,11 @@ fn validateBatchHandler(ctx: *anyopaque, inv: *const spec.Invocation, kind: []co
         var setup: ValidateSetup = .{ .ctx = .{} };
         defer setup.deinit(cli.allocator);
         try setup.load(cli, inv, path);
+        // `defer` runs at the end of each pass round the loop, so this is the
+        // only release. A second, explicit one stood here and freed the uid
+        // cache twice: every validate-batch on an imported project crashed,
+        // which over MCP reads as the connection closing.
         const report = try id_validate.validateDocument(cli.allocator, &doc, setup.ctx);
-        setup.deinit(cli.allocator);
 
         const issues = try buildIssuesJson(cli, &report);
         const errors = countErrors(&report);

@@ -84,6 +84,13 @@ Finish every change with:
   godot-cli scene validate <scene> --project-root . --json
   godot-cli project run --project-root . --json
 
+After files were moved, renamed or deleted outside godot-cli, find every
+reference left pointing at nothing, in project.godot, scenes, resources and
+scripts:
+  godot-cli project validate --project-root . --json
+It reads the whole project without starting Godot. project run finds only the
+missing files that run happens to load.
+
 A change with no scene in it, such as the input map, is checked the same way:
   godot-cli project input validate --project-root . --json
   godot-cli project run --project-root . --press <action>@10..30 --json

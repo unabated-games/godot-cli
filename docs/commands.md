@@ -117,6 +117,7 @@ godot-cli [global options] <command> [command options] [args...]
 | [`godot-cli project resave`](#godot-cli-project-resave) | Have Godot save a copy of a scene the way the editor would, the reference for compare-godot |
 | [`godot-cli project run`](#godot-cli-project-run) | Run the game for a few frames and capture the last frame and the log |
 | [`godot-cli project show`](#godot-cli-project-show) | Summarize key project.godot configuration |
+| [`godot-cli project validate`](#godot-cli-project-validate) | Find every reference to a file that is not in the project, without starting Godot |
 | [`godot-cli project move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`godot-cli project apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
 | [`godot-cli project input`](#godot-cli-project-input) | Input Map actions in project.godot |
@@ -2166,6 +2167,7 @@ godot-cli project [options]
 | [`resave`](#godot-cli-project-resave) | Have Godot save a copy of a scene the way the editor would, the reference for compare-godot |
 | [`run`](#godot-cli-project-run) | Run the game for a few frames and capture the last frame and the log |
 | [`show`](#godot-cli-project-show) | Summarize key project.godot configuration |
+| [`validate`](#godot-cli-project-validate) | Find every reference to a file that is not in the project, without starting Godot |
 | [`move`](#godot-cli-project-move) | Move or rename a file and repoint every reference to it |
 | [`apply`](#godot-cli-project-apply) | Apply unified project intent JSON (input, settings, autoload, plugins, rendering, physics) |
 | [`input`](#godot-cli-project-input) | Input Map actions in project.godot |
@@ -2292,6 +2294,22 @@ Summarize key project.godot configuration
 
 ```
 godot-cli project show [options]
+```
+
+**Options**
+
+| Option | Value | Description | Default |
+|--------|-------|-------------|---------|
+| `--project-root` | `<path>` | Godot project root (directory containing project.godot) | — |
+
+### `godot-cli project validate`
+
+Find every reference to a file that is not in the project, without starting Godot
+
+Reads project.godot, every .tscn and .tres, and every .gd under the project, and looks up each file they name. Godot reports a missing file only when something loads it, so project run finds the ones on the path the run took; this finds the rest, such as a scene reached from a menu. When the project shows where a missing file went, the issue says so: found_at is the file that now carries the reference's uid (found_by uid, which a rename or a move by hand leaves intact), or else the only file of the same name (found_by name); scene retarget-ext &lt;scene&gt; --from &lt;missing&gt; --to &lt;found_at&gt; repoints a scene, and a script is edited by hand. Errors, which exit 1: an ext_resource whose file is gone (Godot refuses the whole scene), one whose file is there while the project's uid cache still maps its uid to a file that is gone (uid_path_mismatch: Godot follows the uid first, so the scene fails until project import rewrites the cache, as project run does before it runs), a preload or a path after extends that is gone (the script does not compile), the main scene (run/main_scene.mobile and other per-platform ones included), and an autoload. Warnings: a load() of a literal res:// path that is gone, which fails only when that line runs, and any other res:// path in project.godot, such as the icon. Not looked at: a .translation whose .csv is there, since Godot writes it on import; a path built at run time, a load() of a path with no res://, C# and shaders, files under a folder with .gdignore or a name starting with a dot, and an ext_resource whose uid the project's uid cache maps to a file that is there, since Godot loads by uid first (scene validate reports that one as uid_path_mismatch). This checks only that files exist: scene validate checks what is inside a scene. A path that differs from the file only in letter case passes on macOS and Windows and fails in an exported game. It reads the first 64 KiB of each scene, where the ext_resource lines are, and each path is looked up once, so a project of thousands of files takes well under a second; duration_ms says what it took. Result data: path, issues (severity, kind, file, line, missing, or cache_path on a uid_path_mismatch, found_at and found_by when known, message), missing_files (each distinct path with how many references name it), error_count, warning_count, scenes_checked, scripts_checked, references_checked, duration_ms, summary.
+
+```
+godot-cli project validate [options]
 ```
 
 **Options**

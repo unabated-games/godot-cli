@@ -17,11 +17,11 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.29.0";
+    const version_string = b.option([]const u8, "version-string", "Version string embedded in the CLI") orelse "0.30.0";
     // Release date of `version_string`, shown in the man page header. Bumped
     // with the version at release time (see RELEASING.md) rather than read
     // from the clock, so the generated docs stay byte-stable.
-    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-11-19";
+    const version_date = b.option([]const u8, "version-date", "Release date (YYYY-MM-DD) of the embedded version") orelse "2026-11-25";
 
     const version_options = b.addOptions();
     version_options.addOption([]const u8, "version", version_string);
@@ -248,6 +248,16 @@ pub fn build(b: *std.Build) void {
     inspect_smoke.setCwd(b.path("."));
     inspect_smoke.step.dependOn(b.getInstallStep());
     test_step.dependOn(&inspect_smoke.step);
+
+    // A project with a uid cache, which is what crashed validate-batch.
+    const validate_batch_smoke = b.addSystemCommand(&.{
+        "bash", "-ec",
+        \\out=$(./zig-out/bin/godot-cli scene validate-batch test_fixtures/project/sample.tscn test_fixtures/project/sample.tscn --project-root test_fixtures/project --json) || true
+        \\echo "$out" | grep -q '"file_count":2'
+    });
+    validate_batch_smoke.setCwd(b.path("."));
+    validate_batch_smoke.step.dependOn(b.getInstallStep());
+    test_step.dependOn(&validate_batch_smoke.step);
 
     const node_list_smoke = b.addSystemCommand(&.{
         "bash", "-ec",

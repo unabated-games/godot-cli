@@ -298,6 +298,54 @@ fn checkExtResourceStaleUid(
     }
 }
 
+/// An `ext_resource` whose file is not in the project. Godot refuses the whole
+/// scene at run time ("referenced non-existent resource"), and until this
+/// check a scene naming a deleted texture validated clean.
+///
+/// One `access` call per reference when the file is there, which is every
+/// reference in a healthy scene; the rest of the work happens only on a miss.
+fn checkExtResourceExists(
+    report: *Report,
+    allocator: std.mem.Allocator,
+    ctx: ValidateContext,
+    uid_text: ?[]const u8,
+    res_path: []const u8,
+    line: usize,
+) !void {
+    const project_root = ctx.project_root orelse return;
+    const io = ctx.io orelse return;
+    const fs_path = (try project_config.resPathToFilesystem(allocator, project_root, res_path)) orelse return;
+    defer allocator.free(fs_path);
+    if (std.Io.Dir.cwd().access(io, fs_path, .{})) |_| return else |_| {}
+
+    // With --project-root aimed at a folder that is not a project, every
+    // path would look missing. Say nothing rather than fail a good scene.
+    const marker = try std.fs.path.join(allocator, &.{ project_root, "project.godot" });
+    defer allocator.free(marker);
+    std.Io.Dir.cwd().access(io, marker, .{}) catch return;
+
+    // Godot loads by uid before it tries the path, so a reference whose uid
+    // the cache maps to another file still loads. uid_path_mismatch reports
+    // that one.
+    if (ctx.cache) |c| {
+        if (uid_text) |text| {
+            if (validateUidText(text) == null) {
+                if (c.pathForId(resource_uid.textToId(text))) |cached| {
+                    if (!std.mem.eql(u8, cached, res_path)) return;
+                }
+            }
+        }
+    }
+
+    const msg = try std.fmt.allocPrint(
+        allocator,
+        "{s} does not exist, so Godot fails to load this file (\"referenced non-existent resource\"); restore it, or point the reference at where it went. project move repoints every reference when it moves a file, and project validate lists every missing file in the project",
+        .{res_path},
+    );
+    defer allocator.free(msg);
+    try report.add(allocator, .err, "missing_file", msg, line);
+}
+
 pub fn hasErrors(report: *const Report) bool {
     for (report.issues.items) |issue| {
         if (issue.severity == .err) return true;
@@ -460,6 +508,12 @@ pub fn validateDocument(
                 const msg = try allocator.print("two {s} sections have id \"{s}\"", .{ name, id });
                 defer allocator.free(msg);
                 try report.add(allocator, .err, "duplicate_scene_id", msg, section.line);
+            }
+
+            if (std.mem.eql(u8, name, "ext_resource")) {
+                if (section.header.getString("path")) |path| {
+                    try checkExtResourceExists(&report, allocator, ctx, section.header.getString("uid"), path, section.line);
+                }
             }
 
             if (section.header.getString("uid")) |uid_text| {
@@ -1837,4 +1891,40 @@ test "theme overrides are checked against the items the class offers" {
 
     // Without the project root the instance cannot be read; the rest stands.
     try std.testing.expectEqual(@as(usize, 4), (try unknownThemeOverrides(a, &doc, .{})).len);
+}
+
+test "an ext_resource whose file is gone is an error, and one that is there is not" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\[gd_scene format=3]
+        \\
+        \\[ext_resource type="Script" path="res://scripts/here.gd" id="1_a"]
+        \\[ext_resource type="Texture2D" path="res://art/gone.png" id="2_b"]
+        \\
+        \\[node name="Main" type="Sprite2D"]
+        \\script = ExtResource("1_a")
+        \\texture = ExtResource("2_b")
+        \\
+    ;
+    var doc = try document.parseBytes(allocator, source);
+    defer doc.deinit(allocator);
+
+    var report = try validateDocument(allocator, &doc, .{ .project_root = "test_fixtures/missing_files", .io = std.testing.io });
+    defer report.deinit(allocator);
+    var missing: usize = 0;
+    for (report.issues.items) |issue| {
+        if (!std.mem.eql(u8, issue.kind, "missing_file")) continue;
+        missing += 1;
+        try std.testing.expectEqual(Severity.err, issue.severity);
+        try std.testing.expectEqual(@as(?usize, 4), issue.line);
+        try std.testing.expect(std.mem.indexOf(u8, issue.message, "res://art/gone.png") != null);
+    }
+    try std.testing.expectEqual(@as(usize, 1), missing);
+
+    // A folder that is not a project cannot say what is missing from it.
+    var elsewhere = try validateDocument(allocator, &doc, .{ .project_root = "test_fixtures/batch", .io = std.testing.io });
+    defer elsewhere.deinit(allocator);
+    for (elsewhere.issues.items) |issue| {
+        try std.testing.expect(!std.mem.eql(u8, issue.kind, "missing_file"));
+    }
 }

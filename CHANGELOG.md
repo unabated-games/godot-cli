@@ -15,6 +15,20 @@ Agent/tooling changes that affect LLM workflows belong here too (docs, skills, i
 
 ## [Unreleased]
 
+## [0.30.0] — 2026-11-25
+
+### Added
+
+- **`missing_file`: `scene validate` now fails a scene that names a file which is not there.** An `ext_resource` whose `res://` path does not exist makes Godot refuse the whole scene at run time ("referenced non-existent resource"), and until now such a scene validated clean: only `project run` said so, and only for scenes the run loaded. It is an error, with the line and the path. It is skipped when `--project-root` holds no `project.godot`, and when the project's uid cache maps the reference's uid to another file, since Godot loads by uid first and `uid_path_mismatch` already reports that. It costs one file lookup per reference: on a scene with 16 references, `scene validate` took 3.1 ms before and after.
+- **`project validate` finds every reference to a missing file in a project, without starting Godot.** It reads `project.godot`, every `.tscn` and `.tres`, and every `.gd`. Errors: a missing `ext_resource`, a missing `preload` or `extends "..."` path (the script does not compile), the main scene, and an autoload. Warnings: a `load()` of a literal `res://` path, which fails only when the line runs, and other paths in `project.godot` such as the icon. `missing_files` lists each missing path once with how many references name it. Paths built at run time, C#, shaders and folders with `.gdignore` are not read. On a generated project of 6,000 scenes and 3,000 scripts (105,000 references) it took 145 ms and 5 MB; it reads only the first 64 KiB of each scene, where the references are, and looks each path up once. Across Godot's 140 demo projects (534 scenes and resources, 460 scripts, 2,021 references) it reports one error, a `run/main_scene.mobile` naming a scene the demo does not have, and seven warnings, all paths that are not there; `scene validate` reports no `missing_file` on any of the 534. With one reference broken in each of 441 scenes and 57 scripts, both commands named every one. A `.translation` whose `.csv` is present is not reported, since Godot writes it on import; the first draft warned about four in the translation demo.
+
+- **`project validate` says where a missing file went.** A file moved or renamed by hand keeps its uid, in its `.uid` or `.import` sidecar or its own header, so an issue for a reference that carries one has `found_at`, the file with that uid now, and `found_by: "uid"`. Without a uid match, the only file of the same name is offered as `found_by: "name"`. Trial 50 matched five paths by comparing uids itself. The index behind this is built on the first missing file, so a healthy project does not pay for it.
+- **`project validate` reports `uid_path_mismatch`** when a reference's path is right but the project's uid cache still maps its uid to a file that is gone. Godot follows the uid before the path, so the scene fails to load until `project import` rewrites the cache, which `project run` does before it runs. Trial 50 retargeted a renamed sound and got a clean `project validate` while `scene validate` still failed.
+
+### Fixed
+
+- **`scene validate-batch` and `resource validate-batch` crashed on any project with a uid cache.** The cache was freed twice for each file. From the shell it was a segfault; over MCP the connection closed, three times in trial 50, which fell back to one `scene validate` per scene. It dates from 0.25.1.
+
 ### Changed
 
 - **`project run --help` lists `frames_per_second` and `stray_keys`** among the result data, and says the run's window ignores the desktop pointer. The site covers 0.29.0: `--key`, `--hover`, stray keys and the tick rate on the run pages, theme override colours, order and `unknown_theme_override` on the UI page, the `add_node` recipe's `script`, and a script's float keeping its `.0`.

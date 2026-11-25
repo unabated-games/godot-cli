@@ -1,4 +1,4 @@
-.TH GODOT\-CLI 1 "2026-11-19" "godot-cli 0.29.0" "godot-cli Manual"
+.TH GODOT\-CLI 1 "2026-11-25" "godot-cli 0.30.0" "godot-cli Manual"
 .SH NAME
 godot\-cli \- Create, edit, and manipulate Godot scenes and resource files
 .SH SYNOPSIS
@@ -2630,6 +2630,52 @@ pair as well as the last frame
 Lines of the log to return inline as log_tail (default: 40)
 .SS godot\-cli project show
 Summarize key project.godot configuration
+.TP
+\fB\-\-project\-root\fR \fIpath\fR
+Godot project root (directory containing project.godot)
+.SS godot\-cli project validate
+Find every reference to a file that is not in the project,
+without starting Godot
+.PP
+Reads project.godot, every .tscn and .tres, and every .gd under
+the project, and looks up each file they name. Godot reports
+a missing file only when something loads it, so project run
+finds the ones on the path the run took; this finds the rest,
+such as a scene reached from a menu. When the project shows
+where a missing file went, the issue says so: found_at is the
+file that now carries the reference's uid (found_by uid, which
+a rename or a move by hand leaves intact), or else the only
+file of the same name (found_by name); scene retarget\-ext
+<scene> \-\-from <missing> \-\-to <found_at> repoints a scene,
+and a script is edited by hand. Errors, which exit 1: an ext_resource
+whose file is gone (Godot refuses the whole scene), one whose
+file is there while the project's uid cache still maps its
+uid to a file that is gone (uid_path_mismatch: Godot follows
+the uid first, so the scene fails until project import rewrites
+the cache, as project run does before it runs), a preload or
+a path after extends that is gone (the script does not compile),
+the main scene (run/main_scene.mobile and other per\-platform
+ones included), and an autoload. Warnings: a load() of a literal
+res:// path that is gone, which fails only when that line runs,
+and any other res:// path in project.godot, such as the icon.
+Not looked at: a .translation whose .csv is there, since Godot
+writes it on import; a path built at run time, a load() of
+a path with no res://, C# and shaders, files under a folder
+with .gdignore or a name starting with a dot, and an ext_resource
+whose uid the project's uid cache maps to a file that is there,
+since Godot loads by uid first (scene validate reports that
+one as uid_path_mismatch). This checks only that files exist:
+scene validate checks what is inside a scene. A path that differs
+from the file only in letter case passes on macOS and Windows
+and fails in an exported game. It reads the first 64 KiB of
+each scene, where the ext_resource lines are, and each path
+is looked up once, so a project of thousands of files takes
+well under a second; duration_ms says what it took. Result
+data: path, issues (severity, kind, file, line, missing, or
+cache_path on a uid_path_mismatch, found_at and found_by when
+known, message), missing_files (each distinct path with how
+many references name it), error_count, warning_count, scenes_checked,
+scripts_checked, references_checked, duration_ms, summary.
 .TP
 \fB\-\-project\-root\fR \fIpath\fR
 Godot project root (directory containing project.godot)

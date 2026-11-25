@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Texture2D" path="res://art/also_gone.png" id="1_a"]
+
+[node name="Old" type="Sprite2D"]
+texture = ExtResource("1_a")

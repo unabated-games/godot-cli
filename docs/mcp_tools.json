@@ -1,6 +1,6 @@
 {
   "name": "godot-cli",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "description": "Godot .tscn/.tres load, validate, edit, and save tooling for scripts and MCP agents.",
   "binary": "godot-cli",
   "server": {
@@ -2417,6 +2417,25 @@
         "argv": [
           "project",
           "show",
+          "--project-root",
+          ".",
+          "--json"
+        ]
+      }
+    },
+    {
+      "name": "project_validate",
+      "argv": [
+        "project",
+        "validate",
+        "--project-root",
+        "<path>"
+      ],
+      "description": "Find every reference to a file that is not in the project, in project.godot, scenes, resources and scripts, without starting Godot. Exits 1 on an error; data.missing_files lists each missing path once.",
+      "json_request": {
+        "argv": [
+          "project",
+          "validate",
           "--project-root",
           ".",
           "--json"

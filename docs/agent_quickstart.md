@@ -50,6 +50,8 @@ Through the MCP server there is no `project-root` argument. A server started wit
 5. project run --project-root . --json               read data.frame and data.errors
 ```
 
+After deleting, moving or renaming files by hand, `project validate --project-root . --json` lists every reference to a file that is no longer there, across `project.godot`, scenes, resources and scripts. `project run` finds only the ones the run happens to load.
+
 ## Cheat sheet
 
 ```bash

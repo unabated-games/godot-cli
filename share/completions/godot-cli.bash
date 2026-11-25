@@ -54,7 +54,7 @@ _godot_cli_children() {
             echo "add relink scan list show validate search export"
             ;;
         'project')
-            echo "new import resave run show move apply input settings autoload plugins rendering physics export"
+            echo "new import resave run show validate move apply input settings autoload plugins rendering physics export"
             ;;
         'project input')
             echo "list apply validate"
@@ -286,6 +286,9 @@ _godot_cli_options() {
         'project show')
             echo "--project-root"
             ;;
+        'project validate')
+            echo "--project-root"
+            ;;
         'project move')
             echo "--rename-ids --godot --import --from --to --dry-run --project-root"
             ;;
@@ -467,6 +470,7 @@ _godot_cli_takes_args() {
         'project resave') return 0 ;;
         'project run') return 0 ;;
         'project show') return 0 ;;
+        'project validate') return 0 ;;
         'project move') return 0 ;;
         'project apply') return 0 ;;
         'project input list') return 0 ;;

@@ -189,6 +189,30 @@ one aimed at a point. `--no-auto-camera` captures what the game itself shows.
 `application/run/main_scene`. A settings-only change, such as an input map, can
 be checked against any scene this way.
 
+## Find missing files the run never reaches
+
+Godot reports a missing file only when something loads it. A run that stays on the title screen says nothing about a texture deleted from a level the player reaches later. `project validate` reads every reference instead, without starting Godot:
+
+```bash
+godot-cli project validate --project-root . --json
+```
+
+```json
+{
+  "issues": [
+    { "severity": "err", "kind": "missing_file", "file": "levels/cave.tscn", "line": 4,
+      "missing": "res://art/bat.png",
+      "message": "res://art/bat.png does not exist, so Godot fails to load levels/cave.tscn" }
+  ],
+  "missing_files": [{ "path": "res://art/bat.png", "references": 1 }],
+  "error_count": 1
+}
+```
+
+It covers `project.godot`, every scene and resource, and every GDScript file. A missing `ext_resource`, `preload`, main scene or autoload is an error. A `load()` of a path that is not there is a warning, because it fails only when that line runs. `scene validate` reports the same `missing_file` error for the one scene it is given.
+
+Run it after files were moved, renamed or deleted by hand. `project move` does not need it, since it repoints every reference as it moves the file.
+
 ## Running it by hand
 
 `project run` is a wrapper around commands you can type yourself, which is

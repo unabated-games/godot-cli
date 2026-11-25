@@ -31,6 +31,7 @@ pub const config_file = @import("config_file.zig");
 pub const export_options = @import("export_options.zig");
 pub const export_presets = @import("export_presets.zig");
 pub const project_input = @import("project_input.zig");
+pub const project_files = @import("project_files.zig");
 pub const project_settings = @import("project_settings.zig");
 pub const project_autoload = @import("project_autoload.zig");
 pub const project_plugins = @import("project_plugins.zig");
